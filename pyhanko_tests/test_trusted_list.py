@@ -2,14 +2,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from certomancer.integrations.illusionist import Illusionist
+from certomancer.registry import ArchLabel
+from freezegun import freeze_time
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.authority import AuthorityWithCert, NamedKeyAuthority
-from signing_commons import ECC_INTERM_CERT, FROM_CA, FROM_ECC_CA, INTERM_CERT
+from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
+    RevocationCheckingPolicy,
+    RevocationCheckingRule,
+)
+from samples import CERTOMANCER
+from signing_commons import ECC_INTERM_CERT, FROM_CA, INTERM_CERT
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
 
 from pyhanko.generated.etsi import ts_119612
-from pyhanko.sign.validation import KeyUsageConstraints, eutl
-from pyhanko.sign.validation.eutl import CriteriaCombination
+from pyhanko.sign.validation import eutl
+from pyhanko.sign.validation.settings import KeyUsageConstraints
+
+TESTING_CA_QUALIFIED = CERTOMANCER.get_pki_arch(
+    ArchLabel('testing-ca-qualified')
+)
 
 
 def _read_cas_from_file(path: Path):
@@ -337,10 +351,10 @@ def test_parse_service_no_type():
 @pytest.mark.parametrize(
     'criterion',
     [
-        eutl.CriteriaList(CriteriaCombination.ALL, frozenset()),
-        eutl.CriteriaList(CriteriaCombination.NONE, frozenset()),
+        eutl.CriteriaList(eutl.CriteriaCombination.ALL, frozenset()),
+        eutl.CriteriaList(eutl.CriteriaCombination.NONE, frozenset()),
         eutl.CriteriaList(
-            CriteriaCombination.ALL,
+            eutl.CriteriaCombination.ALL,
             frozenset(
                 [
                     eutl.CertSubjectDNCriterion(
@@ -358,7 +372,7 @@ def test_parse_service_no_type():
             ),
         ),
         eutl.CriteriaList(
-            CriteriaCombination.AT_LEAST_ONE,
+            eutl.CriteriaCombination.AT_LEAST_ONE,
             frozenset(
                 [
                     eutl.CertSubjectDNCriterion(
@@ -369,7 +383,7 @@ def test_parse_service_no_type():
             ),
         ),
         eutl.CriteriaList(
-            CriteriaCombination.NONE,
+            eutl.CriteriaCombination.NONE,
             frozenset(
                 [
                     eutl.KeyUsageCriterion(
@@ -390,7 +404,7 @@ def test_criteria_accept(criterion):
     'criterion',
     [
         eutl.CriteriaList(
-            CriteriaCombination.ALL,
+            eutl.CriteriaCombination.ALL,
             frozenset(
                 [
                     eutl.CertSubjectDNCriterion(
@@ -401,7 +415,7 @@ def test_criteria_accept(criterion):
             ),
         ),
         eutl.CriteriaList(
-            CriteriaCombination.NONE,
+            eutl.CriteriaCombination.NONE,
             frozenset(
                 [
                     eutl.CertSubjectDNCriterion(
@@ -423,7 +437,8 @@ def _dummy_service_definition(*extra_certs) -> eutl.CAServiceInformation:
             '',
             'test1',
             provider_certs=(INTERM_CERT, *extra_certs),
-            additional_info=frozenset(),
+            additional_info_certificate_type=frozenset(),
+            other_additional_info=frozenset(),
         ),
         qualifications=frozenset(),
         expired_certs_revocation_info=None,
@@ -481,7 +496,8 @@ def test_tsp_registry_multiple_sds():
                 '',
                 'test1',  # quals are too much work to mock
                 provider_certs=(INTERM_CERT,),
-                additional_info=frozenset(),
+                other_additional_info=frozenset(),
+                additional_info_certificate_type=frozenset(),
             ),
             qualifications=frozenset(),
             expired_certs_revocation_info=None,
@@ -494,7 +510,8 @@ def test_tsp_registry_multiple_sds():
                 '',
                 'test2',
                 provider_certs=(INTERM_CERT,),
-                additional_info=frozenset(),
+                other_additional_info=frozenset(),
+                additional_info_certificate_type=frozenset(),
             ),
             qualifications=frozenset(),
             expired_certs_revocation_info=None,
@@ -506,3 +523,391 @@ def test_tsp_registry_multiple_sds():
     )
     assert len(result) == 2
     assert set(r.base_info.service_name for r in result) == {'test1', 'test2'}
+
+
+@pytest.mark.parametrize(
+    'cert_id,expected_prelim_status',
+    [
+        (
+            'esig-qualified',
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+        ),
+        (
+            'eseal-qualified',
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESEAL,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+        ),
+        (
+            'esig-qualified-no-qscd',
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.UNKNOWN,
+            ),
+        ),
+        ('not-qualified', eutl.UNQUALIFIED),
+        ('not-qualified-nonsense-qcsd', eutl.UNQUALIFIED),
+    ],
+)
+def test_qcstatements_processing(cert_id, expected_prelim_status):
+    cert = TESTING_CA_QUALIFIED.get_cert(cert_id)
+    result = eutl.QualificationAssessor._process_qc_statements(cert)
+    assert result == expected_prelim_status
+
+
+@pytest.mark.parametrize(
+    'prelim_status,applicable_qualifiers,expected_status_fields',
+    [
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+            [eutl.Qualifier.NOT_QUALIFIED],
+            {
+                'qualified': False,
+                'qc_key_security': eutl.QcPrivateKeyManagementType.UNKNOWN,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=False,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+            [eutl.Qualifier.QC_STATEMENT],
+            {
+                'qualified': True,
+                'qc_key_security': eutl.QcPrivateKeyManagementType.QCSD,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=False,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+            [eutl.Qualifier.WITH_QSCD],
+            {
+                'qualified': False,
+                'qc_key_security': eutl.QcPrivateKeyManagementType.UNKNOWN,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.UNKNOWN,
+            ),
+            [eutl.Qualifier.WITH_QSCD],
+            {
+                'qualified': True,
+                'qc_key_security': eutl.QcPrivateKeyManagementType.QCSD,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.UNKNOWN,
+            ),
+            [eutl.Qualifier.WITH_SSCD],
+            {
+                'qualified': True,
+                'qc_key_security': eutl.QcPrivateKeyManagementType.QCSD,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.UNKNOWN,
+            ),
+            [eutl.Qualifier.FOR_ESEAL],
+            {
+                'qualified': True,
+                'qc_type': eutl.QcCertType.QC_ESEAL,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESEAL,
+                qc_key_security=eutl.QcPrivateKeyManagementType.UNKNOWN,
+            ),
+            [eutl.Qualifier.FOR_ESIG],
+            {
+                'qualified': True,
+                'qc_type': eutl.QcCertType.QC_ESIGN,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.UNKNOWN,
+            ),
+            [eutl.Qualifier.FOR_WSA],
+            {
+                'qualified': True,
+                'qc_type': eutl.QcCertType.QC_WEB,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESEAL,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+            [eutl.Qualifier.QSCD_MANAGED_ON_BEHALF],
+            {
+                'qc_key_security': (
+                    eutl.QcPrivateKeyManagementType.QCSD_DELEGATED
+                )
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+            [eutl.Qualifier.NO_QSCD],
+            {
+                'qualified': True,
+                'qc_key_security': eutl.QcPrivateKeyManagementType.UNKNOWN,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+            [eutl.Qualifier.NO_SSCD],
+            {
+                'qualified': True,
+                'qc_key_security': eutl.QcPrivateKeyManagementType.UNKNOWN,
+            },
+        ),
+        (
+            eutl.QualifiedStatus(
+                qualified=True,
+                qc_type=eutl.QcCertType.QC_ESIGN,
+                qc_key_security=eutl.QcPrivateKeyManagementType.QCSD,
+            ),
+            [eutl.Qualifier.QSCD_AS_IN_CERT],
+            {
+                'qualified': True,
+                'qc_key_security': eutl.QcPrivateKeyManagementType.QCSD,
+            },
+        ),
+    ],
+)
+def test_tl_override_processing(
+    prelim_status, applicable_qualifiers, expected_status_fields
+):
+    result = eutl.QualificationAssessor._final_status(
+        prelim_status, frozenset(applicable_qualifiers)
+    )
+    result_fields = {
+        key: getattr(result, key) for key in expected_status_fields
+    }
+    assert result_fields == expected_status_fields
+
+
+DUMMY_BASE_INFO = eutl.BaseServiceInformation(
+    service_type=eutl.CA_QC_URI,
+    service_name='Dummy',
+    provider_certs=(TESTING_CA_QUALIFIED.get_cert('root'),),
+    additional_info_certificate_type=frozenset([eutl.QcCertType.QC_ESIGN]),
+    other_additional_info=frozenset(),
+)
+
+_SKIP_REVOCATION = CertRevTrustPolicy(
+    RevocationCheckingPolicy(
+        ee_certificate_rule=RevocationCheckingRule.NO_CHECK,
+        intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK,
+    )
+)
+
+MUST_HAVE_POLICY0 = eutl.CriteriaList(
+    combine_as=eutl.CriteriaCombination.ALL,
+    criteria=frozenset([eutl.PolicySetCriterion(frozenset(['2.999.31337.0']))]),
+)
+
+MUST_HAVE_POLICY1 = eutl.CriteriaList(
+    combine_as=eutl.CriteriaCombination.ALL,
+    criteria=frozenset([eutl.PolicySetCriterion(frozenset(['2.999.31337.1']))]),
+)
+
+MUST_HAVE_NONREPUD = eutl.CriteriaList(
+    combine_as=eutl.CriteriaCombination.ALL,
+    criteria=frozenset(
+        [
+            eutl.KeyUsageCriterion(
+                KeyUsageConstraints(key_usage=('non_repudiation',))
+            )
+        ]
+    ),
+)
+
+
+@pytest.mark.asyncio
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize(
+    'cert_name,sd',
+    [
+        (
+            'esig-qualified',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+        (
+            'esig-qualified-no-qscd',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(
+                    [
+                        eutl.Qualification(
+                            qualifiers=frozenset([eutl.Qualifier.WITH_QSCD]),
+                            criteria_list=MUST_HAVE_POLICY0,
+                        )
+                    ]
+                ),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+        (
+            'not-qualified',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(
+                    [
+                        eutl.Qualification(
+                            criteria_list=MUST_HAVE_POLICY0,
+                            qualifiers=frozenset(
+                                [
+                                    eutl.Qualifier.QC_STATEMENT,
+                                    eutl.Qualifier.WITH_QSCD,
+                                ]
+                            ),
+                        )
+                    ]
+                ),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+        (
+            'not-qualified',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(
+                    [
+                        eutl.Qualification(
+                            criteria_list=MUST_HAVE_POLICY0,
+                            qualifiers=frozenset(
+                                [
+                                    eutl.Qualifier.QC_STATEMENT,
+                                ]
+                            ),
+                        ),
+                        eutl.Qualification(
+                            criteria_list=MUST_HAVE_NONREPUD,
+                            qualifiers=frozenset(
+                                [
+                                    eutl.Qualifier.WITH_QSCD,
+                                ]
+                            ),
+                        ),
+                    ]
+                ),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+        (
+            'esig-qualified',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(
+                    [
+                        eutl.Qualification(
+                            criteria_list=MUST_HAVE_POLICY1,
+                            qualifiers=frozenset(
+                                [
+                                    eutl.Qualifier.NO_QSCD,
+                                ]
+                            ),
+                        ),
+                    ]
+                ),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+    ],
+)
+async def test_conclude_qualified_qcsd(cert_name, sd):
+    ee_cert = TESTING_CA_QUALIFIED.get_cert(cert_name)
+    vc = ValidationContext(
+        trust_roots=[TESTING_CA_QUALIFIED.get_cert('root')],
+        allow_fetching=False,
+        revinfo_policy=_SKIP_REVOCATION,
+        other_certs=[TESTING_CA_QUALIFIED.get_cert('interm-qualified')],
+    )
+    cv = CertificateValidator(end_entity_cert=ee_cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    registry = eutl.TSPRegistry()
+    registry.register_ca(sd)
+    assessor = eutl.QualificationAssessor(tsp_registry=registry)
+    status = assessor.check_entity_cert_qualified(path)
+    assert status.qualified
+    assert status.qc_key_security == eutl.QcPrivateKeyManagementType.QCSD
+
+
+@pytest.mark.asyncio
+@freeze_time('2015-11-01')
+@pytest.mark.parametrize(
+    'cert_name,expect_qscd',
+    [
+        ('esig-qualified-legacy-policy', False),
+        ('esig-qualified-legacy-policy-qscd', True),
+    ],
+)
+async def test_conclude_qualified_pre_eidas(cert_name, expect_qscd):
+    sd = eutl.CAServiceInformation(
+        base_info=DUMMY_BASE_INFO,
+        qualifications=frozenset(),
+        expired_certs_revocation_info=None,
+    )
+    ee_cert = TESTING_CA_QUALIFIED.get_cert(cert_name)
+    vc = ValidationContext(
+        trust_roots=[TESTING_CA_QUALIFIED.get_cert('root')],
+        allow_fetching=False,
+        revinfo_policy=_SKIP_REVOCATION,
+        other_certs=[TESTING_CA_QUALIFIED.get_cert('interm-qualified')],
+    )
+    cv = CertificateValidator(end_entity_cert=ee_cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    registry = eutl.TSPRegistry()
+    registry.register_ca(sd)
+    assessor = eutl.QualificationAssessor(tsp_registry=registry)
+    status = assessor.check_entity_cert_qualified(path)
+    assert status.qualified
+    if expect_qscd:
+        assert (
+            status.qc_key_security
+            == eutl.QcPrivateKeyManagementType.QCSD_BY_POLICY
+        )
+    else:
+        assert status.qc_key_security == eutl.QcPrivateKeyManagementType.UNKNOWN
