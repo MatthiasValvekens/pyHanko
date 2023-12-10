@@ -1,4 +1,4 @@
-from asn1crypto import core
+from asn1crypto import core, x509
 
 from pyhanko.sign.ades.asn1_util import register_x509_extension
 
@@ -91,6 +91,16 @@ class QcStatement(core.Sequence):
 
 class QcStatements(core.SequenceOf):
     _child_spec = QcStatement
+
+
+def get_qc_statements(cert: x509.Certificate) -> QcStatements:
+    for ext in cert['tbs_certificate']['extensions']:
+        if ext['extn_id'].native != 'qc_statements':
+            continue
+        qc_statements: QcStatements = ext['extn_value'].parsed
+        return qc_statements
+    else:
+        return QcStatements()
 
 
 register_x509_extension('1.3.6.1.5.5.7.1.3', 'qc_statements', QcStatements)
