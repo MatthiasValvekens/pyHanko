@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
       - run: pip install --upgrade pip isort black
       - name: Check import order
         run: isort --profile black --line-length 80 --check pyhanko pyhanko_tests
