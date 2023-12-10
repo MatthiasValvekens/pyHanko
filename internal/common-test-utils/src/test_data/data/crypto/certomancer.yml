@@ -1,4 +1,6 @@
 external-url-prefix: "http://pyhanko.tests"
+plugin-modules:
+  - pyhanko.sign.ades.qualified_asn1
 keysets:
   testing-ca:
     path-prefix: keys-rsa
@@ -600,3 +602,95 @@ pki-architectures:
         tsa:
           signing-key: tsa
           signing-cert: tsa
+  testing-ca-qualified:
+    template: testing-ca
+    keyset: testing-ca-ecdsa
+    certs:
+      interm-qualified:
+        template: interm
+        subject: interm
+        extensions:
+          - id: certificate_policies
+            value:
+              - policy_identifier: '2.999.31337.0'
+              - policy_identifier: '2.999.31337.1'
+              - policy_identifier: '0.4.0.1456.1.1'
+              - policy_identifier: '0.4.0.1456.1.2'
+      esig-qualified:
+        template: signer1
+        subject: signer1
+        issuer-cert: interm-qualified
+        extensions:
+          - id: certificate_policies
+            value:
+              - policy_identifier: '2.999.31337.0'
+          - id: qc_statements
+            value:
+              - statement_id: 'qc_compliance'
+              - statement_id: 'qc_sscd'
+      eseal-qualified:
+        template: signer1
+        subject: signer1
+        issuer-cert: interm-qualified
+        extensions:
+          - id: certificate_policies
+            value:
+              - policy_identifier: '2.999.31337.1'
+          - id: qc_statements
+            value:
+              - statement_id: 'qc_compliance'
+              - statement_id: 'qc_sscd'
+              - statement_id: 'qc_type'
+                statement_info: ['qct_eseal']
+      esig-qualified-no-qscd:
+        template: signer1
+        subject: signer1
+        issuer-cert: interm-qualified
+        extensions:
+          - id: certificate_policies
+            value:
+              - policy_identifier: '2.999.31337.0'
+          - id: qc_statements
+            value:
+              - statement_id: 'qc_compliance'
+      not-qualified:
+        template: signer1
+        subject: signer1
+        issuer-cert: interm-qualified
+        extensions:
+          - id: certificate_policies
+            value:
+              - policy_identifier: '2.999.31337.0'
+      not-qualified-nonsense-qcsd:
+        template: signer1
+        subject: signer1
+        issuer-cert: interm-qualified
+        extensions:
+          - id: certificate_policies
+            value:
+              - policy_identifier: '2.999.31337.0'
+          - id: qc_statements
+            value:
+              - statement_id: 'qc_sscd'
+      esig-qualified-legacy-policy:
+        template: signer1
+        subject: signer1
+        issuer-cert: interm-qualified
+        validity:
+          valid-from: "2012-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        extensions:
+          - id: certificate_policies
+            value:
+              - policy_identifier: '0.4.0.1456.1.1'
+      esig-qualified-legacy-policy-qscd:
+        template: signer1
+        subject: signer1
+        issuer-cert: interm-qualified
+        validity:
+          valid-from: "2012-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        extensions:
+          - id: certificate_policies
+            value:
+              - policy_identifier: '0.4.0.1456.1.2'
