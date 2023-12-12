@@ -1,8 +1,8 @@
+import dataclasses
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
@@ -855,6 +855,25 @@ MUST_HAVE_NONREPUD = eutl.CriteriaList(
                 expired_certs_revocation_info=None,
             ),
         ),
+        (
+            'esig-qualified',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(
+                    [
+                        eutl.Qualification(
+                            criteria_list=MUST_HAVE_POLICY1,
+                            qualifiers=frozenset(
+                                [
+                                    eutl.Qualifier.NOT_QUALIFIED,
+                                ]
+                            ),
+                        ),
+                    ]
+                ),
+                expired_certs_revocation_info=None,
+            ),
+        ),
     ],
 )
 async def test_conclude_qualified_qcsd(cert_name, sd):
@@ -911,3 +930,136 @@ async def test_conclude_qualified_pre_eidas(cert_name, expect_qscd):
         )
     else:
         assert status.qc_key_security == eutl.QcPrivateKeyManagementType.UNKNOWN
+
+
+@pytest.mark.asyncio
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize(
+    'cert_name,sd',
+    [
+        (
+            'not-qualified',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+        (
+            'esig-qualified',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(
+                    [
+                        eutl.Qualification(
+                            qualifiers=frozenset(
+                                [eutl.Qualifier.NOT_QUALIFIED]
+                            ),
+                            criteria_list=MUST_HAVE_POLICY0,
+                        )
+                    ]
+                ),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+        (
+            # out of scope of this service definition
+            'eseal-qualified',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+        (
+            'esig-qualified-legacy-policy',
+            eutl.CAServiceInformation(
+                base_info=DUMMY_BASE_INFO,
+                qualifications=frozenset(),
+                expired_certs_revocation_info=None,
+            ),
+        ),
+    ],
+)
+async def test_conclude_not_qualified(cert_name, sd):
+    ee_cert = TESTING_CA_QUALIFIED.get_cert(cert_name)
+    vc = ValidationContext(
+        trust_roots=[TESTING_CA_QUALIFIED.get_cert('root')],
+        allow_fetching=False,
+        revinfo_policy=_SKIP_REVOCATION,
+        other_certs=[TESTING_CA_QUALIFIED.get_cert('interm-qualified')],
+    )
+    cv = CertificateValidator(end_entity_cert=ee_cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    registry = eutl.TSPRegistry()
+    registry.register_ca(sd)
+    assessor = eutl.QualificationAssessor(tsp_registry=registry)
+    status = assessor.check_entity_cert_qualified(path)
+    assert not status.qualified
+
+
+@pytest.mark.asyncio
+@freeze_time('2020-11-01')
+async def test_conclude_not_qualified_contradictory():
+    sd1 = eutl.CAServiceInformation(
+        base_info=DUMMY_BASE_INFO,
+        qualifications=frozenset(),
+        expired_certs_revocation_info=None,
+    )
+    sd2 = eutl.CAServiceInformation(
+        base_info=dataclasses.replace(DUMMY_BASE_INFO, service_name='Dummy2'),
+        qualifications=frozenset(
+            [
+                eutl.Qualification(
+                    qualifiers=frozenset([eutl.Qualifier.NO_QSCD]),
+                    criteria_list=MUST_HAVE_POLICY0,
+                )
+            ]
+        ),
+        expired_certs_revocation_info=None,
+    )
+    ee_cert = TESTING_CA_QUALIFIED.get_cert('esig-qualified')
+    vc = ValidationContext(
+        trust_roots=[TESTING_CA_QUALIFIED.get_cert('root')],
+        allow_fetching=False,
+        revinfo_policy=_SKIP_REVOCATION,
+        other_certs=[TESTING_CA_QUALIFIED.get_cert('interm-qualified')],
+    )
+    cv = CertificateValidator(end_entity_cert=ee_cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    registry = eutl.TSPRegistry()
+    registry.register_ca(sd1)
+    registry.register_ca(sd2)
+    assessor = eutl.QualificationAssessor(tsp_registry=registry)
+    status = assessor.check_entity_cert_qualified(path)
+    assert not status.qualified
+
+
+@pytest.mark.asyncio
+@freeze_time('2020-11-01')
+async def test_conclude_qualified_convergence():
+    sd1 = eutl.CAServiceInformation(
+        base_info=DUMMY_BASE_INFO,
+        qualifications=frozenset(),
+        expired_certs_revocation_info=None,
+    )
+    sd2 = eutl.CAServiceInformation(
+        base_info=dataclasses.replace(DUMMY_BASE_INFO, service_name='Dummy2'),
+        qualifications=frozenset(),
+        expired_certs_revocation_info=None,
+    )
+    ee_cert = TESTING_CA_QUALIFIED.get_cert('esig-qualified')
+    vc = ValidationContext(
+        trust_roots=[TESTING_CA_QUALIFIED.get_cert('root')],
+        allow_fetching=False,
+        revinfo_policy=_SKIP_REVOCATION,
+        other_certs=[TESTING_CA_QUALIFIED.get_cert('interm-qualified')],
+    )
+    cv = CertificateValidator(end_entity_cert=ee_cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    registry = eutl.TSPRegistry()
+    registry.register_ca(sd1)
+    registry.register_ca(sd2)
+    assessor = eutl.QualificationAssessor(tsp_registry=registry)
+    status = assessor.check_entity_cert_qualified(path)
+    assert status.qualified
