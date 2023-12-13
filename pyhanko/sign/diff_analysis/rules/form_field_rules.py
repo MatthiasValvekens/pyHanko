@@ -661,7 +661,11 @@ class SigFieldModificationRule(BaseFieldModificationRule):
         # /DocTimeStamps added for LTA validation purposes shouldn't have
         # an appearance (as per the recommendation in ISO 32000-2, which we
         # enforce as a rigid rule here)
-        if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not visible:
+        if (
+            '/Type' in sig_obj
+            and sig_obj.raw_get('/Type') == '/DocTimeStamp'
+            and not visible
+        ):
             sig_whitelist = ModificationLevel.LTA_UPDATES
             valid_when_locked = True
         else:
