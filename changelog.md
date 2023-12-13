@@ -1,5 +1,16 @@
 # changelog
 
+## 0.26.3
+
+- Bump `aiohttp` requirement to `>=3.8,<3.10`.
+- Address two certificate fetching issues (see PR #13)
+
+    - Tolerate CMS certificate-only message in response
+      without `Content-Type`.
+    - Deal with implicit reliance on order of certs when
+      processing such messages.
+
+
 ## 0.26.2
 
 - Bump some dependency versions.
