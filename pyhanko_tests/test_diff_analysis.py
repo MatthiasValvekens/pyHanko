@@ -2656,3 +2656,15 @@ def test_cant_descend_into_non_container():
 
     with pytest.raises(PdfReadError, match='Anchor'):
         root_rel.descend('/Blah')
+
+
+def test_signature_without_type_is_form_filling():
+    fname = f"{PDF_DATA_DIR}/minimal-signed-twice-no-sig-type.pdf"
+    with open(fname, 'rb') as inf:
+        r = PdfFileReader(inf)
+        s = r.embedded_signatures[0]
+        s.compute_integrity_info(DEFAULT_DIFF_POLICY)
+        assert s.field_name == 'Sig1'
+        assert (
+            s.diff_result.modification_level == ModificationLevel.FORM_FILLING
+        )
