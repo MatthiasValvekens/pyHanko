@@ -38,7 +38,11 @@ from pyhanko_certvalidator.policy_decl import (
     DisallowWeakAlgorithmsPolicy,
     NonRevokedStatusAssertion,
 )
-from pyhanko_certvalidator.registry import CertificateRegistry
+from pyhanko_certvalidator.registry import (
+    CertificateRegistry,
+    PathBuilder,
+    SimpleTrustManager,
+)
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 from pyhanko_certvalidator.validate import async_validate_path, validate_path
 
@@ -774,3 +778,66 @@ def test_408020_cps_pointer_qualifier_test20():
         'http://csrc.nist.gov/groups/ST/crypto_apps_infra/csor/'
         'pki_registration.html#PKITest'
     )
+
+
+class MockRequestsCertificateFetcher(
+    requests_fetchers.RequestsCertificateFetcher
+):
+    def __init__(self, *args, order, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.order = order
+
+    async def fetch_certs(self, *args, **kwargs) -> Iterable[x509.Certificate]:
+        root_ca = load_cert_object('testing-aia', 'brazilian_root_ca_v5')
+        middle_ca = load_cert_object('testing-aia', 'ca_brazilian_fro_v4')
+        end_ca = load_cert_object('testing-aia', 'ca_serprorfbv5')
+        certs = {'root': root_ca, 'middle': middle_ca, 'end': end_ca}
+
+        return [
+            certs[self.order[0]],
+            certs[self.order[1]],
+            certs[self.order[2]],
+        ]
+
+
+@pytest.mark.parametrize(
+    'cert_order',
+    [
+        ('root', 'middle', 'end'),
+        ('root', 'end', 'middle'),
+        ('middle', 'root', 'end'),
+        ('middle', 'end', 'root'),
+        ('root', 'end', 'middle'),
+        ('root', 'middle', 'end'),
+    ],
+)
+@pytest.mark.asyncio
+async def test_building_trust_path_with_pkcs7_in_different_orders(cert_order):
+    trust_path = [
+        'Autoridade Certificadora Raiz Brasileira v5',
+        'AC Secretaria da Receita Federal do Brasil v4',
+        'Autoridade Certificadora SERPRORFBv5',
+    ]
+
+    serpro_root = load_cert_object('testing-aia', 'brazilian_root_ca_v5')
+
+    trust_manager = SimpleTrustManager.build(
+        extra_trust_roots=[serpro_root],
+    )
+    cert = load_cert_object('testing-aia', 'repositorio.serpro.gov.br')
+    registry = CertificateRegistry.build(
+        certs=(cert,),
+        cert_fetcher=MockRequestsCertificateFetcher(order=cert_order),
+    )
+    builder = PathBuilder(trust_manager=trust_manager, registry=registry)
+    paths = await builder.async_build_paths(end_entity_cert=cert)
+
+    paths_common_name = [
+        [
+            authority.name.native['common_name']
+            for authority in path.iter_authorities()
+        ]
+        for path in paths
+    ]
+
+    assert trust_path in paths_common_name

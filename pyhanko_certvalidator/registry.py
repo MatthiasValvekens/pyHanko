@@ -377,9 +377,12 @@ class CertificateRegistry(SimpleCertificateStore):
         if self.fetcher is None:
             return
 
-        async for issuer in self.fetcher.fetch_cert_issuers(cert):
-            # register the cert for future reference
-            self.register(issuer)
+        issuers = [
+            issuer async for issuer in self.fetcher.fetch_cert_issuers(cert)
+        ]
+        self.register_multiple(issuers)
+
+        for issuer in issuers:
             yield issuer
 
 
