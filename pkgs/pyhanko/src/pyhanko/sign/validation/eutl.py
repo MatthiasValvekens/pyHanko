@@ -34,12 +34,18 @@ from xsdata.formats.dataclass.parsers.handlers.lxml import (
     LxmlEventHandler,
 )
 
-from pyhanko_certvalidator.authority import Authority, AuthorityWithCert
+from pyhanko_certvalidator.authority import (
+    Authority,
+    AuthorityWithCert,
+    TrustAnchor,
+)
 from pyhanko_certvalidator.errors import InvalidCertificateError
 from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.registry import TrustManager
 
 __all__ = [
     'TSPRegistry',
+    'TSPTrustManager',
     'CAServiceInformation',
     'QualificationAssessor',
     'QualifiedStatus',
@@ -58,7 +64,6 @@ __all__ = [
     'QcPrivateKeyManagementType',
     'TSPServiceParsingError',
 ]
-
 
 logger = logging.getLogger(__name__)
 
@@ -504,6 +509,10 @@ class TSPRegistry:
     ) -> Iterable[CAServiceInformation]:
         return tuple(self._cert_to_si[ca])
 
+    @property
+    def known_authorities(self) -> Iterable[Authority]:
+        return self._cert_to_si.keys()
+
     # TODO take date into account (and properly track it
     #  for service definitions)
     def applicable_tsps_on_path(
@@ -512,6 +521,28 @@ class TSPRegistry:
     ) -> Generator[CAServiceInformation, None, None]:
         for ca in path.iter_authorities():
             yield from self.applicable_service_definitions(ca)
+
+
+class TSPTrustManager(TrustManager):
+    def __init__(self, tsp_registry: TSPRegistry):
+        self.tsp_registry = tsp_registry
+
+    def is_root(self, cert: x509.Certificate) -> bool:
+        return bool(
+            self.tsp_registry.applicable_service_definitions(
+                AuthorityWithCert(cert)
+            )
+        )
+
+    def find_potential_issuers(
+        self, cert: x509.Certificate
+    ) -> Generator[TrustAnchor, None, None]:
+        # TODO food for thought: can we extract qualifiers from the service
+        #  definitions here? E.g. if we know that a cert can only be qualified
+        #  if it has a certain policy, we could enforce that at the PKIX level.
+        for authority in self.tsp_registry.known_authorities:
+            if authority.is_potential_issuer_of(cert):
+                yield TrustAnchor(authority)
 
 
 class QcPrivateKeyManagementType(enum.Enum):
