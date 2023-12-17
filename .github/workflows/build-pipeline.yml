@@ -59,7 +59,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Download dist artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: pyhanko-dist
           path: dist/
@@ -86,7 +86,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Download dist artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: pyhanko-dist
           path: dist/
@@ -123,7 +123,7 @@ jobs:
         with:
           python-version: ${{ env.MAIN_PYTHON_VERSION }}
       - name: Download dist artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: pyhanko-dist
           path: dist/
@@ -144,7 +144,7 @@ jobs:
       # checkout necessary to ensure the uploaded report contains the correct paths
       - uses: actions/checkout@v4
       - name: Retrieve coverage reports
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: coverage
           path: ./reports/
