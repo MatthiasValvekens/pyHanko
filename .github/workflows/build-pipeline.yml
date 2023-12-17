@@ -42,7 +42,7 @@ jobs:
         id: artifact-hashes
         run: cd dist && echo "hashes=$(sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload dist artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pyhanko-dist
           path: dist/
@@ -69,7 +69,7 @@ jobs:
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: "*-coverage.xml"
@@ -109,7 +109,7 @@ jobs:
           LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
           LIVE_CSC_SCAL2_HOST_URL: http://localhost:8999
       - name: Stash coverage report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: "*-coverage.xml"
