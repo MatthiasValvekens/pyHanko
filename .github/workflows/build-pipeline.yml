@@ -156,6 +156,6 @@ jobs:
           env_vars: OS,PYTHON
           name: codecov-umbrella
       - name: Clean up coverage reports
-        uses: GeekyEggo/delete-artifact@v2
+        uses: GeekyEggo/delete-artifact@v4
         with:
           name: coverage
