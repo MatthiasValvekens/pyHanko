@@ -36,7 +36,7 @@ jobs:
         id: artifact-hashes
         run: cd dist && echo "hashes=$(sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload dist artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pyhanko-certvalidator-dist
           path: dist/
@@ -53,7 +53,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Download dist artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: pyhanko-certvalidator-dist
           path: dist/
@@ -72,9 +72,9 @@ jobs:
       - name: Test with pytest
         run: python -m pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
       - name: Stash coverage report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: coverage
+          name: coverage-${{ strategy.job-index }}
           path: "*-coverage.xml"
   codecov-upload:
     runs-on: ubuntu-22.04
@@ -83,9 +83,9 @@ jobs:
       # checkout necessary to ensure the uploaded report contains the correct paths
       - uses: actions/checkout@v4
       - name: Retrieve coverage reports
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: coverage
+          pattern: coverage-*
           path: ./reports/
       - name: Upload all coverage reports to Codecov
         uses: codecov/codecov-action@v3
@@ -95,6 +95,6 @@ jobs:
           env_vars: OS,PYTHON
           name: codecov-umbrella
       - name: Clean up coverage reports
-        uses: GeekyEggo/delete-artifact@v2
+        uses: GeekyEggo/delete-artifact@v4
         with:
-          name: coverage
+          name: coverage-*

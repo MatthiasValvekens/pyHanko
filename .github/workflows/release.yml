@@ -52,7 +52,7 @@ jobs:
         env:
           VERSION: ${{ steps.getversion.outputs.version }}
       - name: Upload release body
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: release-body
           path: release.md
@@ -80,17 +80,17 @@ jobs:
       contents: write
     steps:
     - name: Download dist artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: pyhanko-certvalidator-dist
         path: dist/
     - name: Download provenance data
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: multiple.intoto.jsonl
         path: provenance/
     - name: Download release body
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: release-body
         path: release-body
