@@ -85,7 +85,7 @@ jobs:
         name: pyhanko-certvalidator-dist
         path: dist/
     - name: Download provenance data
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v3
       with:
         name: multiple.intoto.jsonl
         path: provenance/
