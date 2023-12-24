@@ -77,6 +77,9 @@ jobs:
           name: coverage-${{ strategy.job-index }}
           path: "*-coverage.xml"
   codecov-upload:
+    permissions:
+      actions: write
+      contents: read
     runs-on: ubuntu-22.04
     needs: pytest-coverage
     steps:
