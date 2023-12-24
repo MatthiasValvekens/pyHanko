@@ -13,7 +13,7 @@ jobs:
     name: Run CI pipeline
     uses: MatthiasValvekens/certvalidator/.github/workflows/build-pipeline.yml@master
     permissions:
-      actions: read
+      actions: write
       contents: read
   find-env:
     name: Determine target environment
