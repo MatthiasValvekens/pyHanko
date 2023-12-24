@@ -97,4 +97,5 @@ jobs:
       - name: Clean up coverage reports
         uses: GeekyEggo/delete-artifact@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           name: coverage-*
