@@ -13,7 +13,7 @@ jobs:
     name: Run CI pipeline
     uses: MatthiasValvekens/pyHanko/.github/workflows/build-pipeline.yml@master
     permissions:
-      actions: read
+      actions: write
       contents: read
   extract-params:
     name: Determine release parameters
@@ -105,9 +105,6 @@ jobs:
         inputs: ./dist/*
         # useful to inspect workflow artifacts in test runs
         upload-signing-artifacts: true
-        # Append only the .sigstore bundle,
-        # the .sig suffix conflicts with my own GPG signatures
-        bundle-only: true
     - name: Create GitHub release
       if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
