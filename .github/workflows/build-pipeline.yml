@@ -158,4 +158,4 @@ jobs:
       - name: Clean up coverage reports
         uses: GeekyEggo/delete-artifact@v4
         with:
-          name: coverage
+          name: coverage-*
