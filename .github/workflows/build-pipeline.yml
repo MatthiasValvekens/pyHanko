@@ -138,6 +138,9 @@ jobs:
             pyhanko_tests/test_signing.py pyhanko_tests/test_diff_analysis.py pyhanko_tests/test_crypt.py \
             pyhanko_tests/test_cms.py pyhanko_tests/cli_tests/*.py
   codecov-upload:
+    permissions:
+      actions: write
+      contents: read
     runs-on: ubuntu-latest
     needs: [pytest-coverage,live-integration-tests]
     steps:
@@ -158,4 +161,5 @@ jobs:
       - name: Clean up coverage reports
         uses: GeekyEggo/delete-artifact@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           name: coverage-*
