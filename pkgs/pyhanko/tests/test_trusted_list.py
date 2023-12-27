@@ -76,6 +76,9 @@ def test_parse_ca_with_unsupported_critical_qualifier():
                 http://uri.etsi.org/TrstSvc/Svctype/CA/QC
             </ServiceTypeIdentifier>
             <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
             <ServiceInformationExtensions>
                 <Extension Critical="true">
                     <blah/>
@@ -104,6 +107,9 @@ def test_parse_ca_with_unsupported_noncritical_extension():
                 http://uri.etsi.org/TrstSvc/Svctype/CA/QC
             </ServiceTypeIdentifier>
             <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
             <ServiceInformationExtensions>
                 <Extension Critical="false">
                     <blah/>
@@ -156,6 +162,9 @@ def test_parse_ca_with_extensions():
                 http://uri.etsi.org/TrstSvc/Svctype/CA/QC
             </ServiceTypeIdentifier>
             <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
             <ServiceInformationExtensions>
                 <Extension Critical="false">
                     <q:Qualifications>
@@ -236,6 +245,9 @@ def test_parse_omit_empty_or_unknown_quals(qualifiers):
                 http://uri.etsi.org/TrstSvc/Svctype/CA/QC
             </ServiceTypeIdentifier>
             <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
             <ServiceInformationExtensions>
                 <Extension Critical="false">
                     <q:Qualifications>
@@ -273,6 +285,9 @@ def test_parse_service_name(names):
                 http://uri.etsi.org/TrstSvc/Svctype/CA/QC
             </ServiceTypeIdentifier>
             <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
         </ServiceInformation>
     </TSPService>
     """
@@ -280,6 +295,56 @@ def test_parse_service_name(names):
     parse_result = _raw_tlservice_parse(xml)
     result = eutl_parse._interpret_service_info_for_ca(parse_result)
     assert result.base_info.service_name == 'Test'
+
+
+@pytest.mark.parametrize(
+    'date_string',
+    [
+        '2020-11-01T00:00:00Z',
+        '2020-11-01T01:00:00+01:00',
+    ],
+)
+def test_parse_service_validity_dates(date_string):
+    xml = f"""
+    <TSPService {NAMESPACES}>
+        <ServiceInformation>
+            <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+            <ServiceTypeIdentifier>
+                http://uri.etsi.org/TrstSvc/Svctype/CA/QC
+            </ServiceTypeIdentifier>
+            <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                {date_string}
+            </StatusStartingTime>
+        </ServiceInformation>
+    </TSPService>
+    """
+
+    parse_result = _raw_tlservice_parse(xml)
+    result = eutl_parse._interpret_service_info_for_ca(parse_result)
+    assert result.base_info.valid_from == datetime(
+        2020, 11, 1, tzinfo=timezone.utc
+    )
+
+
+def test_reject_service_without_status_starting_time():
+    xml = f"""
+    <TSPService {NAMESPACES}>
+        <ServiceInformation>
+            <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+            <ServiceTypeIdentifier>
+                http://uri.etsi.org/TrstSvc/Svctype/CA/QC
+            </ServiceTypeIdentifier>
+            <ServiceDigitalIdentity/>
+        </ServiceInformation>
+    </TSPService>
+    """
+
+    parse_result = _raw_tlservice_parse(xml)
+    with pytest.raises(
+        eutl_parse.TSPServiceParsingError, match='validity start'
+    ):
+        eutl_parse._interpret_service_info_for_ca(parse_result)
 
 
 @pytest.mark.parametrize(
@@ -319,6 +384,9 @@ def test_criteria_parsing_failure(criteria_xml):
                 http://uri.etsi.org/TrstSvc/Svctype/CA/QC
             </ServiceTypeIdentifier>
             <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
             <ServiceInformationExtensions>
                 <Extension Critical="false">
                     <q:Qualifications>
@@ -344,6 +412,9 @@ def test_parse_service_no_type():
         <ServiceInformation>
             <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
             <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
         </ServiceInformation>
     </TSPService>
     """
@@ -452,6 +523,8 @@ def _dummy_service_definition(
         tsp.BaseServiceInformation(
             '',
             'test1',
+            valid_from=datetime(2020, 11, 1, tzinfo=timezone.utc),
+            valid_until=None,
             provider_certs=(INTERM_CERT, *extra_certs),
             additional_info_certificate_type=frozenset(),
             other_additional_info=frozenset(),
@@ -511,6 +584,8 @@ def test_tsp_registry_multiple_sds():
             tsp.BaseServiceInformation(
                 '',
                 'test1',  # quals are too much work to mock
+                valid_from=datetime(2020, 11, 1, tzinfo=timezone.utc),
+                valid_until=None,
                 provider_certs=(INTERM_CERT,),
                 other_additional_info=frozenset(),
                 additional_info_certificate_type=frozenset(),
@@ -525,6 +600,8 @@ def test_tsp_registry_multiple_sds():
             tsp.BaseServiceInformation(
                 '',
                 'test2',
+                valid_from=datetime(2020, 11, 1, tzinfo=timezone.utc),
+                valid_until=None,
                 provider_certs=(INTERM_CERT,),
                 other_additional_info=frozenset(),
                 additional_info_certificate_type=frozenset(),
@@ -743,6 +820,8 @@ def test_tl_override_processing(
 DUMMY_BASE_INFO = tsp.BaseServiceInformation(
     service_type=eutl_parse.CA_QC_URI,
     service_name='Dummy',
+    valid_from=datetime(2020, 11, 1, tzinfo=timezone.utc),
+    valid_until=None,
     provider_certs=(TESTING_CA_QUALIFIED.get_cert('root'),),
     additional_info_certificate_type=frozenset([tsp.QcCertType.QC_ESIGN]),
     other_additional_info=frozenset(),
