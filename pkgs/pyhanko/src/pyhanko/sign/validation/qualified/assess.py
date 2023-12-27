@@ -184,7 +184,7 @@ class QualificationAssessor:
                 prelim_status = replace(prelim_status, qualified=True)
 
         statuses_found: List[Tuple[CAServiceInformation, QualifiedStatus]] = []
-        for sd in self._registry.applicable_tsps_on_path(path):
+        for sd in self._registry.applicable_tsps_on_path(path, reference_time):
             # For this subtlety, see the hanging para in the beginning of
             # section 4 in the CEF eSignature DSS validation algorithm doc
             putative_status = QualificationAssessor._apply_sd_qualifications(
