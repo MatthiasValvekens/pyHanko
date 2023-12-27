@@ -2,7 +2,16 @@ import enum
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, FrozenSet, Generator, Iterable, Optional, Set, Tuple
+from typing import (
+    Dict,
+    FrozenSet,
+    Generator,
+    Iterable,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 from asn1crypto import x509
 from pyhanko_certvalidator.authority import (
@@ -65,6 +74,8 @@ _SVCINFOEXT_URI_BASE = f'{_TRUSTEDLIST_URI_BASE}/SvcInfoExt'
 class BaseServiceInformation:
     service_type: str
     service_name: str
+    valid_from: datetime
+    valid_until: Optional[datetime]
     provider_certs: Tuple[x509.Certificate, ...]
     additional_info_certificate_type: FrozenSet[QcCertType]
     other_additional_info: FrozenSet[AdditionalServiceInformation]
