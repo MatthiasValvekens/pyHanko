@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import (
     FrozenSet,
     Generator,
@@ -129,7 +130,6 @@ def _process_criteria_list_entries(
                 for bit in ku_criterion.key_usage_bit
                 if bit.value == False
             )
-            # TODO check EKUs
             yield KeyUsageCriterion(
                 settings=KeyUsageConstraints(
                     key_usage=key_usage_must_have,
@@ -203,6 +203,23 @@ def _interpret_service_info_for_ca(
 ):
     service_info = service.service_information
     assert service_info is not None
+    return _interpret_historical_service_info_for_ca(
+        service_info=ts_119612.ServiceHistoryInstance(
+            service_type_identifier=service_info.service_type_identifier,
+            service_name=service_info.service_name,
+            service_digital_identity=service_info.service_digital_identity,
+            service_status=service_info.service_status,
+            status_starting_time=service_info.status_starting_time,
+            service_information_extensions=service_info.service_information_extensions,
+        ),
+        next_update_at=None,
+    )
+
+
+def _interpret_historical_service_info_for_ca(
+    service_info: ts_119612.ServiceHistoryInstance,
+    next_update_at: Optional[datetime],
+):
     certs = list(
         _as_certs(
             _required(
@@ -251,10 +268,18 @@ def _interpret_service_info_for_ca(
                     f"in service named '{service_name}'.\n"
                     f"Content: {ext_content}"
                 )
+    valid_from_date = service_info.status_starting_time
+    if valid_from_date is None:
+        raise TSPServiceParsingError(
+            "The validity start of the current status of the the service named "
+            f"{service_name} is not known. This is an error."
+        )
     base_service_info = BaseServiceInformation(
         service_type=_required(
             service_info.service_type_identifier, "Service type identifier"
         ),
+        valid_from=valid_from_date.to_datetime(),
+        valid_until=next_update_at,
         service_name=service_name or "unknown",
         provider_certs=tuple(certs),
         additional_info_certificate_type=frozenset(asi_qc_type),
