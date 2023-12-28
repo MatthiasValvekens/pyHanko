@@ -2,16 +2,7 @@ import enum
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import (
-    Dict,
-    FrozenSet,
-    Generator,
-    Iterable,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Dict, FrozenSet, Generator, Iterable, Optional, Set, Tuple
 
 from asn1crypto import x509
 from pyhanko_certvalidator.authority import (
@@ -36,7 +27,6 @@ __all__ = [
     'TSPTrustManager',
     'QcCertType',
     'AdditionalServiceInformation',
-    'TSPServiceParsingError',
     'BaseServiceInformation',
     'Qualifier',
     'Criterion',
