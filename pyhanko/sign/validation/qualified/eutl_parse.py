@@ -1,9 +1,11 @@
+import itertools
 import logging
 from datetime import datetime
 from typing import (
     FrozenSet,
     Generator,
     Iterable,
+    List,
     Optional,
     Set,
     Tuple,
@@ -54,6 +56,16 @@ _CERTIFICATE_TYPE_BY_URI = {
 }
 _QUALIFIER_BY_URI = {q.uri: q for q in Qualifier}
 PREFERRED_LANGUAGE: str = 'en'
+
+
+def _service_name_from_intl_string(
+    intl_string: Optional[ts_119612.InternationalNamesType],
+) -> str:
+    return (
+        _extract_from_intl_string(intl_string.name)
+        if intl_string
+        else "unknown"
+    )
 
 
 def _extract_from_intl_string(
@@ -228,9 +240,7 @@ def _interpret_historical_service_info_for_ca(
             )
         )
     )
-    service_name = None
-    if service_info.service_name:
-        service_name = _extract_from_intl_string(service_info.service_name.name)
+    service_name = _service_name_from_intl_string(service_info.service_name)
     qualifications: FrozenSet[Qualification] = frozenset()
     expired_revinfo_date = None
     additional_info = []
@@ -262,7 +272,6 @@ def _interpret_historical_service_info_for_ca(
                 except KeyError:
                     additional_info.append(additional_info_entry)
             elif ext.critical:
-                # TODO more informative exception / only ditch the current SDI
                 raise TSPServiceParsingError(
                     f"Cannot process a critical extension "
                     f"in service named '{service_name}'.\n"
@@ -271,8 +280,9 @@ def _interpret_historical_service_info_for_ca(
     valid_from_date = service_info.status_starting_time
     if valid_from_date is None:
         raise TSPServiceParsingError(
-            "The validity start of the current status of the the service named "
-            f"{service_name} is not known. This is an error."
+            f"The validity start of the status of "
+            f"the the service named {service_name} is not known. "
+            f"This is an error."
         )
     base_service_info = BaseServiceInformation(
         service_type=_required(
@@ -280,7 +290,7 @@ def _interpret_historical_service_info_for_ca(
         ),
         valid_from=valid_from_date.to_datetime(),
         valid_until=next_update_at,
-        service_name=service_name or "unknown",
+        service_name=service_name,
         provider_certs=tuple(certs),
         additional_info_certificate_type=frozenset(asi_qc_type),
         other_additional_info=frozenset(additional_info),
@@ -293,9 +303,53 @@ def _interpret_historical_service_info_for_ca(
     )
 
 
+def _read_service_history(history_items, validity_start, service_name):
+    errors_encountered = []
+    item_index_sorted_by_date = sorted(
+        (
+            (orig_ix, item.status_starting_time.to_datetime())
+            for orig_ix, item in enumerate(history_items)
+            if item.status_starting_time
+        ),
+        key=lambda t: t[1],
+        reverse=True,
+    )
+    end_of_validity_by_orig_ix = {
+        orig_ix: next_start
+        for (orig_ix, cur_start), next_start in zip(
+            item_index_sorted_by_date,
+            itertools.chain(
+                (validity_start.to_datetime(),),
+                (st for _, st in item_index_sorted_by_date[:-1]),
+            ),
+        )
+    }
+
+    for orig_ix, validity_end in end_of_validity_by_orig_ix.items():
+        history_item = history_items[orig_ix]
+        if history_item.service_status != STATUS_GRANTED:
+            continue
+        try:
+            validity_end = end_of_validity_by_orig_ix[orig_ix]
+            yield _interpret_historical_service_info_for_ca(
+                history_item,
+                next_update_at=validity_end,
+            )
+        except TSPServiceParsingError as e:
+            logger.debug(
+                f"Failed to parse item {orig_ix + 1} in history "
+                f"of service {service_name}. This history "
+                f"entry will not be processed further.",
+                exc_info=e,
+            )
+            errors_encountered.append(e)
+    return errors_encountered
+
+
 def _interpret_service_info_for_cas(
     services: Iterable[ts_119612.TSPService],
 ):
+    errors_encountered = []
     for service in services:
         service_info = service.service_information
         if (
@@ -304,14 +358,33 @@ def _interpret_service_info_for_cas(
         ):
             continue
 
+        service_name = _service_name_from_intl_string(service_info.service_name)
         # TODO allow the user to specify if they also want to include
         #  other statuses (e.g. national level)
         # TODO evaluate historical definitions too in case of point-in-time
         #  work, store that info on the object
-        if service_info.service_status != STATUS_GRANTED:
-            continue
-        # TODO process errors in individual services
-        yield _interpret_service_info_for_ca(service)
+        if service_info.service_status == STATUS_GRANTED:
+            try:
+                yield _interpret_service_info_for_ca(service)
+            except TSPServiceParsingError as e:
+                logger.warning(
+                    f"Failed to process current status "
+                    f"of service {service_name}. This history "
+                    f"entry will not be processed further.",
+                    exc_info=e,
+                )
+                errors_encountered.append(e)
+                continue
+
+        validity_start = service_info.status_starting_time
+        if validity_start and service.service_history:
+            history_items = service.service_history.service_history_instance
+            history_errors = yield from _read_service_history(
+                history_items, validity_start, service_name
+            )
+            errors_encountered.extend(history_errors)
+
+    return errors_encountered
 
 
 def _raw_tl_parse(tl_xml: str) -> ts_119612.TrustServiceStatusList:
@@ -329,10 +402,13 @@ def _raw_tl_parse(tl_xml: str) -> ts_119612.TrustServiceStatusList:
 # TODO introduce a similar method for other types of service (TSAs etc)
 def read_qualified_certificate_authorities(
     tl_xml: str,
-) -> Generator[CAServiceInformation, None, None]:
+) -> Generator[CAServiceInformation, None, List[TSPServiceParsingError]]:
     parse_result = _raw_tl_parse(tl_xml)
     tspl = parse_result.trust_service_provider_list
+    errors_encountered = []
     for tsp in _required(tspl, "TSP list").trust_service_provider:
-        yield from _interpret_service_info_for_cas(
+        tsp_errors = yield from _interpret_service_info_for_cas(
             _required(tsp.tspservices, "TSP services").tspservice
         )
+        errors_encountered.extend(tsp_errors)
+    return errors_encountered

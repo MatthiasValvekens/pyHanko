@@ -18,6 +18,10 @@ from xsdata.formats.dataclass.parsers.config import ParserConfig
 
 from pyhanko.generated.etsi import ts_119612
 from pyhanko.sign.validation.qualified import assess, eutl_parse, q_status, tsp
+from pyhanko.sign.validation.qualified.eutl_parse import (
+    CA_QC_URI,
+    STATUS_GRANTED,
+)
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 
 from .samples import CERTOMANCER
@@ -50,7 +54,10 @@ TEST_REAL_TL = TEST_DATA_DIR / 'tsl-be.xml'
 
 
 def test_parse_cas_from_real_tl_smoke_test():
-    assert len(_read_cas_from_file(TEST_REAL_TL)) == 52
+    cas_read = _read_cas_from_file(TEST_REAL_TL)
+    current_cas = [ca for ca in cas_read if not ca.base_info.valid_until]
+    assert len(current_cas) == 52
+    assert len(cas_read) == 73
 
 
 ETSI_NS = 'http://uri.etsi.org'
@@ -89,7 +96,7 @@ def test_parse_ca_with_unsupported_critical_qualifier():
 
     parse_result = _raw_tlservice_parse(xml)
     with pytest.raises(
-        tsp.TSPServiceParsingError,
+        eutl_parse.TSPServiceParsingError,
         match="critical",
     ):
         eutl_parse._interpret_service_info_for_ca(parse_result)
@@ -1158,3 +1165,142 @@ async def test_conclude_qualified_convergence():
     assessor = assess.QualificationAssessor(tsp_registry=registry)
     status = assessor.check_entity_cert_qualified(path)
     assert status.qualified
+
+
+def test_parse_service_history_intervals():
+    xml = f"""
+    <TSPService {NAMESPACES}>
+        <ServiceInformation>
+            <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+            <ServiceTypeIdentifier>{CA_QC_URI}</ServiceTypeIdentifier>
+            <ServiceStatus>{STATUS_GRANTED}</ServiceStatus>
+            <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
+        </ServiceInformation>
+        <ServiceHistory>
+            <ServiceHistoryInstance>
+                <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+                <ServiceTypeIdentifier>{CA_QC_URI}</ServiceTypeIdentifier>
+                <ServiceStatus>{STATUS_GRANTED}</ServiceStatus>
+                <ServiceDigitalIdentity/>
+                <StatusStartingTime>
+                    2017-11-01T00:00:00Z
+                </StatusStartingTime>
+            </ServiceHistoryInstance>
+            <ServiceHistoryInstance>
+                <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+                <ServiceTypeIdentifier>{CA_QC_URI}</ServiceTypeIdentifier>
+                <ServiceStatus>{STATUS_GRANTED}</ServiceStatus>
+                <ServiceDigitalIdentity/>
+                <StatusStartingTime>
+                    2019-11-01T00:00:00Z
+                </StatusStartingTime>
+            </ServiceHistoryInstance>
+        </ServiceHistory>
+    </TSPService>
+    """
+
+    parse_result = _raw_tlservice_parse(xml)
+    result = eutl_parse._interpret_service_info_for_cas([parse_result])
+    date1 = datetime(2017, 11, 1, tzinfo=timezone.utc)
+    date2 = datetime(2019, 11, 1, tzinfo=timezone.utc)
+    date3 = datetime(2020, 11, 1, tzinfo=timezone.utc)
+    intervals = [
+        (r.base_info.valid_from, r.base_info.valid_until) for r in result
+    ]
+    assert intervals == [(date3, None), (date2, date3), (date1, date2)]
+
+
+def test_parse_service_history_intervals_skip_not_granted():
+    xml = f"""
+    <TSPService {NAMESPACES}>
+        <ServiceInformation>
+            <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+            <ServiceTypeIdentifier>{CA_QC_URI}</ServiceTypeIdentifier>
+            <ServiceStatus>{STATUS_GRANTED}</ServiceStatus>
+            <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
+        </ServiceInformation>
+        <ServiceHistory>
+            <ServiceHistoryInstance>
+                <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+                <ServiceTypeIdentifier>{CA_QC_URI}</ServiceTypeIdentifier>
+                <ServiceStatus>{STATUS_GRANTED}</ServiceStatus>
+                <ServiceDigitalIdentity/>
+                <StatusStartingTime>
+                    2017-11-01T00:00:00Z
+                </StatusStartingTime>
+            </ServiceHistoryInstance>
+            <ServiceHistoryInstance>
+                <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+                <ServiceTypeIdentifier>{CA_QC_URI}</ServiceTypeIdentifier>
+                <ServiceStatus>urn:blah</ServiceStatus>
+                <ServiceDigitalIdentity/>
+                <StatusStartingTime>
+                    2019-11-01T00:00:00Z
+                </StatusStartingTime>
+            </ServiceHistoryInstance>
+        </ServiceHistory>
+    </TSPService>
+    """
+
+    parse_result = _raw_tlservice_parse(xml)
+    result = eutl_parse._interpret_service_info_for_cas([parse_result])
+    date1 = datetime(2017, 11, 1, tzinfo=timezone.utc)
+    date2 = datetime(2019, 11, 1, tzinfo=timezone.utc)
+    date3 = datetime(2020, 11, 1, tzinfo=timezone.utc)
+    intervals = [
+        (r.base_info.valid_from, r.base_info.valid_until) for r in result
+    ]
+    assert intervals == [
+        (date3, None),
+        # gap where status is not granted
+        (date1, date2),
+    ]
+
+
+def test_parse_service_history_intervals_skip_invalid_entries():
+    xml = f"""
+    <TSPService {NAMESPACES}>
+        <ServiceInformation>
+            <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+            <ServiceTypeIdentifier>{CA_QC_URI}</ServiceTypeIdentifier>
+            <ServiceStatus>{STATUS_GRANTED}</ServiceStatus>
+            <ServiceDigitalIdentity/>
+            <StatusStartingTime>
+                2020-11-01T00:00:00Z
+            </StatusStartingTime>
+        </ServiceInformation>
+        <ServiceHistory>
+            <ServiceHistoryInstance>
+                <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+                <ServiceTypeIdentifier>{CA_QC_URI}</ServiceTypeIdentifier>
+                <ServiceStatus>{STATUS_GRANTED}</ServiceStatus>
+                <ServiceDigitalIdentity/>
+                <StatusStartingTime>
+                    2017-11-01T00:00:00Z
+                </StatusStartingTime>
+            </ServiceHistoryInstance>
+            <ServiceHistoryInstance>
+                <ServiceName><Name xml:lang="en">Test</Name></ServiceName>
+                <ServiceStatus>{STATUS_GRANTED}</ServiceStatus>
+                <StatusStartingTime>2019-11-01T00:00:00Z</StatusStartingTime>
+            </ServiceHistoryInstance>
+        </ServiceHistory>
+    </TSPService>
+    """
+
+    parse_result = _raw_tlservice_parse(xml)
+    result = eutl_parse._interpret_service_info_for_cas([parse_result])
+    date2 = datetime(2020, 11, 1, tzinfo=timezone.utc)
+    intervals = [
+        (r.base_info.valid_from, r.base_info.valid_until) for r in result
+    ]
+    assert len(intervals) == 2
+    assert intervals[0] == (date2, None)
+    # don't assert on second interval for now; let's call
+    # that one undefined behaviour
