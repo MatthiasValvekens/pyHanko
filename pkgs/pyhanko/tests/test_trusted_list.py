@@ -826,7 +826,7 @@ def test_tl_override_processing(
 DUMMY_BASE_INFO = tsp.BaseServiceInformation(
     service_type=eutl_parse.CA_QC_URI,
     service_name='Dummy',
-    valid_from=datetime(2020, 11, 1, tzinfo=timezone.utc),
+    valid_from=datetime(2015, 11, 1, tzinfo=timezone.utc),
     valid_until=None,
     provider_certs=(TESTING_CA_QUALIFIED.get_cert('root'),),
     additional_info_certificate_type=frozenset([tsp.QcCertType.QC_ESIGN]),
