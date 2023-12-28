@@ -20,7 +20,6 @@ from pyhanko.sign.validation.settings import KeyUsageConstraints
 _TRSTSVC_URI_BASE = 'http://uri.etsi.org/TrstSvc'
 _TRUSTEDLIST_URI_BASE = f'{_TRSTSVC_URI_BASE}/TrustedList'
 
-
 __all__ = [
     'CAServiceInformation',
     'TSPRegistry',
@@ -185,14 +184,17 @@ class TSPRegistry:
     def known_authorities(self) -> Iterable[Authority]:
         return self._cert_to_si.keys()
 
-    # TODO take date into account (and properly track it
-    #  for service definitions)
     def applicable_tsps_on_path(
-        self,
-        path: ValidationPath,
+        self, path: ValidationPath, moment: datetime
     ) -> Generator[CAServiceInformation, None, None]:
         for ca in path.iter_authorities():
-            yield from self.applicable_service_definitions(ca)
+            for service in self.applicable_service_definitions(ca):
+                valid_from = service.base_info.valid_from
+                valid_until = service.base_info.valid_until
+                if valid_from <= moment and (
+                    not valid_until or valid_until >= moment
+                ):
+                    yield service
 
 
 class TSPTrustManager(TrustManager):
