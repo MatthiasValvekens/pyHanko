@@ -817,7 +817,7 @@ remote signers that supply complete CMS objects.
             ),
             timestamper=timestamps.HTTPTimeStamper('http://tsa.example.com')
         )
-        prep_digest, tbs_document, output = \
+        prep_digest, tbs_document, output_handle = \
             await pdf_signer.async_digest_doc_for_signing(w)
         md_algorithm = tbs_document.md_algorithm
         psi = tbs_document.post_sign_instructions
@@ -825,8 +825,7 @@ remote signers that supply complete CMS objects.
         signed_attrs = await ext_signer.signed_attrs(
             prep_digest.document_digest, 'sha256', use_pades=True
         )
-        psi = tbs_document.post_sign_instructions
-        return prep_digest, signed_attrs, psi, output
+        return prep_digest, signed_attrs, psi, output_handle
 
     # After prep_document finishes, you can serialise the contents
     # of prep_digest, signed_attrs and psi somewhere.
