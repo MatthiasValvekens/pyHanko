@@ -4,7 +4,6 @@ Module defining common helpers for use by rules and policies.
 In principle, these aren't relevant to the high-level validation API.
 """
 
-
 import logging
 from typing import Callable, FrozenSet, Generator, Optional, Set, Tuple, TypeVar
 

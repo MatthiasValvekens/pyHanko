@@ -345,10 +345,10 @@ async def async_validate_pdf_ltv_signature(
             retroactive_revinfo=retroactive
         )
         if ac_validation_context_kwargs is not None:
-            ac_validation_context_kwargs[
-                'revinfo_policy'
-            ] = _strict_ltv_internal_revo_policy(
-                retroactive_revinfo=retroactive
+            ac_validation_context_kwargs['revinfo_policy'] = (
+                _strict_ltv_internal_revo_policy(
+                    retroactive_revinfo=retroactive
+                )
             )
     elif 'revocation_mode' not in vc_kwargs:
         vc_kwargs.setdefault(

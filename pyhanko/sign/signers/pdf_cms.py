@@ -2,6 +2,7 @@
 This module defines utility classes to format CMS objects for use in PDF
 signatures.
 """
+
 import asyncio
 import logging
 import warnings

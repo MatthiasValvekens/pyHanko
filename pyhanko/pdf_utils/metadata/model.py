@@ -5,6 +5,7 @@ This module contains the XMP data model classes and namespace registry,
 in addition to a simplified document metadata model used for automated
 metadata management.
 """
+
 import enum
 from dataclasses import dataclass, field
 from datetime import datetime

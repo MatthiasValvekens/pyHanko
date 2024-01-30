@@ -3,6 +3,7 @@
 This module relies on `fontTools <https://pypi.org/project/fonttools/>`_ for
 OTF parsing and subsetting, and on HarfBuzz (via ``uharfbuzz``) for shaping.
 """
+
 import logging
 from binascii import hexlify
 from dataclasses import dataclass

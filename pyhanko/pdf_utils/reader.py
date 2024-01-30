@@ -9,6 +9,7 @@ through incremental updates.
 This comes at a cost, and future iterations of this module may offer more
 flexibility in terms of the level of detail with which file size is scrutinised.
 """
+
 import logging
 import os
 import re

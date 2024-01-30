@@ -7,6 +7,7 @@ This module contains a number of functions to handle AdES signature validation.
     implemented at this stage. There will be bugs, and API changes may still
     occur.
 """
+
 import asyncio
 import dataclasses
 import itertools
@@ -246,17 +247,17 @@ class _InternalBasicValidationResult:
         if with_ts and self.signature_ts_validity:
             status_kwargs['timestamp_validity'] = self.signature_ts_validity
         if with_ts and self.content_ts_validity:
-            status_kwargs[
-                'content_timestamp_validity'
-            ] = self.content_ts_validity
+            status_kwargs['content_timestamp_validity'] = (
+                self.content_ts_validity
+            )
         if with_attrs and self.signer_attr_status:
             status_kwargs['ac_attrs'] = self.signer_attr_status.ac_attrs
-            status_kwargs[
-                'cades_signer_attrs'
-            ] = self.signer_attr_status.cades_signer_attrs
-            status_kwargs[
-                'ac_validation_errs'
-            ] = self.signer_attr_status.ac_validation_errs
+            status_kwargs['cades_signer_attrs'] = (
+                self.signer_attr_status.cades_signer_attrs
+            )
+            status_kwargs['ac_validation_errs'] = (
+                self.signer_attr_status.ac_validation_errs
+            )
         return status_cls(**status_kwargs)
 
 
@@ -270,8 +271,7 @@ async def ades_timestamp_validation(
     timing_info: Optional[ValidationTimingInfo] = None,
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESBasicValidationResult:
-    ...
+) -> AdESBasicValidationResult: ...
 
 
 @overload
@@ -283,8 +283,7 @@ async def ades_timestamp_validation(
     timing_info: Optional[ValidationTimingInfo] = None,
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESBasicValidationResult:
-    ...
+) -> AdESBasicValidationResult: ...
 
 
 async def ades_timestamp_validation(
@@ -600,8 +599,7 @@ async def ades_basic_validation(
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     signature_not_before_time: Optional[datetime] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESBasicValidationResult:
-    ...
+) -> AdESBasicValidationResult: ...
 
 
 @overload
@@ -614,8 +612,7 @@ async def ades_basic_validation(
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     signature_not_before_time: Optional[datetime] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESBasicValidationResult:
-    ...
+) -> AdESBasicValidationResult: ...
 
 
 async def ades_basic_validation(
@@ -789,8 +786,7 @@ async def ades_with_time_validation(
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     signature_not_before_time: Optional[datetime] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESWithTimeValidationResult:
-    ...
+) -> AdESWithTimeValidationResult: ...
 
 
 @overload
@@ -804,8 +800,7 @@ async def ades_with_time_validation(
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     signature_not_before_time: Optional[datetime] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESWithTimeValidationResult:
-    ...
+) -> AdESWithTimeValidationResult: ...
 
 
 async def ades_with_time_validation(

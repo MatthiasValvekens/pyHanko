@@ -6,6 +6,7 @@ The tools in this module allow pyHanko to obtain such tokens from
 :rfc:`3161`-compliant time stamping
 authorities.
 """
+
 import asyncio
 
 from asn1crypto import algos, cms, tsp

@@ -527,16 +527,16 @@ class SignatureIdentifierType:
 
 @dataclass(frozen=True)
 class SignatureValidationPolicyType:
-    signature_policy_identifier: Optional[
-        SignaturePolicyIdentifierType
-    ] = field(
-        default=None,
-        metadata={
-            "name": "SignaturePolicyIdentifier",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-            "required": True,
-        },
+    signature_policy_identifier: Optional[SignaturePolicyIdentifierType] = (
+        field(
+            default=None,
+            metadata={
+                "name": "SignaturePolicyIdentifier",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+                "required": True,
+            },
+        )
     )
     policy_name: Optional[str] = field(
         default=None,
@@ -986,15 +986,15 @@ class ValidationReportDataType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    revocation_status_information: Optional[
-        RevocationStatusInformationType
-    ] = field(
-        default=None,
-        metadata={
-            "name": "RevocationStatusInformation",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-        },
+    revocation_status_information: Optional[RevocationStatusInformationType] = (
+        field(
+            default=None,
+            metadata={
+                "name": "RevocationStatusInformation",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+            },
+        )
     )
     crypto_information: Optional[CryptoInformationType] = field(
         default=None,
@@ -1159,15 +1159,15 @@ class ValidationStatusType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    associated_validation_report_data: Tuple[
-        ValidationReportDataType, ...
-    ] = field(
-        default_factory=tuple,
-        metadata={
-            "name": "AssociatedValidationReportData",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-        },
+    associated_validation_report_data: Tuple[ValidationReportDataType, ...] = (
+        field(
+            default_factory=tuple,
+            metadata={
+                "name": "AssociatedValidationReportData",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+            },
+        )
     )
 
 
@@ -1291,15 +1291,15 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    commitment_type_indication: Tuple[
-        SACommitmentTypeIndicationType, ...
-    ] = field(
-        default_factory=tuple,
-        metadata={
-            "name": "CommitmentTypeIndication",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-        },
+    commitment_type_indication: Tuple[SACommitmentTypeIndicationType, ...] = (
+        field(
+            default_factory=tuple,
+            metadata={
+                "name": "CommitmentTypeIndication",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+            },
+        )
     )
     all_data_objects_time_stamp: Tuple[SATimestampType, ...] = field(
         default_factory=tuple,
@@ -1325,15 +1325,15 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_production_place: Tuple[
-        SASignatureProductionPlaceType, ...
-    ] = field(
-        default_factory=tuple,
-        metadata={
-            "name": "SignatureProductionPlace",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-        },
+    signature_production_place: Tuple[SASignatureProductionPlaceType, ...] = (
+        field(
+            default_factory=tuple,
+            metadata={
+                "name": "SignatureProductionPlace",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+            },
+        )
     )
     signer_role: Tuple[SASignerRoleType, ...] = field(
         default_factory=tuple,
@@ -1556,15 +1556,15 @@ class SignatureAttributesType:
 
 @dataclass(frozen=True)
 class ValidationConstraintsEvaluationReportType:
-    signature_validation_policy: Optional[
-        SignatureValidationPolicyType
-    ] = field(
-        default=None,
-        metadata={
-            "name": "SignatureValidationPolicy",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-        },
+    signature_validation_policy: Optional[SignatureValidationPolicyType] = (
+        field(
+            default=None,
+            metadata={
+                "name": "SignatureValidationPolicy",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+            },
+        )
     )
     validation_constraint: Tuple[
         IndividualValidationConstraintReportType, ...
@@ -1638,15 +1638,15 @@ class SignatureValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_validation_process: Optional[
-        SignatureValidationProcessType
-    ] = field(
-        default=None,
-        metadata={
-            "name": "SignatureValidationProcess",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-        },
+    signature_validation_process: Optional[SignatureValidationProcessType] = (
+        field(
+            default=None,
+            metadata={
+                "name": "SignatureValidationProcess",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+            },
+        )
     )
     signature_validation_status: Optional[ValidationStatusType] = field(
         default=None,
@@ -1736,16 +1736,16 @@ class ValidationObjectListType:
 
 @dataclass(frozen=True)
 class ValidationReportType:
-    signature_validation_report: Tuple[
-        SignatureValidationReportType, ...
-    ] = field(
-        default_factory=tuple,
-        metadata={
-            "name": "SignatureValidationReport",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-            "min_occurs": 1,
-        },
+    signature_validation_report: Tuple[SignatureValidationReportType, ...] = (
+        field(
+            default_factory=tuple,
+            metadata={
+                "name": "SignatureValidationReport",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+                "min_occurs": 1,
+            },
+        )
     )
     signature_validation_objects: Optional[ValidationObjectListType] = field(
         default=None,

@@ -5,6 +5,7 @@ The internals were imported from PyPDF2, with modifications.
 See :ref:`here <pypdf2-license>` for the original license
 of the PyPDF2 project.
 """
+
 import binascii
 import codecs
 import decimal

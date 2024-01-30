@@ -7,6 +7,7 @@ etc.) on top of already existing content in PDF files.
 The code in this module is also used by the :mod:`.sign` module to render
 signature appearances.
 """
+
 import enum
 import uuid
 from binascii import hexlify

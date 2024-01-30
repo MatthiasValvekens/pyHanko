@@ -3,6 +3,7 @@ Module defining common API types for use by rules and policies.
 
 In principle, these aren't relevant to the high-level validation API.
 """
+
 import logging
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field

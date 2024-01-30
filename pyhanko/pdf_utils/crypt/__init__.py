@@ -55,6 +55,7 @@ uses of crypt filters:
 As long as you don't require access to encoded object data and/or raw encrypted
 object data, this distiction should be irrelevant to you as an API user.
 """
+
 from .api import (
     ALL_PERMS,
     IDENTITY,

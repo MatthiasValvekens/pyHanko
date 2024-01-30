@@ -49,9 +49,11 @@ def _write_user_key(
     pem_bytes = key_handle.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.BestAvailableEncryption(passphrase)
-        if passphrase
-        else serialization.NoEncryption(),
+        encryption_algorithm=(
+            serialization.BestAvailableEncryption(passphrase)
+            if passphrase
+            else serialization.NoEncryption()
+        ),
     )
 
     fname = 'signer.key.pem'

@@ -571,8 +571,7 @@ async def async_validate_cms_signature(
     validation_context: Optional[ValidationContext] = None,
     status_kwargs: Optional[dict] = None,
     key_usage_settings: Optional[KeyUsageConstraints] = None,
-) -> StatusType:
-    ...
+) -> StatusType: ...
 
 
 @overload
@@ -583,8 +582,7 @@ async def async_validate_cms_signature(
     validation_context: Optional[ValidationContext] = None,
     status_kwargs: Optional[dict] = None,
     key_usage_settings: Optional[KeyUsageConstraints] = None,
-) -> SignatureStatus:
-    ...
+) -> SignatureStatus: ...
 
 
 async def async_validate_cms_signature(

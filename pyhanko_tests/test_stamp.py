@@ -218,7 +218,10 @@ def test_japanese_vertical_text_stamp():
     )
     w = empty_page()
     style = QRStampStyle(
-        stamp_text=('テスト\n縦書きテスト\n改行してみましょう（括弧）\nPDF\n' 'ちょっと長めの文を書いてみた。'),
+        stamp_text=(
+            'テスト\n縦書きテスト\n改行してみましょう（括弧）\nPDF\n'
+            'ちょっと長めの文を書いてみた。'
+        ),
         text_box_style=TextBoxStyle(font=gaf, vertical_text=True),
         qr_position=QRPosition.ABOVE_TEXT,
         background=STAMP_ART_CONTENT,

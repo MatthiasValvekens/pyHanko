@@ -114,10 +114,10 @@ def _summarise_attrs(
             )
         )
         oid = commitment_type['commitment_type_id']
-        kwargs[
-            'commitment_type_indication'
-        ] = ts_11910202.SACommitmentTypeIndicationType(
-            signed=True, commitment_type_identifier=f'urn:oid:{oid.dotted}'
+        kwargs['commitment_type_indication'] = (
+            ts_11910202.SACommitmentTypeIndicationType(
+                signed=True, commitment_type_identifier=f'urn:oid:{oid.dotted}'
+            )
         )
     except NonexistentAttributeError:
         pass
@@ -148,11 +148,11 @@ def _summarise_attrs(
 
     # signature_production_place (SASignatureProductionPlaceType)
     if '/Location' in embedded_sig.sig_object:
-        kwargs[
-            'signature_production_place'
-        ] = ts_11910202.SASignatureProductionPlaceType(
-            signed=True,
-            address_string=(str(embedded_sig.sig_object['/Location']),),
+        kwargs['signature_production_place'] = (
+            ts_11910202.SASignatureProductionPlaceType(
+                signed=True,
+                address_string=(str(embedded_sig.sig_object['/Location']),),
+            )
         )
     # signer_role (SASignerRoleType)
     if api_status.cades_signer_attrs:
@@ -355,11 +355,11 @@ def _package_validation_object(vo: ValidationObject):
     return ts_11910202.ValidationObjectType(
         id=derive_validation_object_identifier(vo),
         object_type=vo.object_type.urn(),
-        validation_object_representation=ts_11910202.ValidationObjectRepresentationType(
-            base64=bin_data
-        )
-        if bin_data
-        else None,
+        validation_object_representation=(
+            ts_11910202.ValidationObjectRepresentationType(base64=bin_data)
+            if bin_data
+            else None
+        ),
     )
 
 

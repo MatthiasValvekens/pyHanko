@@ -678,15 +678,15 @@ class TSPServiceInformationType:
             "required": True,
         },
     )
-    scheme_service_definition_uri: Optional[
-        NonEmptyMultiLangURIListType
-    ] = field(
-        default=None,
-        metadata={
-            "name": "SchemeServiceDefinitionURI",
-            "type": "Element",
-            "namespace": "http://uri.etsi.org/02231/v2#",
-        },
+    scheme_service_definition_uri: Optional[NonEmptyMultiLangURIListType] = (
+        field(
+            default=None,
+            metadata={
+                "name": "SchemeServiceDefinitionURI",
+                "type": "Element",
+                "namespace": "http://uri.etsi.org/02231/v2#",
+            },
+        )
     )
     service_supply_points: Optional[ServiceSupplyPoints] = field(
         default=None,

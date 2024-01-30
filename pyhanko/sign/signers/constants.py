@@ -2,6 +2,7 @@
 This module defines constants & defaults used by pyHanko when creating digital
 signatures.
 """
+
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.extensions import (
     DeveloperExtension,

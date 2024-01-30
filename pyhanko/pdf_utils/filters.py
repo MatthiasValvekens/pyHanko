@@ -7,6 +7,7 @@ for the original license of the PyPDF2 project.
 Note that not all decoders specified in the standard are supported.
 In particular ``/LZWDecode`` and the various JPEG-based decoders are missing.
 """
+
 import binascii
 import re
 import struct

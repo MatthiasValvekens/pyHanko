@@ -1,6 +1,7 @@
 """
 This module implements support for PDF-specific signing functionality.
 """
+
 import asyncio
 import enum
 import logging

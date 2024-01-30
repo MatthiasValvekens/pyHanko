@@ -325,9 +325,9 @@ class CertifiedAttributes:
         cls, results: Iterable[ACValidationResult], parse_error_fatal=False
     ):
         # first, classify the attributes and results by type
-        by_type: Dict[
-            str, Tuple[List[Any], List[ACValidationResult]]
-        ] = defaultdict(lambda: ([], []))
+        by_type: Dict[str, Tuple[List[Any], List[ACValidationResult]]] = (
+            defaultdict(lambda: ([], []))
+        )
         for result in results:
             for attr in result.approved_attributes.values():
                 attr_type = attr['type'].native

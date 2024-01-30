@@ -5,7 +5,6 @@ document trailer data.
 This entire module is considered internal API.
 """
 
-
 import enum
 import logging
 import os

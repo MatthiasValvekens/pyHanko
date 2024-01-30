@@ -3,6 +3,7 @@ This module provides PKCS#11 integration for pyHanko, by providing a wrapper
 for `python-pkcs11 <https://github.com/danni/python-pkcs11>`_ that can be
 seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
+
 import asyncio
 import binascii
 import logging

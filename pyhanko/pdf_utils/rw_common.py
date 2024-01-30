@@ -1,4 +1,5 @@
 """Utilities common to reading and writing PDF files."""
+
 from typing import Tuple
 
 from . import generic, misc

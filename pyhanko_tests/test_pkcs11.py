@@ -3,6 +3,7 @@ Tests for PKCS#11 functionality.
 
 NOTE: these are not run in CI, due to lack of testing setup.
 """
+
 import asyncio
 import binascii
 from io import BytesIO

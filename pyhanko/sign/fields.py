@@ -1,6 +1,7 @@
 """
 Utilities to deal with signature form fields and their properties in PDF files.
 """
+
 import logging
 from dataclasses import dataclass
 from enum import Enum, Flag, unique
