@@ -79,7 +79,7 @@ testing-basic = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
-    "pytest-asyncio==0.23.3",
+    "pytest-asyncio==0.23.4",
     "certomancer==0.11.*",
     "pytest-cov>=4.0,<4.2",
     "backports.zoneinfo[tzdata];python_version<\"3.9\"",
