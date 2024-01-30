@@ -967,9 +967,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
                 or originator_pub_key.curve.name != priv_key.curve.name
             ):
                 raise ValueError(mismatch_msg)
-            ecdh_value = priv_key.exchange(
-                ECDH(), peer_public_key=originator_pub_key
-            )
+            ecdh_value = priv_key.exchange(ECDH(), originator_pub_key)
         elif isinstance(priv_key, X25519PrivateKey):
             if not isinstance(originator_pub_key, X25519PublicKey):
                 raise ValueError(mismatch_msg)
