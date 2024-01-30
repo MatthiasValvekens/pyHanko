@@ -159,7 +159,7 @@ jobs:
           env_vars: OS,PYTHON
           name: codecov-umbrella
       - name: Clean up coverage reports
+        continue-on-error: true
         uses: GeekyEggo/delete-artifact@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           name: coverage-*
