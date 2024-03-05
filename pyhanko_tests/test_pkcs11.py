@@ -410,6 +410,20 @@ def test_simple_sign_from_config():
     val_trusted(emb)
 
 
+def test_config_init_failure_signing_error():
+    config = PKCS11SignatureConfig(
+        module_path='.',
+        token_criteria=TokenCriteria('testrsa'),
+        cert_label=SIGNER_LABEL,
+        user_pin='1234',
+        other_certs_to_pull=None,
+    )
+
+    with pytest.raises(SigningError, match='error while opening session'):
+        with PKCS11SigningContext(config):
+            pass
+
+
 @freeze_time('2020-11-01')
 def test_sign_skip_login_fail():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))

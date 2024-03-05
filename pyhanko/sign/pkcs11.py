@@ -720,12 +720,17 @@ class PKCS11SigningContext:
         config = self.config
         pin = self._handle_pin()
 
-        self._session = session = open_pkcs11_session(
-            config.module_path,
-            slot_no=config.slot_no,
-            token_criteria=config.token_criteria,
-            user_pin=pin,
-        )
+        try:
+            self._session = session = open_pkcs11_session(
+                config.module_path,
+                slot_no=config.slot_no,
+                token_criteria=config.token_criteria,
+                user_pin=pin,
+            )
+        except pkcs11.PKCS11Error as ex:
+            raise SigningError(
+                f"PKCS#11 error while opening session to {config.module_path}: [{type(ex).__name__}] {ex}"
+            ) from ex
         return PKCS11Signer(
             session,
             config.cert_label,
@@ -741,12 +746,7 @@ class PKCS11SigningContext:
         )
 
     def __enter__(self):
-        try:
-            return self._instantiate()
-        except pkcs11.PKCS11Error as ex:  # pragma: nocover
-            raise SigningError(
-                f"PKCS#11 error: [{type(ex).__name__}] {ex}"
-            ) from ex
+        return self._instantiate()
 
     async def __aenter__(self):
         loop = asyncio.get_running_loop()
