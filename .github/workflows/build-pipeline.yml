@@ -19,7 +19,7 @@ env:
   MAIN_PYTHON_VERSION: "3.10"
   PDFTOPPM_PATH: /usr/bin/pdftoppm
   IM_COMPARE_PATH: /usr/bin/compare
-  SOFTHSM2_CONF: softhsm2.conf
+  SOFTHSM2_CONF: /tmp/softhsm2.conf
   SOFTHSM2_MODULE_PATH: /usr/lib/softhsm/libsofthsm2.so
   CERTOMANCER_CONFIG_PATH: pyhanko_tests/data/crypto/certomancer.yml
 
