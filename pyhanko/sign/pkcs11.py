@@ -23,6 +23,7 @@ from pyhanko.config.pkcs11 import (
     PKCS11SignatureConfig,
     TokenCriteria,
 )
+from pyhanko.pdf_utils.misc import coalesce
 from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 from pyhanko.sign.signers import Signer
 
@@ -516,23 +517,10 @@ class PKCS11Signer(Signer):
         """
         Initialise a PKCS11 signer.
         """
-        if signing_cert is None and cert_id is None and cert_label is None:
-            raise SigningError(
-                "Please specify a signer's certificate through the "
-                "'cert_id', 'signing_cert' and/or 'cert_label' options"
-            )
-
-        self.cert_label = cert_label
-        self.key_id = key_id
-        self.cert_id = cert_id
-        if key_id is None and key_label is None:
-            if cert_label is None:
-                raise SigningError(
-                    "If 'cert_label' is None, then 'key_label' or 'key_id' "
-                    "must be provided."
-                )
-            key_label = cert_label
-        self.key_label = key_label
+        self.cert_label = coalesce(cert_label, key_label)
+        self.key_id = coalesce(key_id, cert_id)
+        self.cert_id = coalesce(cert_id, key_id)
+        self.key_label = coalesce(key_label, cert_label)
         self.pkcs11_session = pkcs11_session
         self.other_certs = other_certs_to_pull
         self._other_certs_loaded = False

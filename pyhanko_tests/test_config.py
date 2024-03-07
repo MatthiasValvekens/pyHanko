@@ -718,20 +718,6 @@ def test_read_pkcs11_config_external_cert():
     assert isinstance(setup.signing_certificate, x509.Certificate)
 
 
-def test_read_pkcs11_config_no_key_spec():
-    cli_config = _parse_cli_config(
-        f"""
-        pkcs11-setups:
-            foo:
-                module-path: /path/to/libfoo.so
-                slot-no: 0
-                cert-id: "deadbeef"
-        """
-    )
-    with pytest.raises(ConfigurationError, match="Either 'key_id'"):
-        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
-
-
 def test_read_pkcs11_config_bad_criteria_type():
     cli_config = _parse_cli_config(
         f"""
@@ -765,7 +751,20 @@ def test_read_pkcs11_config_bad_serial():
         ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
 
-def test_read_pkcs11_config_no_cert_spec():
+def test_read_pkcs11_config_no_cert_spec_or_key_spec():
+    cli_config = _parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+        """
+    )
+    with pytest.raises(ConfigurationError, match="Either 'key_id'"):
+        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+
+
+def test_read_pkcs11_config_cert_label_from_key_label():
     cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
@@ -775,8 +774,50 @@ def test_read_pkcs11_config_no_cert_spec():
                 key-label: signer
         """
     )
-    with pytest.raises(ConfigurationError, match="Either 'cert_id'"):
-        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+    cfg = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+    assert (cfg.cert_label, cfg.cert_id) == ('signer', None)
+
+
+def test_read_pkcs11_config_cert_id_from_key_id():
+    cli_config = _parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                key-id: deadbeef
+        """
+    )
+    cfg = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+    assert (cfg.cert_label, cfg.cert_id) == (None, b"\xde\xad\xbe\xef")
+
+
+def test_read_pkcs11_config_key_id_from_cert_id():
+    cli_config = _parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                cert-id: "deadbeef"
+        """
+    )
+    cfg = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+    assert (cfg.key_label, cfg.key_id) == (None, b"\xde\xad\xbe\xef")
+
+
+def test_read_pkcs11_config_key_label_from_cert_label():
+    cli_config = _parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                cert-label: "signer"
+        """
+    )
+    cfg = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+    assert (cfg.key_label, cfg.key_id) == ("signer", None)
 
 
 @pytest.mark.parametrize(
@@ -1062,50 +1103,50 @@ class DemoConfigurableB(ConfigurableMixin):
     [
         (
             """
-        some_field:
-            field1: 1
-            field2: [1,2]
-        """,
+            some_field:
+                field1: 1
+                field2: [1,2]
+            """,
             DemoConfigurableA(field1=1, field2=[1, 2]),
         ),
         (
             """
-        some_field:
-            field1: 1
-            field2: [1,2]
-            field3: 5
-        """,
+            some_field:
+                field1: 1
+                field2: [1,2]
+                field3: 5
+            """,
             DemoConfigurableA(field1=1, field2=[1, 2], field3=5),
         ),
         (
             """
-        some_field:
-            field1: 1
-            field2: [1,2]
-            field3: 5
-            field4: [6,7,8]
-        """,
+            some_field:
+                field1: 1
+                field2: [1,2]
+                field3: 5
+                field4: [6,7,8]
+            """,
             DemoConfigurableA(
                 field1=1, field2=[1, 2], field3=5, field4=[6, 7, 8]
             ),
         ),
         (
             """
-        some_field:
-            field1: 1
-            field2: [1,2]
-            field5: xyz
-        """,
+            some_field:
+                field1: 1
+                field2: [1,2]
+                field5: xyz
+            """,
             DemoConfigurableA(field1=1, field2=[1, 2], field5='xyz'),
         ),
         (
             """
-        some_field:
-            field1: 1
-            field2: [1,2]
-            field5: 8
-            field6: xyz
-        """,
+            some_field:
+                field1: 1
+                field2: [1,2]
+                field5: 8
+                field6: xyz
+            """,
             DemoConfigurableA(field1=1, field2=[1, 2], field5=8, field6='xyz'),
         ),
         ("{}", None),

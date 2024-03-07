@@ -555,3 +555,10 @@ class _LiftedIterable(CancelableAsyncIterator[X]):
 
 def lift_iterable_async(i: Iterable[X]) -> CancelableAsyncIterator[X]:
     return _LiftedIterable(i)
+
+
+def coalesce(*args):
+    for arg in args:
+        if arg is not None:
+            return arg
+    return None
