@@ -3,6 +3,42 @@ Release history
 ***************
 
 
+.. _release-0.22.0:
+
+*Release date:* 2024-03-07
+
+
+Dependency changes
+------------------
+
+ * Relax upper bounds on ``xsdata`` and ``uharfbuzz``.
+ * ``cryptography` to ``42.0.1``
+ * Get rid of ``pytest-runner``
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Relax processing of PKCS#11 options, setting better defaults so
+   users have to write less config to select their key/certificate.
+   (see PR #296 <https://github.com/MatthiasValvekens/pyHanko/issues/296>)
+
+
+CLI
+^^^
+
+ * Add ``timestamp`` command to CLI to add a document timestamp without
+   performing any PAdES validation.
+
+
+Bugs fixed
+----------
+
+ * Gracefully handle lack of ``/Type`` entry in signature objects vailidation.
+
 .. _release-0.21.0:
 
 *Release date:* 2023-11-26
