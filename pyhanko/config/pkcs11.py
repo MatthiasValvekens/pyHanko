@@ -224,24 +224,32 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
             config_dict['key_id'] = _process_pkcs11_id_value(
                 config_dict['key_id']
             )
-        elif 'key_label' not in config_dict and 'cert_label' not in config_dict:
-            raise ConfigurationError(
-                "Either 'key_id', 'key_label' or 'cert_label' must be provided "
-                "in PKCS#11 setup"
-            )
 
         if 'cert_id' in config_dict:
             config_dict['cert_id'] = _process_pkcs11_id_value(
                 config_dict['cert_id']
             )
-        elif (
+
+        if 'key_label' not in config_dict and 'key_id' not in config_dict:
+            if 'cert_id' not in config_dict and 'cert_label' not in config_dict:
+                raise ConfigurationError(
+                    "Either 'key_id', 'key_label', 'cert_label' or 'cert_id',"
+                    "must be provided in PKCS#11 setup"
+                )
+            if 'cert_id' in config_dict:
+                config_dict['key_id'] = config_dict['cert_id']
+            if 'cert_label' in config_dict:
+                config_dict['key_label'] = config_dict['cert_label']
+
+        if (
             'cert_label' not in config_dict
+            and 'cert_id' not in config_dict
             and 'signing_certificate' not in config_dict
         ):
-            raise ConfigurationError(
-                "Either 'cert_id', 'cert_label' or 'signing_certificate' "
-                "must be provided in PKCS#11 setup"
-            )
+            if 'key_id' in config_dict:
+                config_dict['cert_id'] = config_dict['key_id']
+            if 'key_label' in config_dict:
+                config_dict['cert_label'] = config_dict['key_label']
 
         config_dict['prompt_pin'] = get_and_apply(
             config_dict,

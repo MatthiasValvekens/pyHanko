@@ -207,7 +207,7 @@ def test_wrong_cert(bulk_fetch):
             bulk_fetch=bulk_fetch,
             cert_id=binascii.unhexlify(b'deadbeef'),
         )
-        with pytest.raises(PKCS11Error, match='Could not find.*with ID'):
+        with pytest.raises(PKCS11Error, match='Could not find cert'):
             signers.sign_pdf(w, meta, signer=signer)
 
 
@@ -283,25 +283,31 @@ def test_signer_pulled_others_provided(bulk_fetch):
 
 
 @freeze_time('2020-11-01')
-def test_unclear_key_label():
-    signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
+def test_unclear_key_label_and_cert():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
-        with pytest.raises(SigningError, match='\'key_label\'.*must be prov'):
-            pkcs11.PKCS11Signer(
-                sess,
-                signing_cert=signer_cert,
-                other_certs_to_pull=default_other_certs,
-            )
+        with pytest.raises(PKCS11Error, match='Found more than one'):
+            signer = pkcs11.PKCS11Signer(sess)
+            signers.sign_pdf(w, meta, signer=signer)
 
 
 @freeze_time('2020-11-01')
-def test_unclear_signer_cert():
+def test_auto_use_only_key_if_cert_is_known():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     with _simple_sess() as sess:
-        with pytest.raises(SigningError, match='Please specify'):
-            pkcs11.PKCS11Signer(
-                sess,
-                other_certs_to_pull=default_other_certs,
-            )
+        signer = pkcs11.PKCS11Signer(
+            sess,
+            signing_cert=signer_cert,
+            other_certs_to_pull=default_other_certs,
+        )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    val_trusted(emb)
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
