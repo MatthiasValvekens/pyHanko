@@ -32,6 +32,14 @@ pyhanko.sign.beid module
    :undoc-members:
    :show-inheritance:
 
+pyhanko.sign.eoi module
+------------------------
+
+.. automodule:: pyhanko.sign.eoi
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 pyhanko.sign.fields module
 --------------------------
 
