@@ -107,7 +107,7 @@ jobs:
         upload-signing-artifacts: true
     - name: Create GitHub release
       if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: |
           dist/*.whl
