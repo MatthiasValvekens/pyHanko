@@ -3,6 +3,25 @@ Release history
 ***************
 
 
+.. _release-0.23.0:
+
+*Release date:* 2024-03-10
+
+
+Breaking changes
+----------------
+
+ * The BeID signer implementation and CLI command was moved into a separate
+   package; see
+   `pyhanko-beid-plugin <https://github.com/MatthiasValvekens/pyhanko-beid-plugin>`_.
+   While this integration was so far preserved in the core tree for
+   historical reasons, pyHanko has matured beyond this kind of vendor/country-specific
+   code. Note that CLI invocations will continue to work unchanged as long as
+   ``pyhanko-beid-plugin`` is installed alongside pyHanko, thanks to Python's
+   package entry point mechanism.
+
+
+
 .. _release-0.22.0:
 
 *Release date:* 2024-03-07
