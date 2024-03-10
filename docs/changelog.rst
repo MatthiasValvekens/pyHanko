@@ -3,6 +3,25 @@ Release history
 ***************
 
 
+.. _release-0.23.0:
+
+*Release date:* 2024-03-10
+
+
+Breaking changes
+----------------
+
+ * The BeID signer implementation and CLI command was moved into a separate
+   package; see
+   `pyhanko-beid-plugin <https://github.com/MatthiasValvekens/pyhanko-beid-plugin>`_.
+   While this integration was so far preserved in the core tree for
+   historical reasons, pyHanko has matured beyond this kind of vendor/country-specific
+   code. Note that CLI invocations will continue to work unchanged as long as
+   ``pyhanko-beid-plugin`` is installed alongside pyHanko, thanks to Python's
+   package entry point mechanism.
+
+
+
 .. _release-0.22.0:
 
 *Release date:* 2024-03-07
@@ -334,7 +353,7 @@ Other than these, there have been some miscellaneous changes.
  * Move ``add_content_to_page`` to :meth:`~pyhanko.pdf_utils.content.PdfContent.add_to_page` to deal with a
    (conceptual) circular dependency between modules.
  * :class:`~pyhanko_certvalidator.registry.CertificateStore` is no longer reexported by :mod:`pyhanko.sign.general`.
- * The :class:`~pyhanko.sign.beid.BEIDSigner` no longer allows convenient access to the authentication certificate.
+ * The ``BEIDSigner`` no longer allows convenient access to the authentication certificate.
  * Packaging-wise, underscores have been replaced with hyphens in optional dependency groups.
  * In ``pyhanko_certvalidator``, :class:`~pyhanko_certvalidator.errors.InvalidCertificateError`
    is no longer a subclass of :class:`~pyhanko_certvalidator.errors.PathValidationError`.

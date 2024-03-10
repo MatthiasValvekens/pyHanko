@@ -117,7 +117,6 @@ def _load_plugins(root_config: Optional[CLIRootConfig], plugins_enabled: bool):
     # we always load the default ones
     to_load = [
         'pyhanko.cli.commands.signing.pkcs11_cli:PKCS11Plugin',
-        'pyhanko.cli.commands.signing.pkcs11_cli:BEIDPlugin',
         'pyhanko.cli.commands.signing.simple:PKCS12Plugin',
         'pyhanko.cli.commands.signing.simple:PemderPlugin',
     ]
