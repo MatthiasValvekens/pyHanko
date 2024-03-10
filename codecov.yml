@@ -1,6 +1,5 @@
 ignore: 
     - "pyhanko_tests"
     - "docs"
-    - "pyhanko/sign/beid.py"
     - "pyhanko/__main__.py"
     - "pyhanko/pdf_utils/_saslprep.py"  # this is mostly vendored code

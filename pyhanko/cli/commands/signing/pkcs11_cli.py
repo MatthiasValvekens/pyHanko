@@ -1,4 +1,3 @@
-import contextlib
 import getpass
 import os
 from typing import ContextManager, List, Optional
@@ -17,7 +16,7 @@ from pyhanko.config.pkcs11 import (
 )
 from pyhanko.sign import Signer
 
-__all__ = ['PKCS11Plugin', 'BEIDPlugin']
+__all__ = ['PKCS11Plugin']
 
 
 try:
@@ -174,41 +173,9 @@ def _pkcs11_signer_context(
     return pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin)
 
 
-class BEIDPlugin(SigningCommandPlugin):
-    subcommand_name = 'beid'
-    help_summary = 'use Belgian eID to sign'
-    unavailable_message = UNAVAIL_MSG
-
-    def is_available(self) -> bool:
-        return pkcs11_available
-
-    def click_options(self) -> List[click.Option]:
-        return [
-            click.Option(
-                ('--lib',),
-                help='path to libbeidpkcs11 library file',
-                type=readable_file,
-                required=False,
-            ),
-            click.Option(
-                ('--slot-no',),
-                help='specify PKCS#11 slot to use',
-                required=False,
-                type=int,
-                default=None,
-            ),
-        ]
-
-    def create_signer(
-        self, context: CLIContext, **kwargs
-    ) -> ContextManager[Signer]:
-        return _beid_signer_context(context, **kwargs)
-
-
 class ModuleConfigWrapper:
     def __init__(self, config: CLIConfig):
         config_dict = config.raw_config
-        self.beid_module_path = config_dict.get('beid-module-path', None)
         self.pkcs11_setups = config_dict.get('pkcs11-setups', {})
 
     def get_pkcs11_config(self, name):
@@ -217,39 +184,3 @@ class ModuleConfigWrapper:
         except KeyError:
             raise ConfigurationError(f"There's no PKCS#11 setup named '{name}'")
         return PKCS11SignatureConfig.from_config(setup)
-
-
-def _beid_signer_context(ctx: CLIContext, lib, slot_no):
-    import pkcs11
-
-    from pyhanko.sign import beid
-
-    module_path: str
-    if not lib:
-        cli_config: Optional[CLIConfig] = ctx.config
-        beid_module_path = None
-        if cli_config is not None:
-            beid_module_path = ModuleConfigWrapper(cli_config).beid_module_path
-        if beid_module_path is None:
-            raise click.ClickException(
-                "The --lib option is mandatory unless beid-module-path is "
-                "provided in the configuration file."
-            )
-        module_path = beid_module_path
-    else:
-        module_path = lib
-
-    @contextlib.contextmanager
-    def manager():
-        try:
-            session = beid.open_beid_session(module_path, slot_no=slot_no)
-        except pkcs11.PKCS11Error as e:
-            logger.error("PKCS#11 error", exc_info=e)
-            raise click.ClickException(
-                f"PKCS#11 error: [{type(e).__name__}] {e}"
-            )
-
-        with session:
-            yield beid.BEIDSigner(session)
-
-    return manager()

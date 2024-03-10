@@ -334,7 +334,7 @@ Other than these, there have been some miscellaneous changes.
  * Move ``add_content_to_page`` to :meth:`~pyhanko.pdf_utils.content.PdfContent.add_to_page` to deal with a
    (conceptual) circular dependency between modules.
  * :class:`~pyhanko_certvalidator.registry.CertificateStore` is no longer reexported by :mod:`pyhanko.sign.general`.
- * The :class:`~pyhanko.sign.beid.BEIDSigner` no longer allows convenient access to the authentication certificate.
+ * The ``BEIDSigner`` no longer allows convenient access to the authentication certificate.
  * Packaging-wise, underscores have been replaced with hyphens in optional dependency groups.
  * In ``pyhanko_certvalidator``, :class:`~pyhanko_certvalidator.errors.InvalidCertificateError`
    is no longer a subclass of :class:`~pyhanko_certvalidator.errors.PathValidationError`.

@@ -24,14 +24,6 @@ pyhanko.sign.attributes module
    :undoc-members:
    :show-inheritance:
 
-pyhanko.sign.beid module
-------------------------
-
-.. automodule:: pyhanko.sign.beid
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 pyhanko.sign.fields module
 --------------------------
 

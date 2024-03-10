@@ -254,56 +254,6 @@ With this information, producing a basic signature isn't very hard:
 Have a look at ``pyhanko sign addsig pkcs11 --help`` for a full list of options.
 
 
-Signing a PDF file using a Belgian eID card
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-To sign a PDF file using your eID card, use the ``beid`` subcommand to
-``addsig``, with the ``--lib`` parameter to tell pyHanko where to look for the
-eID PKCS#11 library.
-
-.. note::
-    Of course, you can also use the ``pkcs11`` subcommand, but ``beid`` provides an extra layer
-    of convenience.
-
-On Linux, it is named ``libbeidpkcs11.so`` and can usually be found under
-``/usr/lib`` or ``/usr/local/lib``.
-On macOS, it is named ``libbeidpkcs11.dylib``, and can similarly be found under
-``/usr/local/lib``.
-The Windows version is typically installed to ``C:\Windows\System32`` and is
-called ``beidpkcs11.dll``.
-
-
-On Linux, this boils down to the following:
-
-.. code-block:: bash
-
-    pyhanko sign addsig --field Sig1 beid \
-        --lib /path/to/libbeidpkcs11.so input.pdf output.pdf
-
-On all platforms, the eID middleware will prompt you to enter your PIN to create
-the signature.
-
-
-.. warning::
-    This command will produce a non-repudiable signature using the 'Signature'
-    certificate on your eID card (as opposed to the 'Authentication'
-    certificate). These signatures are legally equivalent to
-    a normal "wet" signature wherever they are allowed, so use them with care.
-
-    In particular, you should only allow software you trust\ [#disclaimer]_
-    to use the 'Signature' certificate!
-
-
-.. warning::
-    You should also be aware that your national registry number
-    (rijksregisternummer, no. de registre national) is embedded into the
-    metadata of the signature certificate on your eID card\ [#nnserial]_.
-    As such, it can also be **read off from any digital signature you create**.
-    While national registry numbers aren't secret per se, they are nevertheless
-    often considered sensitive personal information, so you may want to be
-    careful where you send documents containing your eID signature or that
-    of someone else.
-
 
 .. _ltv-signing:
 
@@ -507,10 +457,3 @@ see :doc:`stamping` and :ref:`style-definitions` for details.
 .. [#validationscope]
     The author has it on good authority that a rigorous incremental update
     validation specification is beyond the scope of the PDF standard itself.
-.. [#disclaimer]
-    This obviously also applies to pyHanko itself; be aware that pyHanko's
-    :doc:`license </license>` doesn't make any fitness-for-purpose guarantees,
-    so making sure you know what you're running is 100% your own responsibility.
-.. [#nnserial]
-    The certificate's serial number is in fact equal to the holder's
-    national registry number.

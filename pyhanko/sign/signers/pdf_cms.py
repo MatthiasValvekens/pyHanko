@@ -250,8 +250,7 @@ class Signer:
     * :class:`.SimpleSigner` implements the easy case where all the key material
       can be loaded into memory.
     * :class:`~pyhanko.sign.pkcs11.PKCS11Signer` implements a signer that is
-      capable of interfacing with a PKCS#11 device
-      (see also :class:`~pyhanko.sign.beid.BEIDSigner`).
+      capable of interfacing with a PKCS#11 device.
 
     :param prefer_pss:
         When signing using an RSA key, prefer PSS padding to legacy PKCS#1 v1.5

@@ -128,14 +128,6 @@ def _write_config(config: dict, fname: str = 'pyhanko.yml'):
         yaml.dump(config, outf)
 
 
-class _DummyManager:
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        return
-
-
 logger = logging.getLogger(__name__)
 
 
