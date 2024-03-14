@@ -24,6 +24,7 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import general, pkcs11, signers
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.pkcs11 import (
+    PKCS11Signer,
     PKCS11SigningContext,
     TokenCriteria,
     criteria_satisfied_by,
@@ -831,3 +832,38 @@ def test_token_not_found(slot_list, token_lbl_query):
         token_criteria=TokenCriteria(label=token_lbl_query),
     )
     assert tok is None
+
+
+def _mirror(*cfgs):
+    for cfg in cfgs:
+        a = cfg
+        b = cfg[1], cfg[0], cfg[3], cfg[2]
+        yield a
+        if a != b:
+            yield b
+
+
+@pytest.mark.parametrize(
+    'key_in,cert_in,key_prop,cert_prop',
+    [
+        *_mirror(
+            ((None, None), (None, None), (None, None), (None, None)),
+            (('a', b"a"), (None, None), ('a', b"a"), ('a', b"a")),
+            (('a', None), (None, None), ('a', None), ('a', None)),
+            ((None, b"a"), (None, None), (None, b"a"), (None, b"a")),
+            (('a', None), (None, b"a"), ('a', None), (None, b"a")),
+        )
+    ],
+)
+def test_config_fallbacks(key_in, cert_in, key_prop, cert_prop):
+    # noinspection PyTypeChecker
+    signer = PKCS11Signer(
+        pkcs11_session=None,
+        cert_label=cert_in[0],
+        cert_id=cert_in[1],
+        key_label=key_in[0],
+        key_id=key_in[1],
+    )
+    actual_key_prop = signer.key_label, signer.key_id
+    actual_cert_prop = signer.cert_label, signer.cert_id
+    assert (actual_key_prop, actual_cert_prop) == (key_prop, cert_prop)
