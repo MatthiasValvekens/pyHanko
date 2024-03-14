@@ -47,7 +47,6 @@ except ImportError as e:  # pragma: nocover
         e,
     )
 
-
 __all__ = [
     'PKCS11Signer',
     'open_pkcs11_session',
@@ -165,7 +164,6 @@ RSA_MECH_MAP = {
     'sha512': Mechanism.SHA512_RSA_PKCS,
 }
 
-
 RSASSA_PSS_MECH_MAP = {
     'sha1': Mechanism.SHA1_RSA_PKCS_PSS,
     'sha224': Mechanism.SHA224_RSA_PKCS_PSS,
@@ -182,7 +180,6 @@ MGF_MECH_MAP = {
     'sha512': MGF.SHA512,
 }
 
-
 ECDSA_MECH_MAP = {
     'sha1': Mechanism.ECDSA_SHA1,
     'sha224': Mechanism.ECDSA_SHA224,
@@ -190,7 +187,6 @@ ECDSA_MECH_MAP = {
     'sha384': Mechanism.ECDSA_SHA384,
     'sha512': Mechanism.ECDSA_SHA512,
 }
-
 
 DSA_MECH_MAP = {
     'sha1': Mechanism.DSA_SHA1,
@@ -203,7 +199,6 @@ DSA_MECH_MAP = {
     'sha384': Mechanism.DSA_SHA384,
     'sha512': Mechanism.DSA_SHA512,
 }
-
 
 DIGEST_MECH_MAP = {
     'sha1': Mechanism.SHA_1,
@@ -517,10 +512,12 @@ class PKCS11Signer(Signer):
         """
         Initialise a PKCS11 signer.
         """
-        self.cert_label = coalesce(cert_label, key_label)
-        self.key_id = coalesce(key_id, cert_id)
-        self.cert_id = coalesce(cert_id, key_id)
-        self.key_label = coalesce(key_label, cert_label)
+        self.cert_label = coalesce(
+            cert_label, key_label if not cert_id else None
+        )
+        self.key_id = coalesce(key_id, cert_id if not key_label else None)
+        self.cert_id = coalesce(cert_id, key_id if not cert_label else None)
+        self.key_label = coalesce(key_label, cert_label if not key_id else None)
         self.pkcs11_session = pkcs11_session
         self.other_certs = other_certs_to_pull
         self._other_certs_loaded = False

@@ -820,6 +820,22 @@ def test_read_pkcs11_config_key_label_from_cert_label():
     assert (cfg.key_label, cfg.key_id) == ("signer", None)
 
 
+def test_read_pkcs11_config_key_label_not_from_cert_label_if_key_id_defined():
+    cli_config = _parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                cert-label: "signer"
+                key-id: "deadbeef"
+        """
+    )
+    cfg = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+    assert (cfg.key_label, cfg.key_id) == (None, b"\xde\xad\xbe\xef")
+    assert (cfg.cert_label, cfg.cert_id) == ("signer", None)
+
+
 @pytest.mark.parametrize(
     'literal,exp_val',
     [
