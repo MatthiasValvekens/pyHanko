@@ -3,6 +3,17 @@ Release history
 ***************
 
 
+.. _release-0.23.1:
+
+*Release date:* 2024-03-14
+
+
+Bugs fixed
+----------
+
+ * Fix a regression in the way PKCS#11 objects are loaded.
+
+
 .. _release-0.23.0:
 
 *Release date:* 2024-03-10
