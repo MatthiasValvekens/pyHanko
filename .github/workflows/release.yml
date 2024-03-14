@@ -11,10 +11,12 @@ on:
 jobs:
   ci:
     name: Run CI pipeline
-    uses: MatthiasValvekens/pyHanko/.github/workflows/build-pipeline.yml@master
+    uses: MatthiasValvekens/pyHanko/.github/workflows/build-pipeline.yml@ci/codecov-bump
     permissions:
       actions: write
       contents: read
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   extract-params:
     name: Determine release parameters
     runs-on: ubuntu-latest
