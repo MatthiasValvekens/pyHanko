@@ -6,7 +6,9 @@ on:
   pull_request:
     branches: [ master ]
   workflow_call:
-    secrets: {}
+    secrets:
+      CODECOV_TOKEN:
+        required: true
     outputs:
       hashes:
         description: "Hashes of the artifacts that were built"
@@ -152,8 +154,9 @@ jobs:
           pattern: coverage-*
           path: ./reports/
       - name: Upload all coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./reports/
           flags: unittests
           env_vars: OS,PYTHON
