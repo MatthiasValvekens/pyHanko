@@ -1,6 +1,7 @@
 """
 .. versionadded:: 0.20.0
 """
+
 import abc
 import enum
 from dataclasses import dataclass

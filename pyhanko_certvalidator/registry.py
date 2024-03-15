@@ -485,9 +485,9 @@ class _IssuerFetcher:
         self.local_iss_iter = iter(local_issuers)
         self.local_issuers_found = 0
         self.fetched_issuers_found = 0
-        self._fetched_cas: Optional[
-            AsyncGenerator[x509.Certificate, None]
-        ] = None
+        self._fetched_cas: Optional[AsyncGenerator[x509.Certificate, None]] = (
+            None
+        )
         self._fetching_done = False
 
     @property
