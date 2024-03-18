@@ -69,25 +69,18 @@ keysets:
     keys:
       root:
         path: root_ca.key.pem
-        password: secret
       interm:
         path: intermediate_ca.key.pem
-        password: secret
       tsa:
         path: tsa.key.pem
-        password: secret
       tsa2:
         path: tsa2.key.pem
-        password: secret
       interm-ocsp:
         path: ocsp.key.pem
-        password: secret
       signer1:
         path: signer.key.pem
-        password: secret
       signer2:
         path: signer2.key.pem
-        password: secret
   testing-ca-ed25519:
     path-prefix: keys-ed25519
     keys:
