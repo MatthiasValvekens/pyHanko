@@ -229,6 +229,13 @@ def _validate_pubkey_decryption(r, result):
     assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
 
 
+def _extract_ktri_kea(r: PdfFileReader):
+    recp_bytes = r.encrypt_dict['/CF']['/DefaultCryptFilter']['/Recipients'][0]
+    content_info = cms.ContentInfo.load(recp_bytes)
+    ktri = content_info['content']['recipient_infos'][0].chosen
+    return ktri['key_encryption_algorithm']['algorithm'].native
+
+
 @pytest.mark.parametrize(
     "version, keylen, use_aes, use_crypt_filters",
     [
@@ -253,6 +260,9 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
         assert r.input_version == (2, 0)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
     _validate_pubkey_decryption(r, result)
+    if version == SecurityHandlerVersion.AES256:
+        kea = _extract_ktri_kea(r)
+        assert kea == 'rsaes_pkcs1v15'
 
 
 @pytest.mark.parametrize(
@@ -297,6 +307,8 @@ def test_oaep_encryption():
     r = PdfFileReader(out)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
     _validate_pubkey_decryption(r, result)
+    kea = _extract_ktri_kea(r)
+    assert kea == 'rsaes_oaep'
 
 
 def test_ecdh_decryption_smoke():

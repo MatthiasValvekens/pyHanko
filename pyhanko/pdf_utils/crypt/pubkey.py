@@ -529,9 +529,9 @@ def _recipient_info(
             {'issuer_and_serial_number': iss_serial_rid}
         )
         if policy.prefer_oaep:
-            return _rsaes_pkcs1v15_recipient(pub_key_info, rid, envelope_key)
-        else:
             return _rsaes_oaep_recipient(pub_key_info, rid, envelope_key)
+        else:
+            return _rsaes_pkcs1v15_recipient(pub_key_info, rid, envelope_key)
     elif algorithm_name in ('ec', 'x25519', 'x448'):
         ka_rid = cms.KeyAgreementRecipientIdentifier(
             {'issuer_and_serial_number': iss_serial_rid}
