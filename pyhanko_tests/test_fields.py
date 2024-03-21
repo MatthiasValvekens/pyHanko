@@ -439,8 +439,6 @@ def test_append_sig_field_acro_update():
 
 def test_append_acroform_no_fields():
     w = PdfFileWriter()
-    # Technically, this is not standards-compliant, but our routine
-    # shouldn't care
     w.root['/AcroForm'] = generic.DictionaryObject()
     w.insert_page(simple_page(w, 'Hello world'))
     out = BytesIO()
@@ -449,8 +447,11 @@ def test_append_acroform_no_fields():
 
     sp = fields.SigFieldSpec('InvisibleSig')
     w = IncrementalPdfFileWriter(out)
-    with pytest.raises(PdfError, match="has no /Fields"):
-        fields.append_signature_field(w, sp)
+    fields.append_signature_field(w, sp)
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    assert len(r.root['/AcroForm']['/Fields']) == 1
 
 
 def test_append_acroform_reference_broken_nonstrict():

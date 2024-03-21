@@ -1473,7 +1473,7 @@ def prepare_sig_field(
         try:
             fields = form['/Fields']
         except KeyError:
-            raise PdfError('/AcroForm has no /Fields')
+            fields = form['/Fields'] = generic.ArrayObject()
 
         candidates = enumerate_sig_fields_in(
             fields, with_name=sig_field_name, refs_seen=set()
