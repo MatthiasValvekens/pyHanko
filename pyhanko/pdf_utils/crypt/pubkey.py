@@ -1102,11 +1102,11 @@ def read_seed_from_recipient_cms(
                 'rc2': symmetric.rc2_cbc_pkcs5_decrypt,
             }
         )
-    except ImportError:  # pragma: nocover
+    except Exception as e:  # pragma: nocover
         if cipher_name in ('des', 'tripledes', 'rc2'):
             raise NotImplementedError(
                 "DES, 3DES and RC2 require oscrypto to be present"
-            )
+            ) from e
 
     if cipher_name in with_iv:
         decryption_fun = with_iv[cipher_name]
