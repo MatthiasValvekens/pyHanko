@@ -99,6 +99,6 @@ jobs:
           name: codecov-umbrella
       - name: Clean up coverage reports
         continue-on-error: true
-        uses: GeekyEggo/delete-artifact@v4
+        uses: GeekyEggo/delete-artifact@v5
         with:
           name: coverage-*
