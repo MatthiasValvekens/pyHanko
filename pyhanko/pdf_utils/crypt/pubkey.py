@@ -164,7 +164,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         new_cms = construct_recipient_cms(
             certs,
             self._recp_key_seed,
-            as_signed(perms),
+            perms & 0xFFFFFFFF,
             policy=policy,
             include_permissions=self.acts_as_default,
         )
@@ -310,7 +310,7 @@ def construct_envelope_content(
     seed: bytes, perms: int, include_permissions=True
 ):
     assert len(seed) == 20
-    return seed + (struct.pack('<i', perms) if include_permissions else b'')
+    return seed + (struct.pack('>I', perms) if include_permissions else b'')
 
 
 def _rsaes_pkcs1v15_recipient(
@@ -1123,7 +1123,7 @@ def read_seed_from_recipient_cms(
     perms: Optional[int] = None
     if len(content) == 24:
         # permissions are included
-        perms = struct.unpack('<i', content[20:])[0]
+        perms = struct.unpack('>I', content[20:])[0]
     return seed, perms
 
 
