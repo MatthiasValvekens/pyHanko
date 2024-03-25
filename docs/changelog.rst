@@ -3,6 +3,27 @@ Release history
 ***************
 
 
+.. _release-0.23.2:
+
+*Release date:* 2024-03-25
+
+
+Dependency changes
+------------------
+
+ * Upgraded ``certomancer`` dependency for tests to ``0.12.0``.
+ * Upgraded ``pytest-asyncio`` tot ``0.23.6``.
+
+
+Bugs fixed
+----------
+
+ * Fix handling of "OAEP preferred" flag when encrypting documents with a public key.
+ * Fix endianness issue when reading & writing permissions in documents encrypted with a public key.
+ * Tolerate **AcroForm**s without a **Fields** entry.
+ * Increase resilience against issues with ``oscrypto``.
+
+
 .. _release-0.23.1:
 
 *Release date:* 2024-03-14
