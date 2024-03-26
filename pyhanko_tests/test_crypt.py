@@ -1569,3 +1569,19 @@ def test_tolerate_direct_encryption_dict_in_nonstrict():
         r.decrypt('ownersecret')
         data = r.root['/Pages']['/Kids'][0]['/Contents'].data
         assert b'Hello' in data
+
+
+def test_tolerate_empty_encrypted_string():
+    with open(
+        os.path.join(PDF_DATA_DIR, 'minimal-aes256-empty-encrypted-string.pdf'),
+        'rb',
+    ) as inf:
+        r = PdfFileReader(inf)
+        r.decrypt('secret')
+        obj = r.root.raw_get('/Blah', decrypt=generic.EncryptedObjAccess.PROXY)
+        assert isinstance(obj, generic.DecryptedObjectProxy)
+        decrypted = obj.decrypted
+        assert isinstance(
+            decrypted, (generic.TextStringObject, generic.ByteStringObject)
+        )
+        assert decrypted.original_bytes == b""
