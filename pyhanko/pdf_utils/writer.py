@@ -755,88 +755,13 @@ class BasePdfFileWriter(PdfHandler):
             a new instance.
         """
 
-        return self._import_object(obj, {}, obj_stream)
-
-    def _import_object(
-        self, obj: generic.PdfObject, reference_map: dict, obj_stream
-    ) -> generic.PdfObject:
-        # TODO check the spec for guidance on fonts. Do font identifiers have
-        #  to be globally unique?
-
-        # TODO deal with container_ref
-
-        if isinstance(obj, generic.DecryptedObjectProxy):
-            obj = obj.decrypted
-        if isinstance(obj, generic.IndirectObject):
-            try:
-                return reference_map[obj.reference]
-            except KeyError:
-                refd = obj.get_object()
-                # Add a placeholder to reserve the reference value.
-                # This ensures correct behaviour in recursive calls
-                # with self-references.
-                new_ido = self.allocate_placeholder()
-                reference_map[obj.reference] = new_ido
-                imported = self._import_object(refd, reference_map, obj_stream)
-
-                # if the imported object is a bare reference and/or a stream
-                # object, we can't put it into an object stream.
-                if isinstance(imported, OBJSTREAM_FORBIDDEN):
-                    obj_stream = None
-
-                # fill in the placeholder
-                self.add_object(
-                    imported, obj_stream=obj_stream, idnum=new_ido.idnum
-                )
-                return new_ido
-        elif isinstance(obj, generic.DictionaryObject):
-            raw_dict = {
-                k: self._import_object(v, reference_map, obj_stream)
-                for k, v in obj.items()
-                if k != '/Metadata'
-            }
-            try:
-                # make sure to import metadata streams as such
-                meta_ref = obj.get_value_as_reference('/Metadata')
-                # ensure a MetadataStream object ends up in the cache
-                meta_ref.get_pdf_handler().get_object(
-                    meta_ref, as_metadata_stream=True
-                )
-                # ...then import the reference
-                raw_dict['/Metadata'] = self._import_object(
-                    generic.IndirectObject(
-                        meta_ref.idnum, meta_ref.generation, meta_ref.pdf
-                    ),
-                    reference_map,
-                    obj_stream,
-                )
-            except (KeyError, IndirectObjectExpected):
-                pass
-
-            if isinstance(obj, generic.StreamObject):
-                stm_cls = generic.StreamObject
-                # again, make sure to import metadata streams as such
-                try:
-                    # noinspection PyUnresolvedReferences
-                    from pyhanko.pdf_utils.metadata import xmp_xml
-
-                    if isinstance(obj, xmp_xml.MetadataStream):
-                        stm_cls = xmp_xml.MetadataStream
-                except ImportError:  # pragma: nocover
-                    pass
-                # In the vast majority of use cases, I'd expect the content
-                # to be available in encoded form by default.
-                # By initialising the stream object in this way, we avoid
-                # a potentially costly decoding operation.
-                return stm_cls(raw_dict, encoded_data=obj.encoded_data)
-            else:
-                return generic.DictionaryObject(raw_dict)
-        elif isinstance(obj, generic.ArrayObject):
-            return generic.ArrayObject(
-                self._import_object(v, reference_map, obj_stream) for v in obj
-            )
-        else:
-            return obj
+        importer = _ObjectImporter(
+            source=obj.get_container_ref().get_pdf_handler(),
+            target=self,
+            obj_stream=obj_stream,
+            reference_map={},
+        )
+        return importer.import_object(obj)
 
     def import_page_as_xobject(
         self, other: PdfHandler, page_ix=0, inherit_filters=True
@@ -1222,6 +1147,100 @@ class PdfFileWriter(BasePdfFileWriter):
         super()._populate_trailer(trailer)
 
 
+class _ObjectImporter:
+
+    def __init__(
+        self,
+        source: PdfHandler,
+        target: BasePdfFileWriter,
+        reference_map: Dict[generic.Reference, generic.IndirectObject],
+        obj_stream: Optional[ObjectStream],
+    ):
+        self.source = source
+        self.target = target
+        self.obj_stream = obj_stream
+        self.queued_references: List[
+            Tuple[generic.Reference, generic.Reference]
+        ] = []
+        self.reference_map = reference_map
+
+    def import_object(self, obj: generic.PdfObject) -> generic.PdfObject:
+        result = self._ingest(obj)
+
+        while self.queued_references:
+            source_ref, target_ref = self.queued_references.pop()
+            source_obj = source_ref.get_object()
+            imported = self._ingest(source_obj)
+
+            # if the imported object is a bare reference and/or a stream
+            # object, we can't put it into an object stream.
+            if isinstance(imported, OBJSTREAM_FORBIDDEN):
+                obj_stream = None
+            else:
+                obj_stream = self.obj_stream
+
+            # fill in the placeholder
+            self.target.add_object(
+                imported, obj_stream=obj_stream, idnum=target_ref.idnum
+            )
+
+        return result
+
+    def _ingest(self, obj: generic.PdfObject):
+        if isinstance(obj, generic.DecryptedObjectProxy):
+            obj = obj.decrypted
+        if isinstance(obj, generic.IndirectObject):
+            return self.process_reference(obj.reference)
+        elif isinstance(obj, generic.DictionaryObject):
+            raw_dict = {
+                k: self._ingest(v) for k, v in obj.items() if k != '/Metadata'
+            }
+            try:
+                # make sure to import metadata streams as such
+                meta_ref = obj.get_value_as_reference('/Metadata')
+                # ensure a MetadataStream object ends up in the cache
+                meta_ref.get_pdf_handler().get_object(
+                    meta_ref, as_metadata_stream=True
+                )
+                # ...then import the reference
+                raw_dict['/Metadata'] = self.process_reference(meta_ref)
+            except (KeyError, IndirectObjectExpected):
+                pass
+
+            if isinstance(obj, generic.StreamObject):
+                stm_cls = generic.StreamObject
+                # again, make sure to import metadata streams as such
+                try:
+                    # noinspection PyUnresolvedReferences
+                    from pyhanko.pdf_utils.metadata import xmp_xml
+
+                    if isinstance(obj, xmp_xml.MetadataStream):
+                        stm_cls = xmp_xml.MetadataStream
+                except ImportError:  # pragma: nocover
+                    pass
+                # In the vast majority of use cases, I'd expect the content
+                # to be available in encoded form by default.
+                # By initialising the stream object in this way, we avoid
+                # a potentially costly decoding operation.
+                return stm_cls(raw_dict, encoded_data=obj.encoded_data)
+            else:
+                return generic.DictionaryObject(raw_dict)
+        elif isinstance(obj, generic.ArrayObject):
+            return generic.ArrayObject(self._ingest(v) for v in obj)
+        else:
+            return obj
+
+    def process_reference(self, ref: generic.Reference) -> generic.PdfObject:
+        try:
+            return self.reference_map[ref]
+        except KeyError:
+            # Add a placeholder to reserve the reference value.
+            new_ido = self.target.allocate_placeholder()
+            self.reference_map[ref] = new_ido
+            self.queued_references.append((ref, new_ido.reference))
+            return new_ido
+
+
 def copy_into_new_writer(
     input_handler: PdfHandler, writer_kwargs: Optional[dict] = None
 ) -> PdfFileWriter:
@@ -1254,16 +1273,24 @@ def copy_into_new_writer(
     w = PdfFileWriter(init_page_tree=False, **writer_kwargs)
     input_root_ref = input_handler.root_ref
     output_root_ref = w.root_ref
-    # call _import_object in such a way that we translate the input handler's
+    # call _ObjectImporter in such a way that we translate the input handler's
     # root to the new writer's root.
     # From a technical PoV this doesn't matter, but it makes the output file
     # somewhat "cleaner" (i.e. it doesn't leave an orphaned document catalog
     # cluttering up the file)
-    new_root_dict = w._import_object(
-        input_handler.root,
-        reference_map={input_root_ref: output_root_ref},
+    importer = _ObjectImporter(
+        source=input_handler,
+        target=w,
+        reference_map={
+            input_root_ref: generic.IndirectObject(
+                idnum=output_root_ref.idnum,
+                generation=output_root_ref.generation,
+                pdf=w,
+            )
+        },
         obj_stream=None,
     )
+    new_root_dict = importer.import_object(input_handler.root)
     # override the old root ref
     ix = (output_root_ref.generation, output_root_ref.idnum)
     w.objects[ix] = new_root_dict
@@ -1278,9 +1305,13 @@ def copy_into_new_writer(
         except KeyError:
             info_dict = None
         if info_dict is not None:
-            imported_info = w._import_object(
-                info_dict, reference_map={}, obj_stream=None
+            importer = _ObjectImporter(
+                source=input_handler,
+                target=w,
+                reference_map={},
+                obj_stream=None,
             )
+            imported_info = importer.import_object(info_dict)
             w._info = w.add_object(imported_info)
 
     return w
