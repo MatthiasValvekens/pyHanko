@@ -4,6 +4,7 @@ Contains code from the PyPDF2 project; see :ref:`here <pypdf2-license>`
 for the original license.
 """
 
+import logging
 import os
 import typing
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union, cast
@@ -52,6 +53,8 @@ __all__ = [
     'init_xobject_dictionary',
     'copy_into_new_writer',
 ]
+
+logger = logging.getLogger(__name__)
 
 
 # TODO move this to content.py?
@@ -1240,6 +1243,44 @@ class _ObjectImporter:
             self.queued_references.append((ref, new_ido.reference))
             return new_ido
 
+    def preprocess_signature_data(self):
+        # Signature /Contents is never encrypted => ensure we respect that
+        # (even though the import operation is guaranteed to break the signature
+        # there are valid use cases for stripping the encryption on such files,
+        # e.g. for downstream processing)
+        from ..sign.fields import enumerate_sig_fields
+
+        signature_dict_refs = [
+            field_value.reference
+            for fq_name, field_value, field_ref in enumerate_sig_fields(
+                self.source, filled_status=True
+            )
+            # this is the case in all valid PDFs
+            if isinstance(field_value, generic.IndirectObject)
+        ]
+        if signature_dict_refs:
+            logger.warning(
+                "Source document contains filled signature fields--the copy "
+                "operation will invalidate them."
+            )
+        for ref in signature_dict_refs:
+            sig_dict = ref.get_object()
+            assert isinstance(sig_dict, generic.DictionaryObject)
+            raw_dict = {
+                k: self._ingest(v)
+                for k, v in sig_dict.items()
+                if k != '/Contents'
+            }
+            raw_dict['/Contents'] = generic.ByteStringObject(
+                sig_dict.raw_get(
+                    '/Contents', decrypt=generic.EncryptedObjAccess.RAW
+                ).original_bytes
+            )
+            self.reference_map[ref] = self.target.add_object(
+                generic.DictionaryObject(raw_dict),
+                obj_stream=None,
+            )
+
 
 def copy_into_new_writer(
     input_handler: PdfHandler, writer_kwargs: Optional[dict] = None
@@ -1290,6 +1331,7 @@ def copy_into_new_writer(
         },
         obj_stream=None,
     )
+    importer.preprocess_signature_data()
     new_root_dict = importer.import_object(input_handler.root)
     # override the old root ref
     ix = (output_root_ref.generation, output_root_ref.idnum)
