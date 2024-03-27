@@ -1259,7 +1259,7 @@ class DictionaryObject(dict, PdfObject):
         tmp = stream.read(2)
         if tmp != b"<<":
             raise PdfReadError(
-                "Dictionary read error at byte %s: "
+                "Dictionary read error at byte 0x%s: "
                 "stream must begin with '<<'" % hex(stream.tell())
             )
         data = {}
@@ -1270,7 +1270,13 @@ class DictionaryObject(dict, PdfObject):
                 stream.read(1)
                 break
             stream.seek(-1, os.SEEK_CUR)
-            key = read_object(stream, container_ref)
+            try:
+                key = NameObject.read_from_stream(stream)
+            except Exception as ex:
+                raise PdfReadError(
+                    "Failed to read dictionary key at byte 0x%s; expected PDF name"
+                    % hex(stream.tell())
+                ) from ex
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
             value = read_object(stream, container_ref)

@@ -20,6 +20,7 @@ from pyhanko.pdf_utils.generic import Reference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints, BoxSpecificationError
 from pyhanko.pdf_utils.metadata.model import DocumentMetadata
+from pyhanko.pdf_utils.misc import PdfReadError
 from pyhanko.pdf_utils.reader import (
     HistoricalResolver,
     PdfFileReader,
@@ -1519,6 +1520,22 @@ def test_parse_comments(input_str):
     assert len(result) == 2
     assert result['/A'] == '/B'
     assert result['/C'] == '/D'
+
+
+@pytest.mark.parametrize(
+    'input_str',
+    [
+        '<</2 0 R>>',
+        '<</Name 0 0>>',
+        '<<(blah) 0>>',
+    ],
+)
+def test_parse_malformed_dictionary(input_str):
+    strm = BytesIO(input_str.strip().encode('utf8'))
+    with pytest.raises(PdfReadError, match="Failed to read dictionary key"):
+        generic.DictionaryObject.read_from_stream(
+            strm, container_ref=generic.Reference(1, 0, pdf=None)
+        )
 
 
 NONEXISTENT_XREF_PATH = os.path.join(
