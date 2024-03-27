@@ -15,7 +15,8 @@ def aes_cbc_decrypt(key, data, iv, use_padding=True):
     decryptor = cipher.decryptor()
     plaintext = decryptor.update(data) + decryptor.finalize()
 
-    if use_padding:
+    # we tolerate empty messages that don't have padding
+    if use_padding and len(plaintext) > 0:
         unpadder = padding.PKCS7(128).unpadder()
         return unpadder.update(plaintext) + unpadder.finalize()
     else:

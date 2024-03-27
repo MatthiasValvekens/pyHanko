@@ -2108,3 +2108,42 @@ def test_merge_resource_conflict():
                 }
             ),
         )
+
+
+def test_copy_deep_object_graph():
+    f = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(f)
+    cur_obj = w.root['/Blah'] = generic.DictionaryObject()
+    w.update_root()
+    for i in range(4000):
+        next_obj = generic.DictionaryObject()
+        cur_obj[f'/Blah_{i}'] = generic.ArrayObject([w.add_object(next_obj)])
+        cur_obj = next_obj
+    w.write_in_place()
+
+    r = PdfFileReader(f)
+    new_w = writer.copy_into_new_writer(r)
+    out = BytesIO()
+    new_w.write(out)
+
+    new_r = PdfFileReader(out)
+    assert len(new_r.root['/Blah']['/Blah_0'][0]['/Blah_1'][0]['/Blah_2']) == 1
+
+
+def test_copy_root_reference():
+    f = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(f)
+    arr = generic.ArrayObject(
+        [generic.IndirectObject(w.root_ref.idnum, w.root_ref.generation, w)]
+    )
+    w.root['/Blah'] = w.add_object(arr)
+    w.update_root()
+    w.write_in_place()
+
+    r = PdfFileReader(f)
+    new_w = writer.copy_into_new_writer(r)
+    out = BytesIO()
+    new_w.write(out)
+
+    new_r = PdfFileReader(out)
+    assert new_r.root['/Blah'].raw_get(0).idnum == w.root_ref.idnum
