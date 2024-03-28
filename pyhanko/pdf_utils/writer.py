@@ -509,7 +509,7 @@ class BasePdfFileWriter(PdfHandler):
             handler: Optional[SecurityHandler] = None
             if self.security_handler is not None:
                 assert self._encrypt is not None
-                if idnum != self._encrypt.idnum:
+                if idnum != getattr(self._encrypt, "idnum", -1):
                     handler = self.security_handler
             container_ref = generic.Reference(idnum, generation, self)
             obj.write_to_stream(stream, handler, container_ref)
