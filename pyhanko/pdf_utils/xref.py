@@ -385,7 +385,7 @@ class XRefSectionData:
             idnum = xref_entry.idnum
             generation = xref_entry.generation
             highest_id = max(idnum, highest_id)
-            if generation > 0xFFFF:
+            if generation > 0xFFFFFF:
                 if strict:
                     raise PdfStrictReadError(
                         f"Illegal generation {generation} for "
