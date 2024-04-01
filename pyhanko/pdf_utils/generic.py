@@ -2070,7 +2070,11 @@ class DecryptedObjectProxy(PdfObject):
             local_key = cf.derive_object_key(
                 container_ref.idnum, container_ref.generation
             )
-            decrypted = pdf_string(cf.decrypt(local_key, obj.original_bytes))
+
+            if not obj.original_bytes:
+                decrypted = pdf_string("")
+            else:
+                decrypted = pdf_string(cf.decrypt(local_key, obj.original_bytes))
         elif isinstance(obj, DictionaryObject):
             decrypted_entries = {
                 dictkey: proxy_encrypted_obj(value, handler)
