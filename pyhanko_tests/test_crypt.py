@@ -870,6 +870,19 @@ def test_copy_to_encrypted_file():
     assert len(r.root['/Pages']['/Kids']) == 1
 
 
+def test_correctly_align_perms():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    perms = ~StandardPermissions.allow_everything()
+    w.encrypt("ownersecret", "usersecret", perms=perms)
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    result = r.decrypt("usersecret")
+    assert result.status == AuthStatus.USER
+    assert result.permission_flags == perms
+
+
 def test_empty_user_pass():
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
     w = writer.copy_into_new_writer(r)

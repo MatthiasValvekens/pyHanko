@@ -443,7 +443,7 @@ class StandardSecurityHandler(SecurityHandler):
         )
         assert len(oe_seed) == 32
 
-        perms_bytes = perms.as_bytes()
+        perms_bytes = perms.as_bytes()[::-1]
         extd_perms_bytes = (
             perms_bytes
             + (b'\xff' * 4)
