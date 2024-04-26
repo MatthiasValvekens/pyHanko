@@ -4,6 +4,7 @@ from typing import Callable, Dict, Optional, Set, Tuple, Type
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt.cred_ser import SerialisableCredential
+from pyhanko.pdf_utils.crypt.permissions import PdfPermissions
 
 
 class PdfKeyNotAvailableError(misc.PdfReadError):
@@ -31,7 +32,7 @@ class AuthResult:
     Authentication status after the authentication attempt.
     """
 
-    permission_flags: Optional[int] = None
+    permission_flags: Optional[PdfPermissions] = None
     """
     Granular permission flags. The precise meaning depends on the security
     handler.
@@ -855,10 +856,3 @@ def build_crypt_filter(
     except KeyError:
         raise NotImplementedError("No such crypt filter method: " + cfm)
     return factory(cfdict, acts_as_default)
-
-
-ALL_PERMS = -4
-"""
-Dummy value that translates to "everything is allowed" in an
-encrypted PDF document.
-"""

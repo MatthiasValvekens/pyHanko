@@ -8,6 +8,7 @@ from pyhanko.cli.utils import _warn_empty_passphrase, readable_file
 from pyhanko.keys import load_certs_from_pemder
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.crypt import StandardSecurityHandler
+from pyhanko.pdf_utils.crypt.permissions import PubKeyPermissions
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 
@@ -175,9 +176,14 @@ def _decrypt_pubkey(
                 )
             auth_result = r.decrypt_pubkey(sedk)
             if auth_result.status == crypt.AuthStatus.USER:
-                # TODO read 2nd bit of perms in CMS enveloped data
-                #  is the one indicating that change of encryption is OK
-                if not force:
+                if (
+                    not force
+                    and auth_result.permission_flags
+                    and not (
+                        PubKeyPermissions.ALLOW_ENCRYPTION_CHANGE
+                        in auth_result.permission_flags
+                    )
+                ):
                     raise click.ClickException(
                         "Change of encryption is typically not allowed with "
                         "user access. Pass --force to decrypt the file anyway."

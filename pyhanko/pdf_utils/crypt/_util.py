@@ -5,11 +5,6 @@ from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 
-def as_signed(val: int):
-    # converts an integer to a signed int
-    return struct.unpack('<i', struct.pack('<I', val & 0xFFFFFFFF))[0]
-
-
 def aes_cbc_decrypt(key, data, iv, use_padding=True):
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
     decryptor = cipher.decryptor()

@@ -31,6 +31,10 @@ from pyhanko.pdf_utils.crypt import (
     build_crypt_filter,
     pubkey,
 )
+from pyhanko.pdf_utils.crypt.permissions import (
+    PubKeyPermissions,
+    StandardPermissions,
+)
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -47,6 +51,17 @@ from pyhanko_tests.samples import (
     VECTOR_IMAGE_PDF,
 )
 
+STD_PERMS = (
+    ~StandardPermissions.ALLOW_MODIFICATION_GENERIC
+    & ~StandardPermissions.ALLOW_ANNOTS_FORM_FILLING
+)
+
+PUBKEY_PERMS = (
+    ~PubKeyPermissions.ALLOW_ENCRYPTION_CHANGE
+    & ~PubKeyPermissions.ALLOW_MODIFICATION_GENERIC
+    & ~PubKeyPermissions.ALLOW_ANNOTS_FORM_FILLING
+)
+
 
 def _produce_legacy_encrypted_file(rev, keylen_bytes, use_aes):
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
@@ -58,7 +73,7 @@ def _produce_legacy_encrypted_file(rev, keylen_bytes, use_aes):
         "usersecret",
         keylen_bytes=keylen_bytes,
         use_aes128=use_aes,
-        perms=-44,
+        perms=STD_PERMS,
     )
     w._assign_security_handler(sh)
     new_page_tree = w.import_object(
@@ -95,7 +110,7 @@ def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
         assert result.status == AuthStatus.OWNER
     else:
         assert result.status == AuthStatus.USER
-    assert result.permission_flags == -44
+    assert result.permission_flags.as_sint32() == -44
     page = r.root['/Pages']['/Kids'][0].get_object()
     assert r.trailer['/Encrypt']['/P'] == -44
     assert '/ExtGState' in page['/Resources']
@@ -206,7 +221,7 @@ def _produce_pubkey_encrypted_file(
         version=version,
         use_aes=use_aes,
         use_crypt_filters=use_crypt_filters,
-        perms=-44,
+        perms=PUBKEY_PERMS,
         policy=policy,
     )
     w._assign_security_handler(sh)
@@ -221,7 +236,7 @@ def _produce_pubkey_encrypted_file(
 
 def _validate_pubkey_decryption(r, result):
     assert result.status == AuthStatus.USER
-    assert result.permission_flags == -44
+    assert result.permission_flags == PUBKEY_PERMS
     page = r.root['/Pages']['/Kids'][0].get_object()
     assert '/ExtGState' in page['/Resources']
     # just a piece of data I know occurs in the decoded content stream
@@ -323,6 +338,7 @@ def test_ecdh_decryption_smoke():
         r = PdfFileReader(inf)
         result = r.decrypt_pubkey(decrypter)
         assert result.status == AuthStatus.USER
+        assert result.permission_flags == PubKeyPermissions.allow_everything()
 
 
 def test_ecdh_decryption_wrong_key_type():
@@ -433,7 +449,7 @@ def test_key_encipherment_requirement():
             version=SecurityHandlerVersion.AES256,
             use_aes=True,
             use_crypt_filters=True,
-            perms=-44,
+            perms=PUBKEY_PERMS,
         )
 
 
@@ -464,7 +480,7 @@ def test_key_encipherment_requirement_override(
         version=version,
         use_aes=use_aes,
         use_crypt_filters=use_crypt_filters,
-        perms=-44,
+        perms=PUBKEY_PERMS,
         policy=pubkey.RecipientEncryptionPolicy(ignore_key_usage=True),
     )
     w._assign_security_handler(sh)
@@ -817,11 +833,11 @@ def test_aes256_perm_read():
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_AES256))
     result = r.decrypt("ownersecret")
     assert result.status == AuthStatus.OWNER
-    assert result.permission_flags == -4
+    assert result.permission_flags == StandardPermissions.allow_everything()
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_AES256))
     result = r.decrypt("usersecret")
     assert result.status == AuthStatus.USER
-    assert result.permission_flags == -4
+    assert result.permission_flags == StandardPermissions.allow_everything()
 
     assert r.trailer['/Encrypt']['/P'] == -4
 
@@ -1173,7 +1189,7 @@ def test_ser_deser_credential_pubkey_sh_cannot_extract_from_builder():
         version=SecurityHandlerVersion.RC4_OR_AES128,
         use_aes=True,
         use_crypt_filters=True,
-        perms=-44,
+        perms=PUBKEY_PERMS,
     )
     assert sh.extract_credential() is None
 
@@ -1273,7 +1289,7 @@ def test_encrypt_skipping_metadata(legacy):
             desired_user_pass="secret",
             keylen_bytes=16,
             use_aes128=True,
-            perms=-44,
+            perms=STD_PERMS,
             encrypt_metadata=False,
         )
         w._assign_security_handler(sh)
@@ -1434,7 +1450,7 @@ def test_legacy_o_u_values(entry):
         "usersecret",
         keylen_bytes=True,
         use_aes128=True,
-        perms=-44,
+        perms=STD_PERMS,
     )
     w.security_handler = sh
     enc_dict = sh.as_pdf_object()
@@ -1585,3 +1601,46 @@ def test_tolerate_empty_encrypted_string():
             decrypted, (generic.TextStringObject, generic.ByteStringObject)
         )
         assert decrypted.original_bytes == b""
+
+
+def test_process_malformed_p_entry():
+    with open(
+        f'{PDF_DATA_DIR}/minimal-aes256-malformed-perms.pdf', 'rb'
+    ) as inf:
+        r = PdfFileReader(inf)
+        with pytest.raises(
+            misc.PdfReadError, match="Cannot parse.*as a permission"
+        ):
+            r.decrypt("usersecret")
+
+
+def test_process_malformed_oe_entry():
+    with open(f'{PDF_DATA_DIR}/minimal-aes256-malformed-oe.pdf', 'rb') as inf:
+        r = PdfFileReader(inf)
+        with pytest.raises(misc.PdfReadError, match="Expected string"):
+            r.decrypt("usersecret")
+
+
+@pytest.mark.parametrize(
+    ['perm', 'expected_sint', 'expected_bytes'],
+    (
+        (StandardPermissions.allow_everything(), -4, b"\xff\xff\xff\xfc"),
+        (STD_PERMS, -44, b"\xff\xff\xff\xd4"),
+    ),
+)
+def test_std_permission_transformations(perm, expected_sint, expected_bytes):
+    assert (perm.as_sint32(), perm.as_bytes()) == (
+        expected_sint,
+        expected_bytes,
+    )
+
+
+@pytest.mark.parametrize(
+    ['perm', 'expected_bytes'],
+    (
+        (PubKeyPermissions.allow_everything(), b"\xff\xff\xff\xff"),
+        (PUBKEY_PERMS, b"\xff\xff\xff\xd5"),
+    ),
+)
+def test_pubkey_permission_transformations(perm, expected_bytes):
+    assert perm.as_bytes() == expected_bytes

@@ -18,9 +18,8 @@ from ._legacy import (
     compute_u_value_r34,
     legacy_normalise_pw,
 )
-from ._util import aes_cbc_decrypt, aes_cbc_encrypt, as_signed, rc4_encrypt
+from ._util import aes_cbc_decrypt, aes_cbc_encrypt, rc4_encrypt
 from .api import (
-    ALL_PERMS,
     AuthResult,
     AuthStatus,
     CryptFilter,
@@ -33,6 +32,7 @@ from .api import (
 )
 from .cred_ser import SerialisableCredential, SerialisedCredential
 from .filter_mixins import AESCryptFilterMixin, RC4CryptFilterMixin
+from .permissions import StandardPermissions
 
 
 @dataclass
@@ -274,7 +274,7 @@ class StandardSecurityHandler(SecurityHandler):
         desired_user_pass=None,
         keylen_bytes=16,
         use_aes128=True,
-        perms: int = ALL_PERMS,
+        perms: StandardPermissions = StandardPermissions.allow_everything(),
         crypt_filter_config=None,
         encrypt_metadata=True,
         **kwargs,
@@ -303,7 +303,7 @@ class StandardSecurityHandler(SecurityHandler):
         :param use_aes128:
             Use AES-128 instead of RC4 (default: ``True``).
         :param perms:
-            Permission bits to set (defined as an integer)
+            Permission bits to set
         :param crypt_filter_config:
             Custom crypt filter configuration. PyHanko will supply a reasonable
             default if none is specified.
@@ -331,10 +331,16 @@ class StandardSecurityHandler(SecurityHandler):
         )
 
         # force perms to a 4-byte format
-        perms = as_signed(perms & 0xFFFFFFFC)
         if rev == StandardSecuritySettingsRevision.RC4_BASIC:
             # some permissions are not available for these security handlers
-            perms = as_signed(perms | 0xFFFFFFC0)
+            # the default is 'allow'
+            perms = (
+                perms
+                | StandardPermissions.ALLOW_FORM_FILLING
+                | StandardPermissions.ALLOW_ASSISTIVE_TECHNOLOGY
+                | StandardPermissions.ALLOW_REASSEMBLY
+                | StandardPermissions.ALLOW_HIGH_QUALITY_PRINTING
+            )
             u_entry, key = compute_u_value_r2(
                 desired_user_pass, o_entry, perms, id1
             )
@@ -387,7 +393,7 @@ class StandardSecurityHandler(SecurityHandler):
         cls,
         desired_owner_pass,
         desired_user_pass=None,
-        perms=ALL_PERMS,
+        perms: StandardPermissions = StandardPermissions.allow_everything(),
         encrypt_metadata=True,
         **kwargs,
     ):
@@ -437,7 +443,7 @@ class StandardSecurityHandler(SecurityHandler):
         )
         assert len(oe_seed) == 32
 
-        perms_bytes = struct.pack('<I', perms & 0xFFFFFFFC)
+        perms_bytes = perms.as_bytes()
         extd_perms_bytes = (
             perms_bytes
             + (b'\xff' * 4)
@@ -496,7 +502,7 @@ class StandardSecurityHandler(SecurityHandler):
         version: SecurityHandlerVersion,
         revision: StandardSecuritySettingsRevision,
         legacy_keylen,  # in bytes, not bits
-        perm_flags: int,
+        perm_flags: StandardPermissions,
         odata,
         udata,
         oeseed=None,
@@ -530,7 +536,7 @@ class StandardSecurityHandler(SecurityHandler):
             compat_entries=compat_entries,
         )
         self.revision = revision
-        self.perms = as_signed(perm_flags)
+        self.perms = perm_flags
         if revision >= StandardSecuritySettingsRevision.AES256:
             self.__class__._check_r6_values(
                 udata, odata, oeseed, ueseed, encrypted_perms
@@ -579,9 +585,21 @@ class StandardSecurityHandler(SecurityHandler):
                 raise misc.PdfReadError(f"Expected string, but got {type(x)}")
             return x.original_bytes
 
+        def _parse_permissions(x: generic.PdfObject) -> StandardPermissions:
+            if isinstance(x, generic.NumberObject):
+                return StandardPermissions.from_sint32(x)
+            else:
+                raise misc.PdfReadError(
+                    f"Cannot parse {x} as a permission indicator"
+                )
+
         return dict(
             legacy_keylen=keylen,
-            perm_flags=as_signed(encrypt_dict.get('/P', ALL_PERMS)),
+            perm_flags=encrypt_dict.get_and_apply(
+                '/P',
+                _parse_permissions,
+                default=StandardPermissions.allow_everything(),
+            ),
             odata=odata.original_bytes[:48],
             udata=udata.original_bytes[:48],
             oeseed=encrypt_dict.get_and_apply('/OE', _get_bytes),
@@ -610,7 +628,7 @@ class StandardSecurityHandler(SecurityHandler):
         result['/Filter'] = generic.NameObject('/Standard')
         result['/O'] = generic.ByteStringObject(self.odata)
         result['/U'] = generic.ByteStringObject(self.udata)
-        result['/P'] = generic.NumberObject(as_signed(self.perms))
+        result['/P'] = generic.NumberObject(self.perms.as_sint32())
         # this shouldn't be necessary for V5 handlers, but Adobe Reader
         # requires it anyway ...sigh...
         if (
@@ -752,7 +770,10 @@ class StandardSecurityHandler(SecurityHandler):
 
         # known plaintext mandated in the standard ...sigh...
         perms_ok = decrypted_p_entry[9:12] == b'adb'
-        perms_ok &= self.perms == struct.unpack('<i', decrypted_p_entry[:4])[0]
+        # endianness reversal
+        perms_ok &= self.perms == StandardPermissions.from_uint(
+            struct.unpack('<I', decrypted_p_entry[:4])[0]
+        )
         try:
             # check encrypt_metadata flag
             decr_metadata_flag = _EXPECTED_PERMS_8[decrypted_p_entry[8]]

@@ -44,9 +44,8 @@ from cryptography.hazmat.primitives.kdf.x963kdf import X963KDF
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 from .. import generic, misc
-from ._util import aes_cbc_decrypt, aes_cbc_encrypt, as_signed, rc4_encrypt
+from ._util import aes_cbc_decrypt, aes_cbc_encrypt, rc4_encrypt
 from .api import (
-    ALL_PERMS,
     AuthResult,
     AuthStatus,
     CryptFilter,
@@ -59,6 +58,7 @@ from .api import (
 )
 from .cred_ser import SerialisableCredential, SerialisedCredential
 from .filter_mixins import AESCryptFilterMixin, RC4CryptFilterMixin
+from .permissions import PubKeyPermissions
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         self,
         certs: List[x509.Certificate],
         policy: RecipientEncryptionPolicy,
-        perms=ALL_PERMS,
+        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
     ):
         """
         Add recipients to this crypt filter.
@@ -164,7 +164,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         new_cms = construct_recipient_cms(
             certs,
             self._recp_key_seed,
-            perms & 0xFFFFFFFF,
+            perms,
             policy=policy,
             include_permissions=self.acts_as_default,
         )
@@ -307,10 +307,10 @@ class PubKeyAdbeSubFilter(enum.Enum):
 
 
 def construct_envelope_content(
-    seed: bytes, perms: int, include_permissions=True
+    seed: bytes, perms: PubKeyPermissions, include_permissions=True
 ):
     assert len(seed) == 20
-    return seed + (struct.pack('>I', perms) if include_permissions else b'')
+    return seed + (perms.as_bytes() if include_permissions else b'')
 
 
 def _rsaes_pkcs1v15_recipient(
@@ -546,7 +546,7 @@ def _recipient_info(
 def construct_recipient_cms(
     certificates: List[x509.Certificate],
     seed: bytes,
-    perms: int,
+    perms: PubKeyPermissions,
     policy: RecipientEncryptionPolicy,
     include_permissions=True,
 ) -> cms.ContentInfo:
@@ -1055,7 +1055,7 @@ def read_envelope_key(
 
 def read_seed_from_recipient_cms(
     recipient_cms: cms.ContentInfo, decrypter: EnvelopeKeyDecrypter
-) -> Tuple[Optional[bytes], Optional[int]]:
+) -> Tuple[Optional[bytes], Optional[PubKeyPermissions]]:
     content_type = recipient_cms['content_type'].native
     if content_type != 'enveloped_data':
         raise misc.PdfReadError(
@@ -1120,10 +1120,10 @@ def read_seed_from_recipient_cms(
         )
 
     seed = content[:20]
-    perms: Optional[int] = None
+    perms: Optional[PubKeyPermissions] = None
     if len(content) == 24:
         # permissions are included
-        perms = struct.unpack('>I', content[20:])[0]
+        perms = PubKeyPermissions.from_bytes(content[20:])
     return seed, perms
 
 
@@ -1192,7 +1192,7 @@ class PubKeySecurityHandler(SecurityHandler):
         version=SecurityHandlerVersion.AES256,
         use_aes=True,
         use_crypt_filters=True,
-        perms: int = ALL_PERMS,
+        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
         encrypt_metadata=True,
         policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
         **kwargs,
@@ -1220,7 +1220,7 @@ class PubKeySecurityHandler(SecurityHandler):
             handlers of version :attr:`~.SecurityHandlerVersion.RC4_OR_AES128`
             or higher.
         :param perms:
-            Permission flags (as a 4-byte signed integer).
+            Permission flags.
         :param encrypt_metadata:
             Whether to encrypt document metadata.
 
@@ -1449,7 +1449,7 @@ class PubKeySecurityHandler(SecurityHandler):
     def add_recipients(
         self,
         certs: List[x509.Certificate],
-        perms=ALL_PERMS,
+        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
         policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
     ):
         # add recipients to all *default* crypt filters
@@ -1492,7 +1492,7 @@ class PubKeySecurityHandler(SecurityHandler):
         else:
             actual_credential = credential
 
-        perms = 0xFFFFFFFF
+        perms = PubKeyPermissions.allow_everything()
         for cf in self.crypt_filter_config.standard_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
@@ -1503,11 +1503,13 @@ class PubKeySecurityHandler(SecurityHandler):
             # these should really be the same for both filters, but hey,
             # you never know. ANDing them seems to be the most reasonable
             # course of action
-            if result.permission_flags is not None:
-                perms &= result.permission_flags
+            cf_flags = result.permission_flags
+            if cf_flags is not None:
+                assert isinstance(cf_flags, PubKeyPermissions)
+                perms &= cf_flags
         if isinstance(actual_credential, SerialisableCredential):
             self._credential = actual_credential
-        return AuthResult(AuthStatus.USER, as_signed(perms))
+        return AuthResult(AuthStatus.USER, perms)
 
     def get_file_encryption_key(self) -> bytes:
         # just grab the key from the default stream filter
