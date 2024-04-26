@@ -1,12 +1,13 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from xsdata.models.datatype import XmlDateTime
 
 from ..w3c.xmldsig_core import (
     CanonicalizationMethod,
     DigestMethod,
+    DigestValue,
     Signature,
     Transforms,
     X509IssuerSerialType,
@@ -356,14 +357,13 @@ class DigestAlgAndValueType:
             "required": True,
         },
     )
-    digest_value: Optional[bytes] = field(
+    digest_value: Optional[DigestValue] = field(
         default=None,
         metadata={
             "name": "DigestValue",
             "type": "Element",
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
             "required": True,
-            "format": "base64",
         },
     )
 
@@ -504,14 +504,13 @@ class ReferenceInfoType:
             "required": True,
         },
     )
-    digest_value: Optional[bytes] = field(
+    digest_value: Optional[DigestValue] = field(
         default=None,
         metadata={
             "name": "DigestValue",
             "type": "Element",
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
             "required": True,
-            "format": "base64",
         },
     )
     id: Optional[str] = field(
@@ -1084,6 +1083,12 @@ class DataObjectFormat(DataObjectFormatType):
 
 @dataclass(frozen=True)
 class OtherTimeStampType(GenericTimeStampType):
+    include: Any = field(
+        init=False,
+        metadata={
+            "type": "Ignore",
+        },
+    )
     reference_info: Tuple[ReferenceInfo, ...] = field(
         default_factory=tuple,
         metadata={
@@ -1123,7 +1128,12 @@ class SigningCertificate(CertIDListType):
 
 @dataclass(frozen=True)
 class XAdESTimeStampType(GenericTimeStampType):
-    pass
+    reference_info: Any = field(
+        init=False,
+        metadata={
+            "type": "Ignore",
+        },
+    )
 
 
 @dataclass(frozen=True)

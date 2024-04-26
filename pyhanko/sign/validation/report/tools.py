@@ -94,7 +94,9 @@ def _summarise_attrs(
                     digest_method=xmldsig_core.DigestMethod(
                         _digest_algo_uri(hash_algo),
                     ),
-                    digest_value=cert_id['cert_hash'].native,
+                    digest_value=xmldsig_core.DigestValue(
+                        cert_id['cert_hash'].native
+                    ),
                     x509_issuer_serial=(
                         cert_id['issuer_serial'].dump()
                         if cert_id['issuer_serial']
@@ -275,7 +277,7 @@ def _generate_report(
         digest_method=xmldsig_core.DigestMethod(
             _digest_algo_uri(api_status.md_algorithm)
         ),
-        digest_value=dtbsr_digest,
+        digest_value=xmldsig_core.DigestValue(dtbsr_digest),
     )
     sig_id = ts_11910202.SignatureIdentifierType(
         signature_value=xmldsig_core.SignatureValue(
@@ -322,7 +324,9 @@ def _generate_report(
                 digest_method=xmldsig_core.DigestMethod(
                     _digest_algo_uri(api_status.md_algorithm)
                 ),
-                digest_value=embedded_sig.compute_digest(),
+                digest_value=xmldsig_core.DigestValue(
+                    embedded_sig.compute_digest()
+                ),
             ),
         ),
         signature_attributes=_summarise_attrs(embedded_sig, api_status),
@@ -389,6 +393,6 @@ def generate_report(
     from xsdata.formats.dataclass.serializers import XmlSerializer
     from xsdata.formats.dataclass.serializers.config import SerializerConfig
 
-    config = SerializerConfig(pretty_print=True)
-    ser = XmlSerializer(config).render(report, ns_map=NAMESPACES)
+    config = SerializerConfig(indent="  ")
+    ser = XmlSerializer(config=config).render(report, ns_map=NAMESPACES)
     return ser
