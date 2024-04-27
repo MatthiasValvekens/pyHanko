@@ -60,7 +60,7 @@ and development should be asked in the [discussion forum][discussion-forum] inst
 ### Features
 
 The code in this repository functions both as a library and as a command-line tool.
-It's nowhere near complete, but here is a short overview of the features.
+Here is a short overview of the features.
 Note that not all of these are necessarily exposed through the CLI.
 
  - Stamping
@@ -102,6 +102,7 @@ Note that not all of these are necessarily exposed through the CLI.
     - AdES validation (incubating)
  - Encryption
     - All encryption methods in PDF 2.0 are supported.
+    - Authenticated encryption via ISO/TS 32003 and 32004.
     - In addition, we support a number of extra file encryption
       modes of operation for the public-key security handler that are not
       explicitly called out in the standard.
