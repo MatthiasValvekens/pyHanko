@@ -2,6 +2,24 @@
 Release history
 ***************
 
+.. _release-0.25.0:
+
+*Release date:* 2024-05-06
+
+
+New features and enhancements
+-----------------------------
+
+
+Encryption
+^^^^^^^^^^
+
+ * Implement ISO/TS 32003 and ISO/TS 32004, to support AES-GCM streams and
+   MAC authentication in encrypted PDF 2.0 documents, respectively.
+   MACs are turned on by default when creating documents with PDF 2.0-style
+   encryption.
+
+
 .. _release-0.24.0:
 
 *Release date:* 2024-04-27
