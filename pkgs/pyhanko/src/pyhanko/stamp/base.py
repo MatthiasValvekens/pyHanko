@@ -6,11 +6,12 @@ from typing import Optional, Tuple
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils import content, generic, layout
-from pyhanko.pdf_utils.generic import IndirectObject, pdf_name
+from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.misc import rd
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
-from .appearances import AnnotAppearances, CoordinateSystem
+from ..pdf_utils.content import AppearanceContent
+from .appearances import CoordinateSystem
 from .art import STAMP_ART_CONTENT
 
 
@@ -106,7 +107,7 @@ class BaseStampStyle(ConfigurableMixin):
         raise NotImplementedError
 
 
-class BaseStamp(content.PdfContent):
+class BaseStamp(AppearanceContent):
     def __init__(
         self,
         writer: BasePdfFileWriter,
@@ -116,7 +117,6 @@ class BaseStamp(content.PdfContent):
         super().__init__(box=box, writer=writer)
         self.style = style
         self._resources_ready = False
-        self._stamp_ref: Optional[IndirectObject] = None
 
     def _render_background(self):
         bg = self.style.background
@@ -191,23 +191,6 @@ class BaseStamp(content.PdfContent):
         command_stream.append(b'Q')
         return b' '.join(command_stream)
 
-    def register(self) -> generic.IndirectObject:
-        """
-        Register the stamp with the writer coupled to this instance, and
-        cache the returned reference.
-
-        This works by calling :meth:`.PdfContent.as_form_xobject`.
-
-        :return:
-            An indirect reference to the form XObject containing the stamp.
-        """
-        stamp_ref = self._stamp_ref
-        if stamp_ref is None:
-            wr = self._ensure_writer
-            form_xobj = self.as_form_xobject()
-            self._stamp_ref = stamp_ref = wr.add_object(form_xobj)
-        return stamp_ref
-
     def apply(
         self,
         dest_page: int,
@@ -270,17 +253,3 @@ class BaseStamp(content.PdfContent):
         )
         dims = (self.box.width, self.box.height)
         return page_ref, dims
-
-    def as_appearances(self) -> AnnotAppearances:
-        """
-        Turn this stamp into an appearance dictionary for an annotation
-        (or a form field widget), after rendering it.
-        Only the normal appearance will be defined.
-
-        :return:
-            An instance of :class:`.AnnotAppearances`.
-        """
-        # TODO support defining overrides/extra's for the rollover/down
-        #  appearances in some form
-        stamp_ref = self.register()
-        return AnnotAppearances(normal=stamp_ref)
