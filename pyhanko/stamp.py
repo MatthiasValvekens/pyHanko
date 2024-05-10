@@ -21,7 +21,8 @@ import tzlocal
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils import content, generic, layout
-from pyhanko.pdf_utils.generic import IndirectObject, pdf_name, pdf_string
+from pyhanko.pdf_utils.content import AppearanceContent
+from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.misc import rd
@@ -30,7 +31,6 @@ from pyhanko.pdf_utils.text import DEFAULT_BOX_LAYOUT, TextBox, TextBoxStyle
 from pyhanko.pdf_utils.writer import BasePdfFileWriter, init_xobject_dictionary
 
 __all__ = [
-    "AnnotAppearances",
     "BaseStampStyle",
     "TextStampStyle",
     "QRStampStyle",
@@ -44,55 +44,6 @@ __all__ = [
     "qr_stamp_file",
     "STAMP_ART_CONTENT",
 ]
-
-
-class AnnotAppearances:
-    """
-    Convenience abstraction to set up an appearance dictionary for a PDF
-    annotation.
-
-    Annotations can have three appearance streams, which can be roughly
-    characterised as follows:
-
-    * *normal*: the only required one, and the default one;
-    * *rollover*: used when mousing over the annotation;
-    * *down*: used when clicking the annotation.
-
-    These are given as references to form XObjects.
-
-    .. note::
-        This class only covers the simple case of an appearance dictionary
-        for an annotation with only one appearance state.
-
-    See § 12.5.5 in ISO 32000-1 for further information.
-    """
-
-    def __init__(
-        self,
-        normal: generic.IndirectObject,
-        rollover: Optional[generic.IndirectObject] = None,
-        down: Optional[generic.IndirectObject] = None,
-    ):
-        self.normal = normal
-        self.rollover = rollover
-        self.down = down
-
-    def as_pdf_object(self) -> generic.DictionaryObject:
-        """
-        Convert the :class:`.AnnotationAppearances` instance to a PDF
-        dictionary.
-
-        :return:
-            A :class:`~.pdf_utils.generic.DictionaryObject` that can be plugged
-            into the ``/AP`` entry of an annotation dictionary.
-        """
-
-        res = generic.DictionaryObject({pdf_name('/N'): self.normal})
-        if self.rollover is not None:
-            res[pdf_name('/R')] = self.rollover
-        if self.down is not None:
-            res[pdf_name('/D')] = self.down
-        return res
 
 
 def _get_background_content(bg_spec) -> content.PdfContent:
@@ -408,7 +359,7 @@ class QRStampStyle(TextStampStyle):
         )
 
 
-class BaseStamp(content.PdfContent):
+class BaseStamp(AppearanceContent):
     def __init__(
         self,
         writer: BasePdfFileWriter,
@@ -418,7 +369,6 @@ class BaseStamp(content.PdfContent):
         super().__init__(box=box, writer=writer)
         self.style = style
         self._resources_ready = False
-        self._stamp_ref: Optional[IndirectObject] = None
 
     def _render_background(self):
         bg = self.style.background
@@ -487,23 +437,6 @@ class BaseStamp(content.PdfContent):
         command_stream.append(b'Q')
         return b' '.join(command_stream)
 
-    def register(self) -> generic.IndirectObject:
-        """
-        Register the stamp with the writer coupled to this instance, and
-        cache the returned reference.
-
-        This works by calling :meth:`.PdfContent.as_form_xobject`.
-
-        :return:
-            An indirect reference to the form XObject containing the stamp.
-        """
-        stamp_ref = self._stamp_ref
-        if stamp_ref is None:
-            wr = self._ensure_writer
-            form_xobj = self.as_form_xobject()
-            self._stamp_ref = stamp_ref = wr.add_object(form_xobj)
-        return stamp_ref
-
     def apply(self, dest_page: int, x: int, y: int):
         """
         Apply a stamp to a particular page in the PDF writer attached to this
@@ -542,20 +475,6 @@ class BaseStamp(content.PdfContent):
         )
         dims = (self.box.width, self.box.height)
         return page_ref, dims
-
-    def as_appearances(self) -> AnnotAppearances:
-        """
-        Turn this stamp into an appearance dictionary for an annotation
-        (or a form field widget), after rendering it.
-        Only the normal appearance will be defined.
-
-        :return:
-            An instance of :class:`.AnnotAppearances`.
-        """
-        # TODO support defining overrides/extra's for the rollover/down
-        #  appearances in some form
-        stamp_ref = self.register()
-        return AnnotAppearances(normal=stamp_ref)
 
 
 class StaticContentStamp(BaseStamp):

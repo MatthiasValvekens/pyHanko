@@ -263,12 +263,7 @@ class SigAppearanceSetup:
             stamp = self._appearance_stamp(
                 writer, BoxConstraints(width=w, height=h)
             )
-            sig_annot['/AP'] = stamp.as_appearances().as_pdf_object()
-            try:
-                # if there was an entry like this, it's meaningless now
-                del sig_annot[pdf_name('/AS')]
-            except KeyError:
-                pass
+            stamp.apply_appearance(sig_annot)
 
     def _appearance_stamp(self, writer, box):
         style = self.style

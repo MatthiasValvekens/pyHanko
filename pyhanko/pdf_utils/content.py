@@ -5,6 +5,7 @@ from typing import Optional
 
 from .generic import (
     DictionaryObject,
+    IndirectObject,
     NameObject,
     PdfObject,
     StreamObject,
@@ -21,6 +22,8 @@ __all__ = [
     'PdfContent',
     'RawContent',
     'ImportedPdfPage',
+    'AnnotAppearances',
+    'AppearanceContent',
 ]
 
 # TODO have the merge_resources helper in incremental_writer rely on some
@@ -335,3 +338,109 @@ class ImportedPdfPage(PdfContent):
         x1, y1, x2, y2 = xobj.get_object()['/BBox']
         self.box = BoxConstraints(width=abs(x1 - x2), height=abs(y1 - y2))
         return resource_name + b' Do'
+
+
+class AnnotAppearances:
+    """
+    Convenience abstraction to set up an appearance dictionary for a PDF
+    annotation.
+
+    Annotations can have three appearance streams, which can be roughly
+    characterised as follows:
+
+    * *normal*: the only required one, and the default one;
+    * *rollover*: used when mousing over the annotation;
+    * *down*: used when clicking the annotation.
+
+    These are given as references to form XObjects.
+
+    .. note::
+        This class only covers the simple case of an appearance dictionary
+        for an annotation with only one appearance state.
+
+    See § 12.5.5 in ISO 32000-1 for further information.
+    """
+
+    def __init__(
+        self,
+        normal: IndirectObject,
+        rollover: Optional[IndirectObject] = None,
+        down: Optional[IndirectObject] = None,
+    ):
+        self.normal = normal
+        self.rollover = rollover
+        self.down = down
+
+    def as_pdf_object(self) -> DictionaryObject:
+        """
+        Convert the :class:`.AnnotationAppearances` instance to a PDF
+        dictionary.
+
+        :return:
+            A :class:`~.pdf_utils.generic.DictionaryObject` that can be plugged
+            into the ``/AP`` entry of an annotation dictionary.
+        """
+
+        res = DictionaryObject({pdf_name('/N'): self.normal})
+        if self.rollover is not None:
+            res[pdf_name('/R')] = self.rollover
+        if self.down is not None:
+            res[pdf_name('/D')] = self.down
+        return res
+
+
+class AppearanceContent(PdfContent):
+
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        box: Optional[BoxConstraints] = None,
+    ):
+        super().__init__(box=box, writer=writer)
+        self._resources_ready = False
+        self._content_xobj_ref: Optional[IndirectObject] = None
+
+    def register(self) -> IndirectObject:
+        """
+        Register the content with the writer coupled to this instance, and
+        cache the returned reference.
+
+        This works by calling :meth:`.PdfContent.as_form_xobject`.
+
+        :return:
+            An indirect reference to the form XObject containing the content.
+        """
+        xobj_ref = self._content_xobj_ref
+        if xobj_ref is None:
+            wr = self._ensure_writer
+            form_xobj = self.as_form_xobject()
+            self._content_xobj_ref = xobj_ref = wr.add_object(form_xobj)
+        return xobj_ref
+
+    def as_appearances(self) -> AnnotAppearances:
+        """
+        Turn this content into an appearance dictionary for an annotation
+        (or a form field widget), after rendering it.
+        Only the normal appearance will be defined.
+
+        :return:
+            An instance of :class:`.AnnotAppearances`.
+        """
+        # TODO support defining overrides/extra's for the rollover/down
+        #  appearances in some form
+        stamp_ref = self.register()
+        return AnnotAppearances(normal=stamp_ref)
+
+    def apply_appearance(self, annot_dict: DictionaryObject):
+        """
+        Set this appearance content as the appearance of an annotation.
+
+        :param annot_dict:
+            The annotation dictionary to which the appearance should apply.
+        """
+        annot_dict['/AP'] = self.as_appearances().as_pdf_object()
+        try:
+            # if there was an entry like this, it's meaningless now
+            del annot_dict[pdf_name('/AS')]
+        except KeyError:
+            pass
