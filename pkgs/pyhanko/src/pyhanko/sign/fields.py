@@ -1479,8 +1479,11 @@ def prepare_sig_field(
         except KeyError:
             fields = form['/Fields'] = generic.ArrayObject()
 
-        candidates = enumerate_sig_fields_in(
-            fields, with_name=sig_field_name, refs_seen=set()
+        candidates = enumerate_fields_in(
+            fields,
+            with_name=sig_field_name,
+            refs_seen=set(),
+            target_field_type='/Sig',
         )
         sig_field_ref = None
         try:
@@ -1604,15 +1607,16 @@ def enumerate_sig_fields(
     except KeyError:
         return
 
-    yield from enumerate_sig_fields_in(
+    yield from enumerate_fields_in(
         fields,
         filled_status=filled_status,
         with_name=with_name,
         refs_seen=set(),
+        target_field_type='/Sig',
     )
 
 
-def enumerate_sig_fields_in(
+def enumerate_fields_in(
     field_list,
     filled_status=None,
     with_name=None,
@@ -1620,6 +1624,7 @@ def enumerate_sig_fields_in(
     parents=None,
     *,
     refs_seen,
+    target_field_type,
 ):
     if not isinstance(field_list, generic.ArrayObject):
         logger.warning(
@@ -1671,7 +1676,7 @@ def enumerate_sig_fields_in(
         else:
             field_type = None
 
-        if field_type == '/Sig':
+        if field_type == target_field_type:
             field_value = field.get('/V')
             # "cast" to a regular string object
             filled = field_value is not None
@@ -1681,20 +1686,21 @@ def enumerate_sig_fields_in(
                 yield fq_name, field_value, field_ref
         elif explicitly_requested:
             raise SigningError(
-                'Field with name %s exists but is not a signature field'
-                % fq_name
+                f'Field with name {fq_name} exists but is '
+                f'not a {target_field_type} field'
             )
 
         # if necessary, descend into the field hierarchy
         if with_name is None or (child_requested and not explicitly_requested):
             try:
-                yield from enumerate_sig_fields_in(
+                yield from enumerate_fields_in(
                     field['/Kids'],
                     parent_name=fq_name,
                     parents=current_path,
                     with_name=with_name,
                     filled_status=filled_status,
                     refs_seen=refs_seen | {field_ref.reference},
+                    target_field_type=target_field_type,
                 )
             except KeyError:
                 continue
