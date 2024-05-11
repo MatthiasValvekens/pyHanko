@@ -53,6 +53,8 @@ __all__ = [
     'load_private_key_from_pemder_data',
 ]
 
+from pyhanko.pdf_utils.misc import FormFillingError
+
 logger = logging.getLogger(__name__)
 
 
@@ -329,14 +331,10 @@ def match_issuer_serial(
     )
 
 
-class SigningError(ValueError):
+class SigningError(FormFillingError):
     """
     Error encountered while signing a file.
     """
-
-    def __init__(self, msg: str, *args):
-        self.msg = msg
-        super().__init__(msg, *args)
 
 
 class UnacceptableSignerError(SigningError):
