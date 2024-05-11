@@ -26,6 +26,7 @@ __all__ = [
     'PdfStreamError',
     'PdfStrictReadError',
     'PdfWriteError',
+    'FormFillingError',
     'Singleton',
     'StringWithLanguage',
     'assert_writable_and_random_access',
@@ -564,3 +565,9 @@ def coalesce(*args):
         if arg is not None:
             return arg
     return None
+
+
+class FormFillingError(ValueError):
+    def __init__(self, msg: str, *args):
+        self.msg = msg
+        super().__init__(msg, *args)
