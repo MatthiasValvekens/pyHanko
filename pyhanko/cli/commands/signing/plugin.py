@@ -11,6 +11,7 @@ from pyhanko.cli.commands.signing.utils import get_text_params, open_for_signing
 from pyhanko.cli.plugin_api import SigningCommandPlugin
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import readable_file, writable_file
+from pyhanko.pdf_utils import form_tools
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign import PdfSigner, fields
 from pyhanko.sign.signers.pdf_cms import (
@@ -29,8 +30,10 @@ def _ensure_field_visible(
         fq_name, _, field_ref = next(
             fields.enumerate_sig_fields(handler, with_name=name)
         )
-        sig_annot = fields.get_sig_field_annot(sig_field=field_ref.get_object())
-        w, h = fields.annot_width_height(sig_annot)
+        sig_annot = form_tools.get_single_field_annot(
+            field=field_ref.get_object()
+        )
+        w, h = form_tools.annot_width_height(sig_annot)
         if not w or not h:
             raise click.ClickException(
                 f"{prefix}, but the field '{fq_name}' in the PDF is not a "

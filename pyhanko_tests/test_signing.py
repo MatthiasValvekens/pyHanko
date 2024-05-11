@@ -20,7 +20,7 @@ from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
 from pyhanko.pdf_utils import embed, generic, layout
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import PdfReadError
+from pyhanko.pdf_utils.misc import FormFillingError, PdfReadError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields, signers, timestamps
@@ -870,7 +870,7 @@ def test_sign_with_empty_kids():
     w.root['/AcroForm']['/Fields'][0]['/Kids'] = generic.ArrayObject()
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
 
-    with pytest.raises(SigningError, match="Failed to access.*annot.*"):
+    with pytest.raises(FormFillingError, match="Failed to access.*annot.*"):
         signers.sign_pdf(w, meta, signer=FROM_CA)
 
 
