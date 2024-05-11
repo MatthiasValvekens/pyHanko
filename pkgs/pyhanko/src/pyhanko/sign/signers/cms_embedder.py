@@ -15,11 +15,9 @@ from pyhanko.sign.fields import (
     FieldMDPSpec,
     MDPPerm,
     SigFieldSpec,
-    annot_width_height,
     apply_sig_field_spec_properties,
     ensure_sig_flags,
     enumerate_sig_fields,
-    get_sig_field_annot,
     prepare_sig_field,
 )
 from pyhanko.sign.general import SigningError
@@ -34,6 +32,8 @@ __all__ = [
     'SigAppearanceSetup',
     'SigIOSetup',
 ]
+
+from ...pdf_utils.form_tools import annot_width_height, get_single_field_annot
 
 
 def docmdp_reference_dictionary(permission_level: MDPPerm):
@@ -459,7 +459,7 @@ class PdfCMSEmbedder:
         # take care of the field's visual appearance (if applicable)
         appearance_setup = sig_obj_setup.appearance_setup
         if appearance_setup is not None:
-            sig_annot = get_sig_field_annot(sig_field)
+            sig_annot = get_single_field_annot(sig_field)
             appearance_setup.apply(sig_annot, writer)
 
         sig_obj = sig_obj_setup.sig_placeholder
