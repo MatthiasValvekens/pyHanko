@@ -44,9 +44,8 @@ from cryptography.hazmat.primitives.kdf.x963kdf import X963KDF
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 from .. import generic, misc
-from ._util import aes_cbc_decrypt, aes_cbc_encrypt, as_signed, rc4_encrypt
+from ._util import aes_cbc_decrypt, aes_cbc_encrypt, rc4_encrypt
 from .api import (
-    ALL_PERMS,
     AuthResult,
     AuthStatus,
     CryptFilter,
@@ -58,7 +57,12 @@ from .api import (
     build_crypt_filter,
 )
 from .cred_ser import SerialisableCredential, SerialisedCredential
-from .filter_mixins import AESCryptFilterMixin, RC4CryptFilterMixin
+from .filter_mixins import (
+    AESCryptFilterMixin,
+    AESGCMCryptFilterMixin,
+    RC4CryptFilterMixin,
+)
+from .permissions import PubKeyPermissions
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +135,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         self,
         certs: List[x509.Certificate],
         policy: RecipientEncryptionPolicy,
-        perms=ALL_PERMS,
+        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
     ):
         """
         Add recipients to this crypt filter.
@@ -164,7 +168,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         new_cms = construct_recipient_cms(
             certs,
             self._recp_key_seed,
-            perms & 0xFFFFFFFF,
+            perms,
             policy=policy,
             include_permissions=self.acts_as_default,
         )
@@ -224,6 +228,14 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
 class PubKeyAESCryptFilter(PubKeyCryptFilter, AESCryptFilterMixin):
     """
     AES crypt filter for public key security handlers.
+    """
+
+    pass
+
+
+class PubKeyAESGCMCryptFilter(PubKeyCryptFilter, AESGCMCryptFilterMixin):
+    """
+    AES-GCM crypt filter for public key security handlers.
     """
 
     pass
@@ -289,9 +301,18 @@ def _pubkey_aes_config(keylen, recipients=None, encrypt_metadata=True):
     )
 
 
-"""
-Type alias for a callable that produces a crypt filter from a dictionary.
-"""
+def _pubkey_gcm_config(recipients=None, encrypt_metadata=True):
+    return CryptFilterConfiguration(
+        {
+            DEFAULT_CRYPT_FILTER: PubKeyAESGCMCryptFilter(
+                acts_as_default=True,
+                recipients=recipients,
+                encrypt_metadata=encrypt_metadata,
+            )
+        },
+        default_stream_filter=DEFAULT_CRYPT_FILTER,
+        default_string_filter=DEFAULT_CRYPT_FILTER,
+    )
 
 
 @enum.unique
@@ -307,10 +328,10 @@ class PubKeyAdbeSubFilter(enum.Enum):
 
 
 def construct_envelope_content(
-    seed: bytes, perms: int, include_permissions=True
+    seed: bytes, perms: PubKeyPermissions, include_permissions=True
 ):
     assert len(seed) == 20
-    return seed + (struct.pack('>I', perms) if include_permissions else b'')
+    return seed + (perms.as_bytes() if include_permissions else b'')
 
 
 def _rsaes_pkcs1v15_recipient(
@@ -546,7 +567,7 @@ def _recipient_info(
 def construct_recipient_cms(
     certificates: List[x509.Certificate],
     seed: bytes,
-    perms: int,
+    perms: PubKeyPermissions,
     policy: RecipientEncryptionPolicy,
     include_permissions=True,
 ) -> cms.ContentInfo:
@@ -1055,7 +1076,7 @@ def read_envelope_key(
 
 def read_seed_from_recipient_cms(
     recipient_cms: cms.ContentInfo, decrypter: EnvelopeKeyDecrypter
-) -> Tuple[Optional[bytes], Optional[int]]:
+) -> Tuple[Optional[bytes], Optional[PubKeyPermissions]]:
     content_type = recipient_cms['content_type'].native
     if content_type != 'enveloped_data':
         raise misc.PdfReadError(
@@ -1120,10 +1141,10 @@ def read_seed_from_recipient_cms(
         )
 
     seed = content[:20]
-    perms: Optional[int] = None
+    perms: Optional[PubKeyPermissions] = None
     if len(content) == 24:
         # permissions are included
-        perms = struct.unpack('>I', content[20:])[0]
+        perms = PubKeyPermissions.from_bytes(content[20:])
     return seed, perms
 
 
@@ -1168,6 +1189,12 @@ def _build_aes256_pubkey_cf(cfdict, acts_as_default):
     )
 
 
+def _build_aesgcm_pubkey_cf(cfdict, acts_as_default):
+    return PubKeyAESGCMCryptFilter(
+        acts_as_default=acts_as_default, **_read_generic_pubkey_cf_info(cfdict)
+    )
+
+
 @SecurityHandler.register
 class PubKeySecurityHandler(SecurityHandler):
     """
@@ -1181,6 +1208,7 @@ class PubKeySecurityHandler(SecurityHandler):
         generic.NameObject('/V2'): _build_legacy_pubkey_cf,
         generic.NameObject('/AESV2'): _build_aes128_pubkey_cf,
         generic.NameObject('/AESV3'): _build_aes256_pubkey_cf,
+        generic.NameObject('/AESV4'): _build_aesgcm_pubkey_cf,
         generic.NameObject('/Identity'): lambda _, __: IdentityCryptFilter(),
     }
 
@@ -1192,9 +1220,10 @@ class PubKeySecurityHandler(SecurityHandler):
         version=SecurityHandlerVersion.AES256,
         use_aes=True,
         use_crypt_filters=True,
-        perms: int = ALL_PERMS,
+        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
         encrypt_metadata=True,
         policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
+        pdf_mac: bool = True,
         **kwargs,
     ) -> 'PubKeySecurityHandler':
         """
@@ -1220,13 +1249,18 @@ class PubKeySecurityHandler(SecurityHandler):
             handlers of version :attr:`~.SecurityHandlerVersion.RC4_OR_AES128`
             or higher.
         :param perms:
-            Permission flags (as a 4-byte signed integer).
+            Permission flags.
         :param encrypt_metadata:
             Whether to encrypt document metadata.
 
             .. warning::
                 See :class:`.SecurityHandler` for some background on the
                 way pyHanko interprets this value.
+        :param pdf_mac:
+            Include an ISO 32004 MAC.
+
+            .. warning::
+                Only works for PDF 2.0 security handlers.
         :param policy:
             Encryption policy choices for the chosen set of recipients.
         :return:
@@ -1251,6 +1285,11 @@ class PubKeySecurityHandler(SecurityHandler):
                     recipients=None,
                     encrypt_metadata=encrypt_metadata,
                 )
+        if pdf_mac and version >= SecurityHandlerVersion.AES256:
+            perms &= ~PubKeyPermissions.TOLERATE_MISSING_PDF_MAC
+            kdf_salt = secrets.token_bytes(32)
+        else:
+            kdf_salt = None
         # noinspection PyArgumentList
         sh = cls(
             version,
@@ -1259,6 +1298,7 @@ class PubKeySecurityHandler(SecurityHandler):
             encrypt_metadata=encrypt_metadata,
             crypt_filter_config=cfc,
             recipient_objs=None,
+            kdf_salt=kdf_salt,
             **kwargs,
         )
         sh.add_recipients(certs, perms=perms, policy=policy)
@@ -1273,6 +1313,7 @@ class PubKeySecurityHandler(SecurityHandler):
         crypt_filter_config: Optional['CryptFilterConfiguration'] = None,
         recipient_objs: Optional[list] = None,
         compat_entries=True,
+        kdf_salt: Optional[bytes] = None,
     ):
         # I don't see how it would be possible to handle V4 without
         # crypt filters in an unambiguous way. V5 should be possible in
@@ -1299,9 +1340,16 @@ class PubKeySecurityHandler(SecurityHandler):
                     encrypt_metadata=encrypt_metadata,
                     recipients=recipient_objs,
                 )
+            elif version == SecurityHandlerVersion.AES_GCM:
+                crypt_filter_config = _pubkey_gcm_config(
+                    recipients=recipient_objs, encrypt_metadata=encrypt_metadata
+                )
             elif version >= SecurityHandlerVersion.AES256:
                 # there's a reasonable default config that we can fall back to
                 # here
+                # NOTE: we _don't_ use GCM by default. With the way PDF
+                # encryption works, the authentication guarantees are not
+                # worth much anyhow (need ISO 32004-style solution).
                 crypt_filter_config = _pubkey_aes_config(
                     keylen=32,
                     encrypt_metadata=encrypt_metadata,
@@ -1317,6 +1365,7 @@ class PubKeySecurityHandler(SecurityHandler):
             crypt_filter_config,
             encrypt_metadata=encrypt_metadata,
             compat_entries=compat_entries,
+            kdf_salt=kdf_salt,
         )
         self.subfilter = pubkey_handler_subfilter
         self.encrypt_metadata = encrypt_metadata
@@ -1384,6 +1433,16 @@ class PubKeySecurityHandler(SecurityHandler):
             legacy_keylen=keylen,
             recipient_objs=recipients,
             encrypt_metadata=encrypt_metadata,
+            kdf_salt=encrypt_dict.get_and_apply(
+                '/KDFSalt',
+                lambda x: (
+                    x.original_bytes
+                    if isinstance(
+                        x, (generic.TextStringObject, generic.ByteStringObject)
+                    )
+                    else None
+                ),
+            ),
         )
 
     @classmethod
@@ -1423,6 +1482,8 @@ class PubKeySecurityHandler(SecurityHandler):
         result['/Filter'] = generic.NameObject(self.get_name())
         result['/SubFilter'] = self.subfilter.value
         result['/V'] = self.version.as_pdf_object()
+        if self._kdf_salt:
+            result['/KDFSalt'] = generic.ByteStringObject(self._kdf_salt)
         if (
             self._compat_entries
             or self.version == SecurityHandlerVersion.RC4_LONGER_KEYS
@@ -1449,7 +1510,7 @@ class PubKeySecurityHandler(SecurityHandler):
     def add_recipients(
         self,
         certs: List[x509.Certificate],
-        perms=ALL_PERMS,
+        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
         policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
     ):
         # add recipients to all *default* crypt filters
@@ -1492,7 +1553,7 @@ class PubKeySecurityHandler(SecurityHandler):
         else:
             actual_credential = credential
 
-        perms = 0xFFFFFFFF
+        perms = PubKeyPermissions.allow_everything()
         for cf in self.crypt_filter_config.standard_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
@@ -1503,11 +1564,13 @@ class PubKeySecurityHandler(SecurityHandler):
             # these should really be the same for both filters, but hey,
             # you never know. ANDing them seems to be the most reasonable
             # course of action
-            if result.permission_flags is not None:
-                perms &= result.permission_flags
+            cf_flags = result.permission_flags
+            if cf_flags is not None:
+                assert isinstance(cf_flags, PubKeyPermissions)
+                perms &= cf_flags
         if isinstance(actual_credential, SerialisableCredential):
             self._credential = actual_credential
-        return AuthResult(AuthStatus.USER, as_signed(perms))
+        return AuthResult(AuthStatus.USER, perms)
 
     def get_file_encryption_key(self) -> bytes:
         # just grab the key from the default stream filter

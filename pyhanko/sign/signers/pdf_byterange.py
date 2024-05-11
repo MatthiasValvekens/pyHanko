@@ -263,6 +263,7 @@ class PdfByteRangeDigest(generic.DictionaryObject):
             instead.
         """
 
+        writer.digest_aware_write = True
         if in_place:
             if not isinstance(writer, IncrementalPdfFileWriter):
                 raise TypeError(

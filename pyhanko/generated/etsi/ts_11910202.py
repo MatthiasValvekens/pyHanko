@@ -4,7 +4,12 @@ from typing import Optional, Tuple
 
 from xsdata.models.datatype import XmlDateTime
 
-from ..w3c.xmldsig_core import DigestMethod, Signature, SignatureValue
+from ..w3c.xmldsig_core import (
+    DigestMethod,
+    DigestValue,
+    Signature,
+    SignatureValue,
+)
 from .ts_119612 import DigitalIdentityType, TSPInformationType
 from .xades import DigestAlgAndValueType, SignaturePolicyIdentifierType
 
@@ -186,7 +191,6 @@ class VOReferenceType:
         metadata={
             "name": "VOReference",
             "type": "Attribute",
-            "required": True,
             "tokens": True,
         },
     )
@@ -400,14 +404,13 @@ class SACRLIDType:
             "required": True,
         },
     )
-    digest_value: Optional[bytes] = field(
+    digest_value: Optional[DigestValue] = field(
         default=None,
         metadata={
             "name": "DigestValue",
             "type": "Element",
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
             "required": True,
-            "format": "base64",
         },
     )
 
@@ -432,14 +435,13 @@ class SACertIDType:
             "required": True,
         },
     )
-    digest_value: Optional[bytes] = field(
+    digest_value: Optional[DigestValue] = field(
         default=None,
         metadata={
             "name": "DigestValue",
             "type": "Element",
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
             "required": True,
-            "format": "base64",
         },
     )
 

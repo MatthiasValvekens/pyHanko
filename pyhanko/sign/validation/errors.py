@@ -1,4 +1,7 @@
-from typing import Optional
+from typing import Optional, Type
+
+from asn1crypto.algos import DigestAlgorithmId
+from asn1crypto.core import ObjectIdentifier
 
 from ..ades.report import AdESIndeterminate, AdESStatus, AdESSubIndic
 from ..general import ValueErrorWithMessage
@@ -49,7 +52,13 @@ class SignatureValidationError(ValueErrorWithMessage):
 
 
 class DisallowedAlgorithmError(SignatureValidationError):
-    def __init__(self, failure_message, permanent: bool):
+    def __init__(
+        self,
+        failure_message,
+        permanent: bool,
+        oid_type: Optional[Type[ObjectIdentifier]] = None,
+    ):
+        self.oid_type = oid_type
         if permanent:
             subindic = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
         else:

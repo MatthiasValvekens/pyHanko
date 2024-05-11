@@ -1,4 +1,5 @@
 import getpass
+from io import BytesIO
 
 import pytest
 from cryptography import x509 as pyca_x509
@@ -6,7 +7,14 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 from pyhanko.cli import cli_root
-from pyhanko.pdf_utils.crypt import AuthStatus
+from pyhanko.pdf_utils import writer
+from pyhanko.pdf_utils.crypt import (
+    AuthStatus,
+    PubKeySecurityHandler,
+    SecurityHandlerVersion,
+)
+from pyhanko.pdf_utils.crypt.permissions import PubKeyPermissions
+from pyhanko.pdf_utils.crypt.pubkey import RecipientEncryptionPolicy
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko_tests.cli_tests.conftest import INPUT_PATH, _const
 from pyhanko_tests.samples import (
@@ -288,9 +296,75 @@ def pubkey_decryption(request):
         return ('pkcs12', [p12_file])
 
 
-def test_decrypt_with_private_key(cli_runner, pubkey_decryption, monkeypatch):
+def _sample_with_forbidden_encryption_change(h):
+
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = writer.copy_into_new_writer(r)
+
+    sh = PubKeySecurityHandler.build_from_certs(
+        [PUBKEY_SELFSIGNED_DECRYPTER.cert],
+        version=SecurityHandlerVersion.AES256,
+        keylen_bytes=32,
+        use_aes=True,
+        use_crypt_filters=True,
+        perms=~PubKeyPermissions.ALLOW_ENCRYPTION_CHANGE,
+        policy=RecipientEncryptionPolicy(ignore_key_usage=True),
+    )
+    w._assign_security_handler(sh)
+    w.write(h)
+
+
+@pytest.mark.parametrize('force', [True, False])
+def test_decrypt_with_private_key(
+    cli_runner, pubkey_decryption, monkeypatch, force
+):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_PUBKEY_AES256)
+    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
+
+    output_path = 'out.pdf'
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'decrypt',
+            pubkey_decryption[0],
+            *(('--force',) if force else ()),
+            INPUT_PATH,
+            output_path,
+            *pubkey_decryption[1],
+        ],
+    )
+    assert not result.exception, result.output
+    _check_first_page(output_path)
+
+
+def test_decrypt_with_private_key_no_force_change_of_encryption_forbidden(
+    cli_runner, pubkey_decryption, monkeypatch
+):
+    with open(INPUT_PATH, 'wb') as inf:
+        _sample_with_forbidden_encryption_change(inf)
+    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
+
+    output_path = 'out.pdf'
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'decrypt',
+            pubkey_decryption[0],
+            INPUT_PATH,
+            output_path,
+            *pubkey_decryption[1],
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Pass --force" in result.output
+
+
+def test_decrypt_with_private_key_force_change_of_encryption_forbidden(
+    cli_runner, pubkey_decryption, monkeypatch
+):
+    with open(INPUT_PATH, 'wb') as inf:
+        _sample_with_forbidden_encryption_change(inf)
     monkeypatch.setattr(getpass, 'getpass', _const('secret'))
 
     output_path = 'out.pdf'
@@ -307,28 +381,6 @@ def test_decrypt_with_private_key(cli_runner, pubkey_decryption, monkeypatch):
     )
     assert not result.exception, result.output
     _check_first_page(output_path)
-
-
-def test_decrypt_with_private_key_no_force(
-    cli_runner, pubkey_decryption, monkeypatch
-):
-    with open(INPUT_PATH, 'wb') as inf:
-        inf.write(MINIMAL_PUBKEY_AES256)
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
-
-    output_path = 'out.pdf'
-    result = cli_runner.invoke(
-        cli_root,
-        [
-            'decrypt',
-            pubkey_decryption[0],
-            INPUT_PATH,
-            output_path,
-            *pubkey_decryption[1],
-        ],
-    )
-    assert result.exit_code == 1
-    assert "Pass --force" in result.output
 
 
 def test_decrypt_with_private_key_and_passfile(cli_runner, pubkey_decryption):

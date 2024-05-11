@@ -572,14 +572,13 @@ class ServiceDigitalIdentityListType:
 
 @dataclass(frozen=True)
 class ServiceHistoryInstanceType:
-    service_type_identifier: Optional[str] = field(
+    service_type_identifier: Optional[ServiceTypeIdentifier] = field(
         default=None,
         metadata={
             "name": "ServiceTypeIdentifier",
             "type": "Element",
             "namespace": "http://uri.etsi.org/02231/v2#",
             "required": True,
-            "min_length": 1,
         },
     )
     service_name: Optional[InternationalNamesType] = field(
@@ -600,14 +599,13 @@ class ServiceHistoryInstanceType:
             "required": True,
         },
     )
-    service_status: Optional[str] = field(
+    service_status: Optional[ServiceStatus] = field(
         default=None,
         metadata={
             "name": "ServiceStatus",
             "type": "Element",
             "namespace": "http://uri.etsi.org/02231/v2#",
             "required": True,
-            "min_length": 1,
         },
     )
     status_starting_time: Optional[XmlDateTime] = field(
@@ -631,14 +629,13 @@ class ServiceHistoryInstanceType:
 
 @dataclass(frozen=True)
 class TSPServiceInformationType:
-    service_type_identifier: Optional[str] = field(
+    service_type_identifier: Optional[ServiceTypeIdentifier] = field(
         default=None,
         metadata={
             "name": "ServiceTypeIdentifier",
             "type": "Element",
             "namespace": "http://uri.etsi.org/02231/v2#",
             "required": True,
-            "min_length": 1,
         },
     )
     service_name: Optional[InternationalNamesType] = field(
@@ -659,14 +656,13 @@ class TSPServiceInformationType:
             "required": True,
         },
     )
-    service_status: Optional[str] = field(
+    service_status: Optional[ServiceStatus] = field(
         default=None,
         metadata={
             "name": "ServiceStatus",
             "type": "Element",
             "namespace": "http://uri.etsi.org/02231/v2#",
             "required": True,
-            "min_length": 1,
         },
     )
     status_starting_time: Optional[XmlDateTime] = field(
@@ -927,14 +923,13 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    tsltype: Optional[str] = field(
+    tsltype: Optional[TSLType] = field(
         default=None,
         metadata={
             "name": "TSLType",
             "type": "Element",
             "namespace": "http://uri.etsi.org/02231/v2#",
             "required": True,
-            "min_length": 1,
         },
     )
     scheme_operator_name: Optional[SchemeOperatorName] = field(
@@ -991,7 +986,7 @@ class TSLSchemeInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    scheme_territory: Optional[str] = field(
+    scheme_territory: Optional[SchemeTerritory] = field(
         default=None,
         metadata={
             "name": "SchemeTerritory",

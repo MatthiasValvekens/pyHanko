@@ -150,6 +150,8 @@ class BasePdfFileWriter(PdfHandler):
         self._meta: DocumentMetadata = DocumentMetadata()
 
         self._font_resources: Dict[str, 'FontSubsetCollection'] = {}
+        self.digest_aware_write = False
+        self._mac_handler_cls = None
 
     def get_subset_collection(self, base_postscript_name: str):
         from .font.api import FontSubsetCollection
@@ -479,6 +481,8 @@ class BasePdfFileWriter(PdfHandler):
         min_pdf_version = sh.get_min_pdf_version()
         if min_pdf_version is not None:
             self.ensure_output_version(min_pdf_version)
+        for extension in self.security_handler.get_extensions():
+            self.register_extension(extension)
 
     def _flush_obj_stream(self, obj_stm: ObjectStream):
         """
@@ -600,6 +604,14 @@ class BasePdfFileWriter(PdfHandler):
         self._populate_trailer(trailer)
         return trailer
 
+    @property
+    def _need_mac_on_write(self):
+        return (
+            not self.digest_aware_write
+            and self.security_handler is not None
+            and self.security_handler.pdf_mac_enabled
+        )
+
     def write(self, stream):
         """
         Write the contents of this PDF writer to a stream.
@@ -608,7 +620,28 @@ class BasePdfFileWriter(PdfHandler):
             A writable output stream.
         """
         self._prep_dom_for_writing()
-        self._write(stream)
+        if self._need_mac_on_write:
+            from pyhanko.pdf_utils.crypt import pdfmac
+
+            self.register_extension(pdfmac.ISO32004)
+            pdfmac.add_standalone_mac(self, output=stream)
+        else:
+            self._write(stream)
+
+    def _init_mac_handler(self, md_algorithm: str = 'sha256'):
+        """
+        MAC-adding method that can easily be manipulated in tests.
+        """
+        from pyhanko.pdf_utils.crypt import pdfmac
+
+        cls = self._mac_handler_cls or pdfmac.PdfMacTokenHandler
+        sh = self.security_handler
+        assert sh is not None
+        return cls.from_key_mat(
+            file_encryption_key=sh.get_file_encryption_key(),
+            kdf_salt=sh.get_kdf_salt(),
+            md_algorithm=md_algorithm,
+        )
 
     def _write(self, stream, skip_header: bool = False):
         object_positions: PositionDict = {}

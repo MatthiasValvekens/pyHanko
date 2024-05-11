@@ -258,11 +258,15 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         This obviously requires a stream supporting both reading and writing
         operations.
         """
-
         self._prep_dom_for_writing()
-        stream = self.prev.stream
-        stream.seek(0, os.SEEK_END)
-        self._write_updated_section(stream)
+        if self._need_mac_on_write:
+            from pyhanko.pdf_utils.crypt import pdfmac
+
+            pdfmac.add_standalone_mac(self, in_place=True)
+        else:
+            stream = self.prev.stream
+            stream.seek(0, os.SEEK_END)
+            self._write_updated_section(stream)
 
     def encrypt(self, user_pwd):
         """Method to handle updates to encrypted files.

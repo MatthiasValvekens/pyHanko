@@ -18,9 +18,8 @@ from ._legacy import (
     compute_u_value_r34,
     legacy_normalise_pw,
 )
-from ._util import aes_cbc_decrypt, aes_cbc_encrypt, as_signed, rc4_encrypt
+from ._util import aes_cbc_decrypt, aes_cbc_encrypt, rc4_encrypt
 from .api import (
-    ALL_PERMS,
     AuthResult,
     AuthStatus,
     CryptFilter,
@@ -32,7 +31,12 @@ from .api import (
     SecurityHandlerVersion,
 )
 from .cred_ser import SerialisableCredential, SerialisedCredential
-from .filter_mixins import AESCryptFilterMixin, RC4CryptFilterMixin
+from .filter_mixins import (
+    AESCryptFilterMixin,
+    AESGCMCryptFilterMixin,
+    RC4CryptFilterMixin,
+)
+from .permissions import StandardPermissions
 
 
 @dataclass
@@ -124,6 +128,7 @@ class StandardSecuritySettingsRevision(misc.VersionEnum):
     RC4_EXTENDED = 3
     RC4_OR_AES128 = 4
     AES256 = 6
+    AES_GCM = 7
     OTHER = None
     """
     Placeholder value for custom security handlers.
@@ -203,6 +208,14 @@ class StandardAESCryptFilter(StandardCryptFilter, AESCryptFilterMixin):
     pass
 
 
+class StandardAESGCMCryptFilter(StandardCryptFilter, AESGCMCryptFilterMixin):
+    """
+    AES-GCM crypt filter for the standard security handler.
+    """
+
+    pass
+
+
 class StandardRC4CryptFilter(StandardCryptFilter, RC4CryptFilterMixin):
     """
     RC4 crypt filter for the standard security handler.
@@ -225,6 +238,14 @@ def _std_rc4_config(keylen):
 def _std_aes_config(keylen):
     return CryptFilterConfiguration(
         {STD_CF: StandardAESCryptFilter(keylen=keylen)},
+        default_stream_filter=STD_CF,
+        default_string_filter=STD_CF,
+    )
+
+
+def _std_gcm_config():
+    return CryptFilterConfiguration(
+        {STD_CF: StandardAESGCMCryptFilter()},
         default_stream_filter=STD_CF,
         default_string_filter=STD_CF,
     )
@@ -258,6 +279,7 @@ class StandardSecurityHandler(SecurityHandler):
         generic.NameObject('/AESV3'): lambda _, __: StandardAESCryptFilter(
             keylen=32
         ),
+        generic.NameObject('/AESV4'): lambda _, __: StandardAESGCMCryptFilter(),
         generic.NameObject('/Identity'): lambda _, __: IdentityCryptFilter(),
     }
 
@@ -274,7 +296,7 @@ class StandardSecurityHandler(SecurityHandler):
         desired_user_pass=None,
         keylen_bytes=16,
         use_aes128=True,
-        perms: int = ALL_PERMS,
+        perms: StandardPermissions = StandardPermissions.allow_everything(),
         crypt_filter_config=None,
         encrypt_metadata=True,
         **kwargs,
@@ -303,7 +325,7 @@ class StandardSecurityHandler(SecurityHandler):
         :param use_aes128:
             Use AES-128 instead of RC4 (default: ``True``).
         :param perms:
-            Permission bits to set (defined as an integer)
+            Permission bits to set
         :param crypt_filter_config:
             Custom crypt filter configuration. PyHanko will supply a reasonable
             default if none is specified.
@@ -331,10 +353,16 @@ class StandardSecurityHandler(SecurityHandler):
         )
 
         # force perms to a 4-byte format
-        perms = as_signed(perms & 0xFFFFFFFC)
         if rev == StandardSecuritySettingsRevision.RC4_BASIC:
             # some permissions are not available for these security handlers
-            perms = as_signed(perms | 0xFFFFFFC0)
+            # the default is 'allow'
+            perms = (
+                perms
+                | StandardPermissions.ALLOW_FORM_FILLING
+                | StandardPermissions.ALLOW_ASSISTIVE_TECHNOLOGY
+                | StandardPermissions.ALLOW_REASSEMBLY
+                | StandardPermissions.ALLOW_HIGH_QUALITY_PRINTING
+            )
             u_entry, key = compute_u_value_r2(
                 desired_user_pass, o_entry, perms, id1
             )
@@ -387,8 +415,10 @@ class StandardSecurityHandler(SecurityHandler):
         cls,
         desired_owner_pass,
         desired_user_pass=None,
-        perms=ALL_PERMS,
+        perms: StandardPermissions = StandardPermissions.allow_everything(),
         encrypt_metadata=True,
+        pdf_mac: bool = True,
+        use_gcm: bool = False,
         **kwargs,
     ):
         """
@@ -407,6 +437,22 @@ class StandardSecurityHandler(SecurityHandler):
         :param encrypt_metadata:
             Whether to set up the security handler for encrypting metadata
             as well.
+        :param pdf_mac:
+            Include an ISO/TS 32004 MAC.
+        :param use_gcm:
+            Use AES-GCM (ISO/TS 32003) to encrypt strings and streams.
+
+            .. danger::
+                Due to the way PDF encryption works, the authentication
+                guarantees of AES-GCM only apply to the content of individual
+                strings and streams. The PDF file structure itself is not
+                authenticated. Document-level integrity protection is provided
+                by the ``pdf_mac=True`` option.
+
+            .. warning::
+                This option is disabled by default because support for
+                ISO/TS 32003 is not available in mainstream PDF
+                software yet. This default may change in the future.
         :return:
             A :class:`StandardSecurityHandler` instance.
         """
@@ -437,7 +483,10 @@ class StandardSecurityHandler(SecurityHandler):
         )
         assert len(oe_seed) == 32
 
-        perms_bytes = struct.pack('<I', perms & 0xFFFFFFFC)
+        if pdf_mac:
+            # clear bit 13 (1-indexed)
+            perms &= ~StandardPermissions.TOLERATE_MISSING_PDF_MAC
+        perms_bytes = perms.as_bytes()[::-1]
         extd_perms_bytes = (
             perms_bytes
             + (b'\xff' * 4)
@@ -456,9 +505,21 @@ class StandardSecurityHandler(SecurityHandler):
             encryptor.update(extd_perms_bytes) + encryptor.finalize()
         )  # lgtm
 
+        if pdf_mac:
+            kdf_salt = secrets.token_bytes(32)
+        else:
+            kdf_salt = None
+
+        if use_gcm:
+            version = SecurityHandlerVersion.AES_GCM
+            revision = StandardSecuritySettingsRevision.AES_GCM
+        else:
+            version = SecurityHandlerVersion.AES256
+            revision = StandardSecuritySettingsRevision.AES256
+
         sh = cls(
-            version=SecurityHandlerVersion.AES256,
-            revision=StandardSecuritySettingsRevision.AES256,
+            version=version,
+            revision=revision,
             legacy_keylen=32,
             perm_flags=perms,
             odata=o_entry,
@@ -467,6 +528,7 @@ class StandardSecurityHandler(SecurityHandler):
             ueseed=ue_seed,
             encrypted_perms=encrypted_perms,
             encrypt_metadata=encrypt_metadata,
+            kdf_salt=kdf_salt,
             **kwargs,
         )
         sh._shared_key = encryption_key
@@ -496,7 +558,7 @@ class StandardSecurityHandler(SecurityHandler):
         version: SecurityHandlerVersion,
         revision: StandardSecuritySettingsRevision,
         legacy_keylen,  # in bytes, not bits
-        perm_flags: int,
+        perm_flags: StandardPermissions,
         odata,
         udata,
         oeseed=None,
@@ -505,12 +567,15 @@ class StandardSecurityHandler(SecurityHandler):
         encrypt_metadata=True,
         crypt_filter_config: Optional[CryptFilterConfiguration] = None,
         compat_entries=True,
+        kdf_salt: Optional[bytes] = None,
     ):
         if crypt_filter_config is None:
             if version == SecurityHandlerVersion.RC4_40:
                 crypt_filter_config = _std_rc4_config(5)
             elif version == SecurityHandlerVersion.RC4_LONGER_KEYS:
                 crypt_filter_config = _std_rc4_config(legacy_keylen)
+            elif version == SecurityHandlerVersion.AES_GCM:
+                crypt_filter_config = _std_gcm_config()
             elif (
                 version >= SecurityHandlerVersion.AES256
                 and crypt_filter_config is None
@@ -528,9 +593,13 @@ class StandardSecurityHandler(SecurityHandler):
             crypt_filter_config,
             encrypt_metadata=encrypt_metadata,
             compat_entries=compat_entries,
+            kdf_salt=kdf_salt,
         )
         self.revision = revision
-        self.perms = as_signed(perm_flags)
+        self.perms = perm_flags
+        self._mac_required = not (
+            self.perms & StandardPermissions.TOLERATE_MISSING_PDF_MAC
+        )
         if revision >= StandardSecuritySettingsRevision.AES256:
             self.__class__._check_r6_values(
                 udata, odata, oeseed, ueseed, encrypted_perms
@@ -579,9 +648,21 @@ class StandardSecurityHandler(SecurityHandler):
                 raise misc.PdfReadError(f"Expected string, but got {type(x)}")
             return x.original_bytes
 
+        def _parse_permissions(x: generic.PdfObject) -> StandardPermissions:
+            if isinstance(x, generic.NumberObject):
+                return StandardPermissions.from_sint32(x)
+            else:
+                raise misc.PdfReadError(
+                    f"Cannot parse {x} as a permission indicator"
+                )
+
         return dict(
             legacy_keylen=keylen,
-            perm_flags=as_signed(encrypt_dict.get('/P', ALL_PERMS)),
+            perm_flags=encrypt_dict.get_and_apply(
+                '/P',
+                _parse_permissions,
+                default=StandardPermissions.allow_everything(),
+            ),
             odata=odata.original_bytes[:48],
             udata=udata.original_bytes[:48],
             oeseed=encrypt_dict.get_and_apply('/OE', _get_bytes),
@@ -589,6 +670,16 @@ class StandardSecurityHandler(SecurityHandler):
             encrypted_perms=encrypt_dict.get_and_apply('/Perms', _get_bytes),
             encrypt_metadata=encrypt_dict.get_and_apply(
                 '/EncryptMetadata', bool, default=True
+            ),
+            kdf_salt=encrypt_dict.get_and_apply(
+                '/KDFSalt',
+                lambda x: (
+                    x.original_bytes
+                    if isinstance(
+                        x, (generic.TextStringObject, generic.ByteStringObject)
+                    )
+                    else None
+                ),
             ),
         )
 
@@ -605,12 +696,18 @@ class StandardSecurityHandler(SecurityHandler):
             **cls.gather_encryption_metadata(encrypt_dict),
         )
 
+    @property
+    def pdf_mac_enabled(self) -> bool:
+        return super().pdf_mac_enabled or self._mac_required
+
     def as_pdf_object(self):
         result = generic.DictionaryObject()
         result['/Filter'] = generic.NameObject('/Standard')
         result['/O'] = generic.ByteStringObject(self.odata)
         result['/U'] = generic.ByteStringObject(self.udata)
-        result['/P'] = generic.NumberObject(as_signed(self.perms))
+        result['/P'] = generic.NumberObject(self.perms.as_sint32())
+        if self._kdf_salt:
+            result['/KDFSalt'] = generic.ByteStringObject(self._kdf_salt)
         # this shouldn't be necessary for V5 handlers, but Adobe Reader
         # requires it anyway ...sigh...
         if (
@@ -752,7 +849,10 @@ class StandardSecurityHandler(SecurityHandler):
 
         # known plaintext mandated in the standard ...sigh...
         perms_ok = decrypted_p_entry[9:12] == b'adb'
-        perms_ok &= self.perms == struct.unpack('<i', decrypted_p_entry[:4])[0]
+        # endianness reversal, also mask off all but the upper 3 bytes
+        perms_ok &= self.perms == StandardPermissions.from_uint(
+            struct.unpack('<I', decrypted_p_entry[:4])[0]
+        )
         try:
             # check encrypt_metadata flag
             decr_metadata_flag = _EXPECTED_PERMS_8[decrypted_p_entry[8]]

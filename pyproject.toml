@@ -74,7 +74,7 @@ image-support = [
 ]
 pkcs11 = ["python-pkcs11~=0.7.0"]
 async-http = ["aiohttp~=3.9.0"]
-etsi = ["xsdata>=23.8,<25.0"]
+etsi = ["xsdata>=24.4,<25.0"]
 testing-basic = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",

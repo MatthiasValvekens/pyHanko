@@ -65,7 +65,7 @@ jobs:
       actions: read
       id-token: write
       contents: write  # https://github.com/slsa-framework/slsa-github-generator/issues/2044 :(
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.10.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
     with:
       base64-subjects: "${{ needs.ci.outputs.hashes }}"
       upload-assets: false
@@ -88,7 +88,7 @@ jobs:
         name: pyhanko-dist
         path: dist/
     - name: Download provenance data
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: multiple.intoto.jsonl
         path: provenance/

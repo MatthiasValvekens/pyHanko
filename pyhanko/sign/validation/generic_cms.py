@@ -18,7 +18,7 @@ from typing import (
     overload,
 )
 
-from asn1crypto import cms, core, tsp, x509
+from asn1crypto import algos, cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import (
@@ -164,7 +164,8 @@ def _check_signing_certificate(
 def validate_algorithm_protection(
     attrs: cms.CMSAttributes,
     claimed_digest_algorithm_obj: cms.DigestAlgorithm,
-    claimed_signature_algorithm_obj: cms.SignedDigestAlgorithm,
+    claimed_signature_algorithm_obj: Optional[algos.SignedDigestAlgorithm],
+    claimed_mac_algorithm_obj: Optional[algos.HmacAlgorithm],
 ):
     """
     Internal API to validate the CMS algorithm protection attribute
@@ -176,6 +177,8 @@ def validate_algorithm_protection(
         The claimed (i.e. unprotected) digest algorithm value.
     :param claimed_signature_algorithm_obj:
         The claimed (i.e. unprotected) signature algorithm value.
+    :param claimed_mac_algorithm_obj:
+        The claimed (i.e. unprotected) MAC algorithm value.
     :raises errors.CMSStructuralError:
         if multiple CMS protection attributes are present
     :raises errors.CMSAlgorithmProtectionError:
@@ -200,19 +203,32 @@ def validate_algorithm_protection(
                 "Digest algorithm does not match CMS algorithm protection "
                 "attribute.",
             )
-        signed_sig_algorithm = cms_algid_protection[
-            'signature_algorithm'
-        ].native
-        if signed_sig_algorithm is None:
-            raise errors.CMSAlgorithmProtectionError(
-                "CMS algorithm protection attribute not valid for signed "
-                "data",
-            )
-        elif signed_sig_algorithm != claimed_signature_algorithm_obj.native:
-            raise errors.CMSAlgorithmProtectionError(
-                "Signature mechanism does not match CMS algorithm "
-                "protection attribute.",
-            )
+        if claimed_signature_algorithm_obj is not None:
+            auth_sig_algorithm = cms_algid_protection[
+                'signature_algorithm'
+            ].native
+            if auth_sig_algorithm is None:
+                raise errors.CMSAlgorithmProtectionError(
+                    "CMS algorithm protection attribute not valid for signed "
+                    "data",
+                )
+            elif auth_sig_algorithm != claimed_signature_algorithm_obj.native:
+                raise errors.CMSAlgorithmProtectionError(
+                    "Signature mechanism does not match CMS algorithm "
+                    "protection attribute.",
+                )
+        if claimed_mac_algorithm_obj is not None:
+            auth_mac_algorithm = cms_algid_protection['mac_algorithm'].native
+            if auth_mac_algorithm is None:
+                raise errors.CMSAlgorithmProtectionError(
+                    "CMS algorithm protection attribute not valid for "
+                    "authenticated data",
+                )
+            elif auth_mac_algorithm != claimed_mac_algorithm_obj.native:
+                raise errors.CMSAlgorithmProtectionError(
+                    "MAC mechanism does not match CMS algorithm "
+                    "protection attribute.",
+                )
 
 
 def validate_sig_integrity(
@@ -316,6 +332,7 @@ def validate_sig_integrity(
                 signed_attrs,
                 claimed_digest_algorithm_obj=digest_algorithm_obj,
                 claimed_signature_algorithm_obj=signature_algorithm,
+                claimed_mac_algorithm_obj=None,
             )
         except CMSStructuralError as e:
             raise errors.SignatureValidationError(

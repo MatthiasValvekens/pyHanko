@@ -57,7 +57,6 @@ object data, this distiction should be irrelevant to you as an API user.
 """
 
 from .api import (
-    ALL_PERMS,
     IDENTITY,
     AuthResult,
     AuthStatus,

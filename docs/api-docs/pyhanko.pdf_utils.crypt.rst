@@ -29,6 +29,14 @@ pyhanko.pdf\_utils.crypt.filter\_mixins module
    :undoc-members:
    :show-inheritance:
 
+pyhanko.pdf\_utils.crypt.permissions module
+-----------------------------------
+
+.. automodule:: pyhanko.pdf_utils.crypt.permissions
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 pyhanko.pdf\_utils.crypt.pubkey module
 --------------------------------------
 

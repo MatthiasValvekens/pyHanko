@@ -35,7 +35,7 @@ def derive_legacy_file_key(
     m.update(owner_entry)
     # 4. Treat the value of the /P entry as an unsigned 4-byte integer and pass
     # these bytes to the MD5 hash function, low-order byte first.
-    p_entry = struct.pack('<i', p_entry)
+    p_entry = struct.pack('<I', p_entry.as_uint32())
     m.update(p_entry)
     # 5. Pass the first element of the file's file identifier array to the MD5
     # hash function.
