@@ -34,7 +34,6 @@ from pyhanko.sign.diff_analysis.rules_api import (
     RelativeContext,
     _eq_deref,
 )
-from pyhanko.sign.general import SigningError
 from pyhanko.sign.validation import (
     SignatureCoverageLevel,
     validate_pdf_signature,
@@ -712,7 +711,7 @@ GROUP_VARIANTS = (TEXTFIELD_GROUP, TEXTFIELD_GROUP_VAR)
 def test_deep_non_sig_field(variant, existing_only):
     w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
     meta = signers.PdfSignatureMetadata(field_name='TextInput.TextField1')
-    with pytest.raises(SigningError):
+    with pytest.raises(misc.FormFillingError, match='not a /Sig field'):
         signers.sign_pdf(
             w, meta, signer=FROM_CA, existing_fields_only=existing_only
         )

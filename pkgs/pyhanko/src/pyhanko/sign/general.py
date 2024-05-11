@@ -24,6 +24,7 @@ from pyhanko.keys import (
     load_private_key_from_pemder_data,
 )
 from pyhanko.pdf_utils import misc
+from pyhanko.pdf_utils.misc import FormFillingError
 from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 __all__ = [
@@ -331,14 +332,10 @@ def match_issuer_serial(
     )
 
 
-class SigningError(ValueError):
+class SigningError(FormFillingError):
     """
     Error encountered while signing a file.
     """
-
-    def __init__(self, msg: str, *args):
-        self.msg = msg
-        super().__init__(msg, *args)
 
 
 class UnacceptableSignerError(SigningError):

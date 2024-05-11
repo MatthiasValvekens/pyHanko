@@ -55,6 +55,14 @@ pyhanko.pdf\_utils.filters module
    :undoc-members:
    :show-inheritance:
 
+pyhanko.pdf\_utils.form_tools module
+------------------------------------
+
+.. automodule:: pyhanko.pdf_utils.form_tools
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 pyhanko.pdf\_utils.generic module
 ---------------------------------
 
