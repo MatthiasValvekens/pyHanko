@@ -204,6 +204,14 @@ class TextBox(PdfContent):
         style = self.style
         return style.font_size if style.leading is None else style.leading
 
+    @property
+    def da_string(self) -> bytes:
+        return b'/%s %d Tf %d TL' % (
+            self.font_name.encode('latin1'),
+            self.style.font_size,
+            self.leading,
+        )
+
     def render(self):
         style = self.style
 
@@ -243,7 +251,7 @@ class TextBox(PdfContent):
                 b'%g %g %g rg' % self.style.text_color,
             )
 
-        command_stream.append(b'BT')
+        command_stream += [b'/Tx BMC q', b'BT', self.da_string]
 
         command_stream.append(
             b'/%s %d Tf %d TL'
@@ -267,5 +275,5 @@ class TextBox(PdfContent):
         command_stream.append(text_cursor_start)
 
         command_stream.extend(self._wrapped_lines)
-        command_stream.append(b'ET')
+        command_stream.append(b'ET Q EMC')
         return b' '.join(command_stream)
