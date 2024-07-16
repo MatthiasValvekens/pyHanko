@@ -589,9 +589,17 @@ class Signer:
         :return:
             An :class:`.asn1crypto.cms.SignerInfo` object.
         """
-        digest_algorithm_obj = algos.DigestAlgorithm(
-            {'algorithm': digest_algorithm}
-        )
+
+        digest_algorithm_args = {'algorithm': digest_algorithm}
+        if digest_algorithm == 'shake256':
+            # RFC 8419 requirement
+            mech = self.get_signature_mechanism_for_digest('shake256')
+            if mech['algorithm'].native == 'ed448':
+                digest_algorithm_args = {
+                    'algorithm': 'shake256_len',
+                    'parameters': core.Integer(512),
+                }
+        digest_algorithm_obj = algos.DigestAlgorithm(digest_algorithm_args)
 
         signing_cert = self.signing_cert
         if signing_cert is None:
@@ -635,10 +643,8 @@ class Signer:
         encap_content_info,
     ) -> cms.ContentInfo:
         encap_content_info = encap_content_info or {'content_type': 'data'}
-        digest_algorithm_obj = algos.DigestAlgorithm(
-            {'algorithm': digest_algorithm}
-        )
         sig_info = self.signer_info(digest_algorithm, signed_attrs, signature)
+        digest_algorithm_obj = sig_info['digest_algorithm']
 
         if unsigned_attrs is not None:
             sig_info['unsigned_attrs'] = unsigned_attrs

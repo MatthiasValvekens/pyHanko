@@ -2168,3 +2168,31 @@ async def test_tolerate_der_deviations_in_pdf():
     # now we run the actual validation after reopening the file
     r = PdfFileReader(output)
     await async_val_trusted(r.embedded_signatures[0])
+
+
+@freeze_time('2020-11-01')
+def test_ed448_no_length():
+    # verify that we still accept ed448 with id-shake256 without paramaters
+
+    fname = os.path.join(PDF_DATA_DIR, 'ed448-shake256-nolen.pdf')
+    with open(fname, 'rb') as inf:
+        r = PdfFileReader(inf)
+        s = r.embedded_signatures[0]
+        status = val_untrusted(s)
+    assert status.md_algorithm == 'shake256'
+
+    assert len(s.external_digest) == 64
+
+
+@freeze_time('2020-11-01')
+def test_ed448_invalid_hash_algo_validation():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    with pytest.raises(
+        DisallowedAlgorithmError, match='algorithm.*does not match'
+    ):
+        fname = os.path.join(PDF_DATA_DIR, 'ed448-disallowed-hash.pdf')
+        with open(fname, 'rb') as inf:
+            r = PdfFileReader(inf)
+            s = r.embedded_signatures[0]
+            val_untrusted(s)
