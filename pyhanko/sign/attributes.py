@@ -130,10 +130,19 @@ class CMSAlgorithmProtectionProvider(CMSAttributeProvider):
     async def build_attr_value(
         self, dry_run=False
     ) -> cms.CMSAlgorithmProtection:
+        digest_algorithm_args = {'algorithm': self.digest_algo}
+        if self.digest_algo == 'shake256':
+            # RFC 8419 requirement
+            mech = self.signature_algo
+            if mech['algorithm'].native == 'ed448':
+                digest_algorithm_args = {
+                    'algorithm': 'shake256_len',
+                    'parameters': core.Integer(512),
+                }
         return cms.CMSAlgorithmProtection(
             {
                 'digest_algorithm': algos.DigestAlgorithm(
-                    {'algorithm': self.digest_algo}
+                    digest_algorithm_args
                 ),
                 'signature_algorithm': self.signature_algo,
             }

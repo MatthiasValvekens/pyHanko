@@ -348,8 +348,9 @@ class UnacceptableSignerError(SigningError):
 
 
 def get_pyca_cryptography_hash(algorithm) -> Union[hashes.HashAlgorithm]:
-    if algorithm.lower() == 'shake256':
-        # force the output length to 64 bytes = 512 bits
+    if algorithm.lower() in ('shake256', 'shake256_len'):
+        # force the output length to 64 bytes = 512 bits. We don't
+        # support any other lengths because those can't be valid in CMS
         return hashes.SHAKE256(digest_size=64)
     else:
         return getattr(hashes, algorithm.upper())()

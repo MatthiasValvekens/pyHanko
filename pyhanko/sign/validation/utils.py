@@ -2,7 +2,7 @@ import abc
 from datetime import datetime
 from typing import Optional
 
-from asn1crypto import algos, cms, keys, x509
+from asn1crypto import algos, cms, core, keys, x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.dsa import DSAPublicKey
@@ -33,6 +33,21 @@ def _ensure_digest_match(
     signature_algo: algos.SignedDigestAlgorithm,
     message_digest_algo: algos.DigestAlgorithm,
 ) -> AlgorithmUsageConstraint:
+    if signature_algo['algorithm'].native == 'ed448':
+        # be a bit more tolerant here, also don't check parameters because
+        # we only support one length anyway
+        algo = message_digest_algo['algorithm'].native
+        if algo in ('shake256', 'shake256_len'):
+            return AlgorithmUsageConstraint(allowed=True)
+        else:
+            return AlgorithmUsageConstraint(
+                allowed=False,
+                failure_reason=(
+                    f"Digest algorithm {algo} "
+                    f"does not match value implied by signature algorithm ed448"
+                ),
+            )
+
     try:
         sig_hash_algo_obj = algos.DigestAlgorithm(
             {'algorithm': signature_algo.hash_algo}
@@ -127,7 +142,6 @@ class _DefaultPolicyMixin(CMSAlgorithmUsagePolicy):
 
 
 DEFAULT_WEAK_HASH_ALGORITHMS = frozenset({'sha1', 'md5', 'md2'})
-
 
 DEFAULT_ALGORITHM_USAGE_POLICY = CMSAlgorithmUsagePolicy.lift_policy(
     DisallowWeakAlgorithmsPolicy(DEFAULT_WEAK_HASH_ALGORITHMS)
