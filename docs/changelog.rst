@@ -2,6 +2,18 @@
 Release history
 ***************
 
+
+.. _release-0.25.1:
+
+*Release date:* 2024-07-18
+
+
+Bugs fixed
+----------
+
+ * Align usage of SHAKE256 OIDs with Ed448 with RFC 8419
+
+
 .. _release-0.25.0:
 
 *Release date:* 2024-05-06
