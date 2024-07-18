@@ -2,7 +2,7 @@ import abc
 from datetime import datetime
 from typing import Optional
 
-from asn1crypto import algos, cms, core, keys, x509
+from asn1crypto import algos, cms, keys, x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.dsa import DSAPublicKey
