@@ -1512,7 +1512,7 @@ def test_ed448():
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     status = val_untrusted(s)
-    assert status.md_algorithm == 'shake256'
+    assert status.md_algorithm == 'shake256_len'
 
     assert len(s.external_digest) == 64
 
