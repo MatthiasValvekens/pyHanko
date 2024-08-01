@@ -24,6 +24,7 @@ from .content import PdfContent, PdfResources, ResourceType
 from .generic import IndirectObject, pdf_name
 from .layout import BoxConstraints
 from .writer import BasePdfFileWriter
+from .misc import rd
 
 try:
     from PIL import Image
@@ -133,6 +134,8 @@ class PdfImage(PdfContent):
         name: Optional[str] = None,
         opacity=None,
         box: Optional[BoxConstraints] = None,
+        x=0,
+        y=0,
     ):
         if isinstance(image, str):
             image = Image.open(image)
@@ -140,6 +143,8 @@ class PdfImage(PdfContent):
         self.image: Image.Image = image
         self.name = name or str(uuid.uuid4())
         self.opacity = opacity
+        self.pos_x = x
+        self.pos_y = y        
 
         if box is None:
             # assume square pixels
@@ -194,9 +199,10 @@ class PdfImage(PdfContent):
         if not self.box.width_defined:
             self.box.width = self.image.width
 
-        draw = b'%g 0 0 %g 0 0 cm %s Do' % (
+        draw = b'%g 0 0 %g %g %g cm %s Do' % (
             self.box.width,
             self.box.height,
+            rd(self.pos_x), rd(self.pos_y),
             img_ref_name.encode('ascii'),
         )
         return b'q %s %s Q' % (opacity, draw)
