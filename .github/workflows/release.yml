@@ -102,7 +102,7 @@ jobs:
       with:
         repository-url: ${{ vars.REPOSITORY_URL }}
     - name: Sign with sigstore
-      uses: sigstore/gh-action-sigstore-python@v2.1.1
+      uses: sigstore/gh-action-sigstore-python@v3.0.0
       with:
         inputs: ./dist/*
         # useful to inspect workflow artifacts in test runs
