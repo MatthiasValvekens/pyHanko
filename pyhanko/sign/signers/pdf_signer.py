@@ -1486,6 +1486,7 @@ class PdfSigner:
         in_place=False,
         output=None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        strict=True,
     ):
         """
         .. versionchanged:: 0.9.0
@@ -1518,6 +1519,9 @@ class PdfSigner:
             Size of the internal buffer (in bytes) used to feed data to the
             message digest function if the input stream does not support
             ``memoryview``.
+        :param strict:
+            If ``True``, enforce stricter validation of the input PDF file.
+            Default is ``True``.        
         :return:
             The output stream containing the signed data.
         """
@@ -1530,6 +1534,7 @@ class PdfSigner:
                 in_place=in_place,
                 output=output,
                 chunk_size=chunk_size,
+                strict=strict
             )
         )
         return result
@@ -1544,6 +1549,7 @@ class PdfSigner:
         in_place=False,
         output=None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        strict=True,
     ):
         """
         .. versionadded:: 0.9.0
@@ -1575,6 +1581,9 @@ class PdfSigner:
             Size of the internal buffer (in bytes) used to feed data to the
             message digest function if the input stream does not support
             ``memoryview``.
+        :param strict:
+            If ``True``, enforce stricter validation of the input PDF file.
+            Default is ``True``.
         :return:
             The output stream containing the signed data.
         """
@@ -1614,7 +1623,7 @@ class PdfSigner:
         )
 
         await post_signing_doc.post_signature_processing(
-            res_output, chunk_size=chunk_size
+            res_output, chunk_size=chunk_size, strict=strict
         )
         # we put the finalisation step after the DSS manipulations, since
         # otherwise we'd also run into issues with non-seekable output buffers
@@ -2734,6 +2743,7 @@ class PdfTBSDocument:
         post_sign_instr: Optional[PostSignInstructions] = None,
         validation_context: Optional[ValidationContext] = None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        strict=True,
     ):
         """
         Finish signing after obtaining a CMS object from an external source, and
@@ -2760,6 +2770,9 @@ class PdfTBSDocument:
             Size of the internal buffer (in bytes) used to feed data to the
             message digest function if the input stream does not support
             ``memoryview``.
+        :param strict:
+            If ``True``, enforce strict validation of the input stream.
+            Default is ``True``.
         """
         # TODO at this point, the output stream no longer needs to be readable,
         #  just seekable, unless there's a timestamp requirement.
@@ -2773,7 +2786,7 @@ class PdfTBSDocument:
             validation_context=validation_context,
         )
         await post_sign.post_signature_processing(
-            rw_output, chunk_size=chunk_size
+            rw_output, chunk_size=chunk_size, strict=strict
         )
 
 
@@ -2795,7 +2808,7 @@ class PdfPostSignatureDocument:
         self.validation_context = validation_context
 
     async def post_signature_processing(
-        self, output: IO, chunk_size=misc.DEFAULT_CHUNK_SIZE
+        self, output: IO, chunk_size=misc.DEFAULT_CHUNK_SIZE, strict=True
     ):
         """
         Handle DSS updates and LTA timestamps, if applicable.
@@ -2854,7 +2867,7 @@ class PdfPostSignatureDocument:
             )
         if timestamper is not None:
             # append a document timestamp after the DSS update
-            w = IncrementalPdfFileWriter(output)
+            w = IncrementalPdfFileWriter(output, strict=strict)
             if (
                 w.security_handler is not None
                 and instr.file_credential is not None

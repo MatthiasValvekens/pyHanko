@@ -30,6 +30,7 @@ def sign_pdf(
     bytes_reserved=None,
     in_place=False,
     output=None,
+    strict=True
 ):
     """
     Thin convenience wrapper around :meth:`.PdfSigner.sign_pdf`.
@@ -63,6 +64,9 @@ def sign_pdf(
         Write the output to the specified output stream.
         If ``None``, write to a new :class:`.BytesIO` object.
         Default is ``None``.
+    :param strict:
+        If ``True``, enforce stricter validation of the input PDF.
+        Default is ``True``.
     :return:
         The output stream containing the signed output.
     """
@@ -85,6 +89,7 @@ def sign_pdf(
         bytes_reserved=bytes_reserved,
         in_place=in_place,
         output=output,
+        strict=strict
     )
 
 
@@ -98,6 +103,7 @@ async def async_sign_pdf(
     bytes_reserved=None,
     in_place=False,
     output=None,
+    strict=True
 ):
     """
     Thin convenience wrapper around :meth:`.PdfSigner.async_sign_pdf`.
@@ -131,6 +137,9 @@ async def async_sign_pdf(
         Write the output to the specified output stream.
         If ``None``, write to a new :class:`.BytesIO` object.
         Default is ``None``.
+    :param strict:
+        If ``True``, enforce stricter validation of the input PDF.
+        Default is ``True``.
     :return:
         The output stream containing the signed output.
     """
@@ -153,6 +162,7 @@ async def async_sign_pdf(
         bytes_reserved=bytes_reserved,
         in_place=in_place,
         output=output,
+        strict=strict
     )
 
 
