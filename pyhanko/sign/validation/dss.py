@@ -490,6 +490,7 @@ class DocumentSecurityStore:
         force_write: bool = False,
         embed_roots: bool = True,
         file_credential: Optional[SerialisedCredential] = None,
+        strict: bool = True,
     ):
         """
         Wrapper around :meth:`supply_dss_in_writer`.
@@ -535,8 +536,11 @@ class DocumentSecurityStore:
             .. versionadded:: 0.13.0
 
             Serialised file credential, to update encrypted files.
+        :param strict:
+            If ``True``, enforce strict validation of the input stream.
+            Default is ``True``.
         """
-        pdf_out = IncrementalPdfFileWriter(output_stream)
+        pdf_out = IncrementalPdfFileWriter(output_stream, strict=strict)
         if pdf_out.security_handler is not None and file_credential is not None:
             pdf_out.security_handler.authenticate(file_credential)
         dss = cls.supply_dss_in_writer(
