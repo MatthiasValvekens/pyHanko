@@ -80,7 +80,8 @@ def pil_image(img: Image.Image, writer: BasePdfFileWriter):
         pdf_name('/DeviceGray') if img.mode == 'L' else pdf_name('/DeviceRGB')
     )
     if img.mode == 'P':
-        palette: ImagePalette = img.palette
+        palette: Optional[ImagePalette] = img.palette
+        assert palette is not None
         palette_arr = palette.palette
         if palette.mode != 'RGB':  # pragma: nocover
             raise NotImplementedError

@@ -264,7 +264,7 @@ class FieldMDPRule:
 def _list_fields(
     old_fields: Optional[generic.PdfObject],
     new_fields: Optional[generic.PdfObject],
-    old_path: RawPdfPath,
+    old_path: Optional[RawPdfPath],
     parent_name="",
     inherited_ft=None,
 ) -> Generator[Tuple[str, FieldComparisonSpec], None, None]:
@@ -313,7 +313,7 @@ def _list_fields(
 
             if not kids and field_type is None:
                 raise exc(
-                    f"Field type of terminal field {fq_name} could not be "
+                    f"Field type of terminal field {fq_name!r} could not be "
                     f"determined"
                 )
             yield fq_name, (field_type, field_ref.reference, kids, ix)

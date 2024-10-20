@@ -462,7 +462,7 @@ class BaseFieldModificationRule(FieldMDPRule):
             else FORMFIELD_ALWAYS_MODIFIABLE
         )
         self.value_update_keys = (
-            value_update_keys
+            frozenset(value_update_keys)
             if value_update_keys is not None
             else VALUE_UPDATE_KEYS
         )

@@ -1798,9 +1798,13 @@ async def _process_signature_ts(
             signature_ts_result = AdESBasicValidationResult(
                 ades_subindic=AdESPassed.OK,
                 # TODO update pyHanko status object as well
-                api_status=dataclasses.replace(
-                    signature_ts_prelim_result.api_status,
-                    validation_path=validation_path,
+                api_status=(
+                    dataclasses.replace(
+                        signature_ts_prelim_result.api_status,
+                        validation_path=validation_path,
+                    )
+                    if signature_ts_prelim_result.api_status
+                    else None
                 ),
                 failure_msg=None,
                 validation_objects=signature_ts_prelim_result.validation_objects,

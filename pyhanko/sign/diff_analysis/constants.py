@@ -12,11 +12,9 @@ __all__ = [
     'VRI_KEY_PATTERN',
 ]
 
-
 # /Type: dictionary type (can always be added if correct)
 # /Ff: Form field flags
-FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff', '/Type'}
-
+FORMFIELD_ALWAYS_MODIFIABLE = frozenset({'/Ff', '/Type'})
 
 # /AP: appearance dictionary
 # /AS: current appearance state
@@ -24,33 +22,36 @@ FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff', '/Type'}
 # /F: (widget) annotation flags
 # /DA: default appearance
 # /Q: quadding
-VALUE_UPDATE_KEYS = FORMFIELD_ALWAYS_MODIFIABLE | {
-    '/AP',
-    '/AS',
-    '/V',
-    '/F',
-    '/DA',
-    '/Q',
-}
-
+VALUE_UPDATE_KEYS = FORMFIELD_ALWAYS_MODIFIABLE | frozenset(
+    {
+        '/AP',
+        '/AS',
+        '/V',
+        '/F',
+        '/DA',
+        '/Q',
+    }
+)
 
 VRI_KEY_PATTERN = re.compile('/[A-Z0-9]{40}')
 
+ACROFORM_EXEMPT_STRICT_COMPARISON = frozenset(
+    {
+        '/Fields',
+        '/DR',
+        '/DA',
+        '/Q',
+        '/NeedAppearances',
+    }
+)
 
-ACROFORM_EXEMPT_STRICT_COMPARISON = {
-    '/Fields',
-    '/DR',
-    '/DA',
-    '/Q',
-    '/NeedAppearances',
-}
-
-
-ROOT_EXEMPT_STRICT_COMPARISON = {
-    '/AcroForm',
-    '/DSS',
-    '/Extensions',
-    '/Metadata',
-    '/MarkInfo',
-    '/Version',
-}
+ROOT_EXEMPT_STRICT_COMPARISON = frozenset(
+    {
+        '/AcroForm',
+        '/DSS',
+        '/Extensions',
+        '/Metadata',
+        '/MarkInfo',
+        '/Version',
+    }
+)
