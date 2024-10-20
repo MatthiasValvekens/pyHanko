@@ -349,6 +349,7 @@ def test_pades_revinfo_live_update(requests_mock):
     assert emb_sig is r.embedded_regular_signatures[0]
 
 
+@freeze_time('2020-11-01')
 def test_update_no_timestamps():
     r = PdfFileReader(BytesIO(MINIMAL))
     output = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
@@ -575,6 +576,7 @@ def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
     _test_pades_revinfo_live_lta_validate(out, requests_mock)
 
 
+@freeze_time('2020-11-01')
 def test_pades_lta_dss_indirect_arrs(requests_mock):
     testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
     live_testing_vc(requests_mock)
