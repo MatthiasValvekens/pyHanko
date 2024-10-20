@@ -1,6 +1,7 @@
 import secrets
 import struct
 
+from cryptography.hazmat.decrepit.ciphers.algorithms import ARC4
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -30,7 +31,7 @@ def aes_cbc_encrypt(key, data, iv, use_padding=True):
 
 
 def rc4_encrypt(key, data):
-    cipher = Cipher(algorithms.ARC4(key), mode=None)
+    cipher = Cipher(ARC4(key), mode=None)
     encryptor = cipher.encryptor()
     # NOTE: Suppress LGTM warning here, we have to do what the spec says
     return encryptor.update(data) + encryptor.finalize()  # lgtm
