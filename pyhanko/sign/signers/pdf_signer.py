@@ -2864,6 +2864,7 @@ class PdfPostSignatureDocument:
                 output_stream=output,
                 **dss_op_kwargs,
                 file_credential=instr.file_credential,
+                strict=strict,
             )
         if timestamper is not None:
             # append a document timestamp after the DSS update
