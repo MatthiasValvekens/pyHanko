@@ -30,7 +30,7 @@ def sign_pdf(
     bytes_reserved=None,
     in_place=False,
     output=None,
-    strict=True
+    strict=True,
 ):
     """
     Thin convenience wrapper around :meth:`.PdfSigner.sign_pdf`.
@@ -89,7 +89,7 @@ def sign_pdf(
         bytes_reserved=bytes_reserved,
         in_place=in_place,
         output=output,
-        strict=strict
+        strict=strict,
     )
 
 
@@ -103,7 +103,7 @@ async def async_sign_pdf(
     bytes_reserved=None,
     in_place=False,
     output=None,
-    strict=True
+    strict=True,
 ):
     """
     Thin convenience wrapper around :meth:`.PdfSigner.async_sign_pdf`.
@@ -162,7 +162,7 @@ async def async_sign_pdf(
         bytes_reserved=bytes_reserved,
         in_place=in_place,
         output=output,
-        strict=strict
+        strict=strict,
     )
 
 

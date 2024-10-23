@@ -1521,7 +1521,7 @@ class PdfSigner:
             ``memoryview``.
         :param strict:
             If ``True``, enforce stricter validation of the input PDF file.
-            Default is ``True``.        
+            Default is ``True``.
         :return:
             The output stream containing the signed data.
         """
@@ -1534,7 +1534,7 @@ class PdfSigner:
                 in_place=in_place,
                 output=output,
                 chunk_size=chunk_size,
-                strict=strict
+                strict=strict,
             )
         )
         return result

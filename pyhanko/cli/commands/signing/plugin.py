@@ -118,7 +118,7 @@ def _callback_logic(
                     w,
                     existing_fields_only=cli_ctx.existing_fields_only,
                     appearance_text_params=get_text_params(ctx),
-                    strict= not cli_ctx.lenient,
+                    strict=not cli_ctx.lenient,
                 )
 
                 with open(outfile, 'wb') as outf:
