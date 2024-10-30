@@ -82,7 +82,7 @@ testing-basic = [
     "freezegun>=1.1.0",
     "pytest-asyncio==0.24.0",
     "certomancer==0.12.*",
-    "pytest-cov>=4.0,<5.1",
+    "pytest-cov>=4.0,<6.1",
     "backports.zoneinfo[tzdata];python_version<\"3.9\"",
 ]
 testing = [
@@ -96,7 +96,7 @@ live-test = [
     "pytest-aiohttp~=1.0.4",
     "certomancer-csc-dummy==0.3.0",
     "certomancer[web-api]==0.12.*",
-    "pytest-cov>=4.0,<5.1",
+    "pytest-cov>=4.0,<6.1",
 ]
 mypy = [
     "pyHanko[pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs,etsi]",
