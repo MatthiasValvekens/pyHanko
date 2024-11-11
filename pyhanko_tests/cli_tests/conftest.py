@@ -14,6 +14,7 @@ from click.testing import CliRunner
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
 
+from pyhanko.pdf_utils.misc import PdfStrictReadError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import (
     RevocationInfoValidationType,
@@ -131,12 +132,12 @@ def _write_config(config: dict, fname: str = 'pyhanko.yml'):
 logger = logging.getLogger(__name__)
 
 
-def _validate_last_sig_in(arch: PKIArchitecture, pdf_file):
+def _validate_last_sig_in(arch: PKIArchitecture, pdf_file, *, strict):
     vc_kwargs = dict(trust_roots=[arch.get_cert(CertLabel('root'))])
     vc = ValidationContext(**vc_kwargs, allow_fetching=True)
     with open(pdf_file, 'rb') as result:
         logger.info(f"Validating last signature in {pdf_file}...")
-        r = PdfFileReader(result)
+        r = PdfFileReader(result, strict=strict)
         # Little hack for the tests with encrypted files
         if r.security_handler is not None:
             r.decrypt("ownersecret")
@@ -163,5 +164,20 @@ def _validate_last_sig_in(arch: PKIArchitecture, pdf_file):
 @pytest.fixture
 def post_validate(pki_arch):
     yield
+    input_passes_strict = True
+    if os.path.isfile(INPUT_PATH):
+        try:
+            with open(INPUT_PATH, 'rb') as inf:
+                PdfFileReader(inf)
+        except PdfStrictReadError:
+            logger.info(
+                f"Input file {INPUT_PATH} can't be opened in strict mode, "
+                f"will validate output {SIGNED_OUTPUT_PATH} in "
+                f"nonstrict mode as well"
+            )
+            input_passes_strict = False
+
     if os.path.isfile(SIGNED_OUTPUT_PATH):
-        _validate_last_sig_in(pki_arch, SIGNED_OUTPUT_PATH)
+        _validate_last_sig_in(
+            pki_arch, SIGNED_OUTPUT_PATH, strict=input_passes_strict
+        )

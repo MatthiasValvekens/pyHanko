@@ -89,11 +89,14 @@ from pyhanko_tests.signing_commons import (
     SIMPLE_ECC_V_CONTEXT,
     SIMPLE_V_CONTEXT,
     TRUST_ROOTS,
+    async_val_trusted,
     dummy_ocsp_vc,
     live_ac_vcs,
     live_testing_vc,
     val_trusted,
 )
+
+from .samples import MINIMAL_SLIGHTLY_BROKEN
 
 
 def ts_response_callback(request, _context):
@@ -2380,3 +2383,37 @@ async def test_cades_signer_attrs_multivalued(requests_mock, pass_ac_vc):
             # validate
             ac_validation_context=(main_vc if pass_ac_vc else None),
         )
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_interrupted_nonstrict_with_psi():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_SLIGHTLY_BROKEN), strict=False)
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(
+            field_name='SigNew',
+            subfilter=PADES,
+            embed_validation_info=True,
+            validation_context=SIMPLE_V_CONTEXT(),
+        ),
+        signer=FROM_CA,
+        timestamper=DUMMY_TS,
+    )
+    prep_digest, tbs_document, output = (
+        await pdf_signer.async_digest_doc_for_signing(w)
+    )
+    md_algorithm = tbs_document.md_algorithm
+    assert tbs_document.post_sign_instructions is not None
+
+    await PdfTBSDocument.async_finish_signing(
+        output,
+        prep_digest,
+        await FROM_CA.async_sign(
+            prep_digest.document_digest,
+            digest_algorithm=md_algorithm,
+        ),
+        post_sign_instr=tbs_document.post_sign_instructions,
+    )
+
+    r = PdfFileReader(output, strict=False)
+    await async_val_trusted(r.embedded_signatures[0], extd=True)
