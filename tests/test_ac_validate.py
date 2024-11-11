@@ -3,6 +3,7 @@ import os
 
 import pytest
 from asn1crypto import cms, crl, ocsp, x509
+from freezegun import freeze_time
 
 from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.authority import CertTrustAnchor
@@ -42,6 +43,7 @@ def load_ocsp_response(fname) -> ocsp.OCSPResponse:
         return ocsp.OCSPResponse.load(inf.read())
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_aacontrols_norev():
     ac = load_attr_cert(
@@ -63,6 +65,7 @@ async def test_basic_ac_validation_aacontrols_norev():
     assert 'group' not in result.approved_attributes
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_bad_signature():
     ac = load_attr_cert(os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt'))
@@ -80,6 +83,7 @@ async def test_basic_ac_validation_bad_signature():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_validation_expired():
     ac = load_attr_cert(
@@ -100,6 +104,7 @@ async def test_ac_validation_expired():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_sig_algo_mismatch():
     ac = load_attr_cert(os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt'))
@@ -126,6 +131,7 @@ async def test_basic_ac_validation_sig_algo_mismatch():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_bad_aa_controls():
     ac = load_attr_cert(
@@ -149,6 +155,7 @@ async def test_basic_ac_validation_bad_aa_controls():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_aa_controls_path_too_long():
     ac = load_attr_cert(
@@ -188,6 +195,7 @@ def _load_targeted_ac():
     return root, interm, aa, ac
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_no_targeting():
     root, interm, aa, ac = _load_targeted_ac()
@@ -202,6 +210,7 @@ async def test_basic_ac_validation_no_targeting():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_bad_targeting_name():
     root, interm, aa, ac = _load_targeted_ac()
@@ -231,6 +240,7 @@ async def test_basic_ac_validation_bad_targeting_name():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_bad_targeting_group():
     root, interm, aa, ac = _load_targeted_ac()
@@ -259,6 +269,7 @@ async def test_basic_ac_validation_bad_targeting_group():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_good_targeting_name():
     root, interm, aa, ac = _load_targeted_ac()
@@ -289,6 +300,7 @@ async def test_basic_ac_validation_good_targeting_name():
     assert 'group' in result.approved_attributes
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_basic_ac_validation_good_targeting_group():
     root, interm, aa, ac = _load_targeted_ac()
@@ -318,6 +330,7 @@ async def test_basic_ac_validation_good_targeting_group():
     assert 'group' in result.approved_attributes
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_match_holder_ac():
     ac = load_attr_cert(
@@ -338,6 +351,7 @@ async def test_match_holder_ac():
     await validate.async_validate_ac(ac, vc, holder_cert=alice)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_match_holder_ac_mismatch():
     ac = load_attr_cert(
@@ -360,6 +374,7 @@ async def test_match_holder_ac_mismatch():
         await validate.async_validate_ac(ac, vc, holder_cert=bob)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_revoked():
     ac = load_attr_cert(
@@ -388,6 +403,7 @@ async def test_ac_revoked():
         await verify_crl(ac, ac_path, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_unrevoked():
     ac = load_attr_cert(
@@ -413,6 +429,7 @@ async def test_ac_unrevoked():
     await verify_crl(ac, ac_path, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_revoked_full_path_validation():
     ac = load_attr_cert(
@@ -440,6 +457,7 @@ async def test_ac_revoked_full_path_validation():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_unrevoked_full_path_validation():
     ac = load_attr_cert(
@@ -463,6 +481,7 @@ async def test_ac_unrevoked_full_path_validation():
     await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_revoked():
     ac = load_attr_cert(
@@ -491,6 +510,7 @@ async def test_ac_revoked():
         await verify_ocsp_response(ac, ac_path, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_unrevoked():
     ac = load_attr_cert(
@@ -517,6 +537,7 @@ async def test_ac_unrevoked():
     await verify_ocsp_response(ac, ac_path, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_revoked_full_path_validation():
     ac = load_attr_cert(
@@ -544,6 +565,7 @@ async def test_ac_revoked_full_path_validation():
         await validate.async_validate_ac(ac, vc)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_ac_unrevoked_full_path_validation():
     ac = load_attr_cert(
