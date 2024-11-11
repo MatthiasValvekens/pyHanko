@@ -97,3 +97,4 @@ log_cli = true
 log_cli_level = "INFO"
 testpaths = "tests"
 asyncio_mode = "strict"
+norecursedirs = "tests/legacy_live_tests"

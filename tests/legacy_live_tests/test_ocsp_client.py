@@ -15,8 +15,8 @@ from pyhanko_certvalidator.registry import (
 )
 from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
 
-from .common import load_cert_object
-from .constants import TEST_REQUEST_TIMEOUT
+from ..common import load_cert_object
+from ..constants import TEST_REQUEST_TIMEOUT
 
 
 @pytest.mark.asyncio

@@ -6,8 +6,8 @@ from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers
 from pyhanko_certvalidator.revinfo.validate_crl import verify_crl
 
-from .common import load_cert_object
-from .constants import TEST_REQUEST_TIMEOUT
+from ..common import load_cert_object
+from ..constants import TEST_REQUEST_TIMEOUT
 
 
 async def _test_with_fetchers(fetchers):
