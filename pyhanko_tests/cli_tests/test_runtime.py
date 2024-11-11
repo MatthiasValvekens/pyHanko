@@ -1,12 +1,6 @@
-import os
-
 from pyhanko.cli import cli_root
 from pyhanko_tests.cli_tests.conftest import INPUT_PATH
-from pyhanko_tests.samples import (
-    MINIMAL_AES256,
-    MINIMAL_HYBRID,
-    MINIMAL_SLIGHTLY_BROKEN,
-)
+from pyhanko_tests.samples import MINIMAL_AES256, MINIMAL_SLIGHTLY_BROKEN
 
 
 def test_fail_read(cli_runner):
@@ -42,7 +36,7 @@ def test_fail_strict_mildly_broken(cli_runner):
     assert "in strict mode; rerun" in result.output
 
 
-def test_fail_strict_mildly_broken(cli_runner):
+def test_succeed_strict_mildly_broken_nonstrict(cli_runner):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_SLIGHTLY_BROKEN)
     result = cli_runner.invoke(
