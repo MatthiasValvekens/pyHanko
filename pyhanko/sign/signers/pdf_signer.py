@@ -838,6 +838,9 @@ class PdfTimeStamper:
                 credential = pdf_out.security_handler.extract_credential()
                 if credential:
                     credential_ser = credential.serialise()
+            strict = True
+            if isinstance(pdf_out, IncrementalPdfFileWriter):
+                strict = pdf_out.prev.strict
             validation.DocumentSecurityStore.add_dss(
                 output_stream=res_output,
                 sig_contents=sig_contents,
@@ -846,6 +849,7 @@ class PdfTimeStamper:
                 force_write=not dss_settings.skip_if_unneeded,
                 embed_roots=embed_roots,
                 file_credential=credential_ser,
+                strict=strict,
             )
 
         return misc.finalise_output(output, res_output)
@@ -2308,6 +2312,12 @@ class PdfSigningSession:
                 credential = security_handler.extract_credential()
                 if credential is not None:
                     credential_ser = credential.serialise()
+            # Preserve strict mode setting if we're doing
+            # an incremental signature
+            strict = True
+            if isinstance(self.pdf_out, IncrementalPdfFileWriter):
+                strict = self.pdf_out.prev.strict
+
             post_signing_instr = PostSignInstructions(
                 validation_info=validation_info,
                 # use the same algorithm
@@ -2322,6 +2332,7 @@ class PdfSigningSession:
                 tight_size_estimates=signature_meta.tight_size_estimates,
                 embed_roots=embed_roots,
                 file_credential=credential_ser,
+                strict=strict,
             )
         return PdfTBSDocument(
             cms_writer=self.cms_writer,
@@ -2411,6 +2422,14 @@ class PostSignInstructions:
     .. versionadded:: 0.13.0
 
     Serialised file credential, to update encrypted files.
+    """
+
+    strict: bool = True
+    """
+    .. versionadded:: 0.25.2
+
+    Controls whether to open the signed document in strict mode before applying
+    post-signing instructions.
     """
 
 
@@ -2851,10 +2870,11 @@ class PdfPostSignatureDocument:
                 output_stream=output,
                 **dss_op_kwargs,
                 file_credential=instr.file_credential,
+                strict=instr.strict,
             )
         if timestamper is not None:
             # append a document timestamp after the DSS update
-            w = IncrementalPdfFileWriter(output)
+            w = IncrementalPdfFileWriter(output, strict=instr.strict)
             if (
                 w.security_handler is not None
                 and instr.file_credential is not None
