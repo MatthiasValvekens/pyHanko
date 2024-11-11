@@ -1,5 +1,11 @@
 # changelog
 
+## 0.26.4
+
+- Bump `aiohttp` requirement to `>=3.8,<3.11`.
+- Declare support for Python 3.12 and 3.13
+
+
 ## 0.26.3
 
 - Bump `aiohttp` requirement to `>=3.8,<3.10`.
