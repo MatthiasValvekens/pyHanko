@@ -2,6 +2,24 @@
 Release history
 ***************
 
+.. _release-0.25.2:
+
+*Release date:* 2024-11-11
+
+
+Dependency changes
+------------------
+
+ * Bump minimal ``cryptography`` version to ``43.0.3``.
+ * Update ``uharfbuzz`` upper bound to ``0.42.0``.
+ * Add Python 3.13 to the package metadata & include it in CI.
+ * Some test dependencies bumped.
+
+Bugs fixed
+----------
+
+ * Properly propagate ``strict=False`` in post-signing instructions.
+
 
 .. _release-0.25.1:
 
