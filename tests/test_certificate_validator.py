@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 from asn1crypto.util import timezone
+from freezegun import freeze_time
 
 from pyhanko_certvalidator import (
     CertificateValidator,
@@ -94,6 +95,7 @@ async def test_basic_certificate_validator_tls_whitelist():
     await validator.async_validate_usage({'crl_sign'})
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_certvalidator_with_params():
     cert = load_nist_cert('ValidPolicyMappingTest12EE.crt')

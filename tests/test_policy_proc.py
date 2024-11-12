@@ -1,7 +1,6 @@
-import os
-
 import pytest
 from asn1crypto import x509
+from freezegun import freeze_time
 
 from pyhanko_certvalidator.authority import (
     CertTrustAnchor,
@@ -49,6 +48,7 @@ def test_extract_permitted_subtrees():
     assert tree.tree_base.value == expected_name
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_validate_with_derived():
     crt = load_nist_cert('nameConstraintsDN1CACert.crt')
@@ -64,6 +64,7 @@ async def test_validate_with_derived():
         await async_validate_path(context, path)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_validate_with_merged_permitted_subtrees():
     crt = load_nist_cert('nameConstraintsDN1CACert.crt')
@@ -93,6 +94,7 @@ async def test_validate_with_merged_permitted_subtrees():
         await async_validate_path(context, path, parameters=extra_params)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_validate_with_merged_excluded_subtrees():
     crt = load_nist_cert('nameConstraintsDN3CACert.crt')
@@ -122,6 +124,7 @@ async def test_validate_with_merged_excluded_subtrees():
         await async_validate_path(context, path, parameters=extra_params)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_validate_with_certless_root():
     crt = load_nist_cert('nameConstraintsDN1CACert.crt')
@@ -154,6 +157,7 @@ async def test_validate_with_certless_root():
     await async_validate_path(context, path, parameters=extra_params)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_validate_with_certless_root_failure():
     crt = load_nist_cert('nameConstraintsDN1CACert.crt')
@@ -186,6 +190,7 @@ async def test_validate_with_certless_root_failure():
         await async_validate_path(context, path, parameters=extra_params)
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.asyncio
 async def test_validate_empty_path_certless_root():
     crt = load_nist_cert('nameConstraintsDN1CACert.crt')

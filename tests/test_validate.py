@@ -9,6 +9,7 @@ from typing import Iterable, List, Optional, Type
 import pytest
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
+from freezegun import freeze_time
 
 from pyhanko_certvalidator import PKIXValidationParams
 from pyhanko_certvalidator.authority import Authority, CertTrustAnchor
@@ -617,6 +618,7 @@ def read_pkits_test_params():
     return [PKITSTestCase.from_json(obj) for obj in cases]
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.parametrize(
     'test_case', read_pkits_test_params(), ids=lambda case: str(case.test_info)
 )
@@ -711,6 +713,7 @@ def read_pkits_user_notice_test_params():
     return [PKITSUserNoticeTestCase.from_json(obj) for obj in cases]
 
 
+@freeze_time('2022-05-01')
 @pytest.mark.parametrize(
     'test_case',
     read_pkits_user_notice_test_params(),
@@ -741,6 +744,7 @@ def test_nist_pkits_user_notice(test_case: PKITSUserNoticeTestCase):
     assert qual_obj['qualifier']['explicit_text'].native == test_case.notice
 
 
+@freeze_time('2022-05-01')
 def test_408020_cps_pointer_qualifier_test20():
     cert = load_nist_cert('CPSPointerQualifierTest20EE.crt')
     ca_certs = [load_nist_cert('TrustAnchorRootCertificate.crt')]
