@@ -95,7 +95,7 @@ live-test = [
     "pyHanko[testing-basic,xmp,async-http,extra-pubkey-algs]",
     "pytest-aiohttp~=1.0.4",
     "certomancer-csc-dummy==0.3.0",
-    "certomancer>=0.12.3,<0.13",
+    "certomancer[web-api]>=0.12.3,<0.13",
     "pytest-cov>=4.0,<6.1",
 ]
 mypy = [
