@@ -2,6 +2,24 @@
 Release history
 ***************
 
+
+.. _release-0.25.3:
+
+*Release date:* 2024-11-17
+
+Dependency changes
+------------------
+
+ * Workflow dependency bumps
+ * Set ``aiohttp`` upper bound to ``3.12``
+ * Bump ``pyhanko-certvalidator`` to ``0.26.5``
+ * Bump ``certomancer`` to ``0.12.3``
+
+Note: these changes make pyHanko compatible with the API (unreleased) change in
+`asn1crypto #230 <https://github.com/wbond/asn1crypto/issues/230>`_,
+which is nevertheless already being shipped in some distros.
+
+
 .. _release-0.25.2:
 
 *Release date:* 2024-11-11
@@ -151,7 +169,7 @@ Signing
 
  * Relax processing of PKCS#11 options, setting better defaults so
    users have to write less config to select their key/certificate.
-   (see PR #296 <https://github.com/MatthiasValvekens/pyHanko/issues/296>)
+   (see `PR #296 <https://github.com/MatthiasValvekens/pyHanko/issues/296>`_)
 
 
 CLI
@@ -248,7 +266,7 @@ Dependency changes
 Miscellaneous
 -------------
 
- * Tolerate missing ``D:`` in date strings (see PR #296 <https://github.com/MatthiasValvekens/pyHanko/issues/296>).
+ * Tolerate missing ``D:`` in date strings (see `PR #296 <https://github.com/MatthiasValvekens/pyHanko/issues/296>`_).
  * Various minor documentation improvements.
  * Release workflow dependency bumps and minor improvements.
 
