@@ -1,5 +1,13 @@
 # changelog
 
+
+## 0.26.5
+
+- Future-proofing against an upcoming `asn1crypto`
+  that is already being shipped in some distro
+  packages.
+- Address some timing issues in tests.
+
 ## 0.26.4
 
 - Bump `aiohttp` requirement to `>=3.8,<3.11`.
