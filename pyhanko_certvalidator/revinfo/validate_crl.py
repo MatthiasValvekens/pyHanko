@@ -1329,16 +1329,12 @@ def _verify_crl_signature(certificate_list, public_key):
         invalid or uses an unsupported algorithm
     """
 
-    signature_algo = certificate_list['signature_algorithm'].signature_algo
-    hash_algo = certificate_list['signature_algorithm'].hash_algo
-
     try:
         validate_sig(
             signature=certificate_list['signature'].native,
             signed_data=certificate_list['tbs_cert_list'].dump(),
             public_key_info=public_key,
-            sig_algo=signature_algo,
-            hash_algo=hash_algo,
+            signed_digest_algorithm=certificate_list['signature_algorithm'],
             parameters=certificate_list['signature_algorithm']['parameters'],
         )
     except PSSParameterMismatch as e:

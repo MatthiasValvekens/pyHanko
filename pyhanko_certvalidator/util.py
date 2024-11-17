@@ -197,11 +197,12 @@ def validate_sig(
     signature: bytes,
     signed_data: bytes,
     public_key_info: PublicKeyInfo,
-    sig_algo: str,
-    hash_algo: str,
+    signed_digest_algorithm: algos.SignedDigestAlgorithm,
     parameters=None,
 ):
     from .errors import DSAParametersUnavailable, PSSParameterMismatch
+
+    sig_algo = signed_digest_algorithm.signature_algo
 
     if (
         sig_algo == 'dsa'
@@ -227,10 +228,12 @@ def validate_sig(
     pub_key = serialization.load_der_public_key(public_key_info.dump())
 
     if sig_algo == 'rsassa_pkcs1v15':
+        hash_algo = signed_digest_algorithm.hash_algo
         assert isinstance(pub_key, rsa.RSAPublicKey)
         h = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, padding.PKCS1v15(), h)
     elif sig_algo == 'rsassa_pss':
+        hash_algo = signed_digest_algorithm.hash_algo
         assert isinstance(pub_key, rsa.RSAPublicKey)
         assert isinstance(parameters, algos.RSASSAPSSParams)
         mga: algos.MaskGenAlgorithm = parameters['mask_gen_algorithm']
@@ -248,10 +251,12 @@ def validate_sig(
         hash_spec = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, pss_padding, hash_spec)
     elif sig_algo == 'dsa':
+        hash_algo = signed_digest_algorithm.hash_algo
         assert isinstance(pub_key, dsa.DSAPublicKey)
         hash_spec = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, hash_spec)
     elif sig_algo == 'ecdsa':
+        hash_algo = signed_digest_algorithm.hash_algo
         assert isinstance(pub_key, ec.EllipticCurvePublicKey)
         hash_spec = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, ec.ECDSA(hash_spec))

@@ -485,9 +485,6 @@ def _check_ac_signature(
             banned_since=digest_allowed.not_allowed_after,
         )
 
-    signature_algo = sd_algo.signature_algo
-    hash_algo = attr_cert['signature_algorithm'].hash_algo
-
     try:
         validate_sig(
             signature=attr_cert['signature'].native,
@@ -497,8 +494,7 @@ def _check_ac_signature(
             #  validation algo)
             # low-priority since this only affects DSA in practice
             public_key_info=aa_cert.public_key,
-            sig_algo=signature_algo,
-            hash_algo=hash_algo,
+            signed_digest_algorithm=sd_algo,
             parameters=attr_cert['signature_algorithm']['parameters'],
         )
     except PSSParameterMismatch:
@@ -983,8 +979,7 @@ class _PathValidationState:
                 signature=cert['signature_value'].native,
                 signed_data=cert['tbs_certificate'].dump(),
                 public_key_info=self.working_public_key,
-                sig_algo=sd_algo.signature_algo,
-                hash_algo=sd_algo.hash_algo,
+                signed_digest_algorithm=sd_algo,
                 parameters=cert['signature_algorithm']['parameters'],
             )
         except PSSParameterMismatch:

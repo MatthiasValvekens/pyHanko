@@ -376,19 +376,14 @@ def _verify_ocsp_signature(
     if response is None:
         return False
 
-    # Determine what algorithm was used to sign the response
-    signature_algo = response['signature_algorithm'].signature_algo
-    hash_algo = response['signature_algorithm'].hash_algo
-
     # Verify that the response was properly signed by the validated certificate
     tbs_response = response['tbs_response_data']
     try:
         validate_sig(
             signature=response['signature'].native,
             signed_data=tbs_response.dump(),
+            signed_digest_algorithm=response['signature_algorithm'],
             public_key_info=responder_key,
-            sig_algo=signature_algo,
-            hash_algo=hash_algo,
             parameters=response['signature_algorithm']['parameters'],
         )
         return True
