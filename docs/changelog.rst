@@ -15,7 +15,7 @@ Dependency changes
  * Bump ``pyhanko-certvalidator`` to ``0.26.5``
  * Bump ``certomancer`` to ``0.12.3``
 
-Note: these changes make pyHanko compatible with the API (unreleased) change in
+Note: these changes make pyHanko compatible with the (unreleased) API change in
 `asn1crypto #230 <https://github.com/wbond/asn1crypto/issues/230>`_,
 which is nevertheless already being shipped in some distros.
 

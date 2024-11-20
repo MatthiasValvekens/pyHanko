@@ -58,13 +58,15 @@ about ``aiohttp`` usage and resource management.
             other_certs=(),
         ):
             self.session = session
-            self.signing_cert = signing_cert
             self.key_id = key_id
             self.signature_mechanism = signature_mechanism
             self.signature_mechanism_aws_id = signature_mechanism_aws_id
-            self.cert_registry = cr = SimpleCertificateStore()
+            cr = SimpleCertificateStore()
             cr.register_multiple(other_certs)
-            super().__init__()
+            super().__init__(
+                signing_cert=signing_cert,
+                cert_registry=cr,
+            )
 
         async def async_sign_raw(
             self, data: bytes, digest_algorithm: str, dry_run=False
@@ -101,16 +103,9 @@ about ``aiohttp`` usage and resource management.
 
         # AWS credentials
         kms_key_id = "KEY_ID_GOES_HERE"
-        aws_access_key_id = "ACCESS_KEY_GOES_HERE"
-        aws_secret_access_key = "SECRET_GOES_HERE"
 
-        # Set up aioboto3 session with provided credentials & region
-        session = aioboto3.Session(
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
-            # substitute your region here
-            region_name='eu-central-1',
-        )
+        # Set up aioboto3 session with ambient credentials & region
+        session = aioboto3.Session()
 
         # Set up our signer
         signer = AsyncKMSSigner(
