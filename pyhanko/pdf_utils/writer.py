@@ -47,11 +47,11 @@ if typing.TYPE_CHECKING:
     from .font.api import FontSubsetCollection
 
 __all__ = [
-    'BasePdfFileWriter',
-    'PageObject',
-    'PdfFileWriter',
-    'init_xobject_dictionary',
-    'copy_into_new_writer',
+    "BasePdfFileWriter",
+    "PageObject",
+    "PdfFileWriter",
+    "init_xobject_dictionary",
+    "copy_into_new_writer",
 ]
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ def init_xobject_dictionary(
     box_width,
     box_height,
     resources: Optional[generic.DictionaryObject] = None,
-    matrix: Optional[generic.DictionaryObject] = None
+    matrix: Optional[generic.DictionaryObject] = None,
 ) -> generic.StreamObject:
     """
     Helper function to initialise form XObject dictionaries.
@@ -86,22 +86,19 @@ def init_xobject_dictionary(
     """
     resources = resources or generic.DictionaryObject()
     dict_data = {
-            pdf_name('/BBox'): generic.ArrayObject(
-                list(
-                    map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
-                )
-            ),
-            pdf_name('/Resources'): resources,
-            pdf_name('/Type'): pdf_name('/XObject'),
-            pdf_name('/Subtype'): pdf_name('/Form'),
-        }
+        pdf_name("/BBox"): generic.ArrayObject(
+            list(map(generic.FloatObject, (0.0, box_height, box_width, 0.0)))
+        ),
+        pdf_name("/Resources"): resources,
+        pdf_name("/Type"): pdf_name("/XObject"),
+        pdf_name("/Subtype"): pdf_name("/Form"),
+    }
     if matrix is not None:
-        dict_data[pdf_name('/Matrix')] = generic.ArrayObject(
-                list(
-                    map(generic.FloatObject, matrix)
-                )
-            )
-    return generic.StreamObject(dict_data,
+        dict_data[pdf_name("/Matrix")] = generic.ArrayObject(
+            list(map(generic.FloatObject, matrix))
+        )
+    return generic.StreamObject(
+        dict_data,
         stream_data=command_stream,
     )
 
@@ -152,13 +149,11 @@ class BasePdfFileWriter(PdfHandler):
             if not isinstance(info, generic.IndirectObject):
                 info_ref = self.add_object(info)
             else:
-                info_ref = generic.IndirectObject(
-                    info.idnum, info.generation, self
-                )
+                info_ref = generic.IndirectObject(info.idnum, info.generation, self)
         self._info = info_ref
         self._meta: DocumentMetadata = DocumentMetadata()
 
-        self._font_resources: Dict[str, 'FontSubsetCollection'] = {}
+        self._font_resources: Dict[str, "FontSubsetCollection"] = {}
         self.digest_aware_write = False
         self._mac_handler_cls = None
 
@@ -235,9 +230,7 @@ class BasePdfFileWriter(PdfHandler):
         id_arr = self._document_id
         return id_arr[0].original_bytes, id_arr[1].original_bytes
 
-    def mark_update(
-        self, obj_ref: Union[generic.Reference, generic.IndirectObject]
-    ):
+    def mark_update(self, obj_ref: Union[generic.Reference, generic.IndirectObject]):
         """
         Mark an object reference to be updated.
         This is only relevant for incremental updates, but is included
@@ -279,9 +272,9 @@ class BasePdfFileWriter(PdfHandler):
 
     def register_extension(self, ext: DeveloperExtension):
         try:
-            extensions = self.root['/Extensions']
+            extensions = self.root["/Extensions"]
         except KeyError:
-            self.root['/Extensions'] = extensions = generic.DictionaryObject()
+            self.root["/Extensions"] = extensions = generic.DictionaryObject()
 
         # check if the extension is already registered,
         try:
@@ -315,7 +308,7 @@ class BasePdfFileWriter(PdfHandler):
                     f"{cls_name}, expected (direct) PDF dictionary"
                 )
             try:
-                lvl = int(ext_dict.raw_get('/ExtensionLevel'))
+                lvl = int(ext_dict.raw_get("/ExtensionLevel"))
             except (TypeError, ValueError, KeyError):
                 raise PdfReadError("Could not read developer extension level")
             # TODO is this still appropriate with the new ExtensionRevision
@@ -380,9 +373,7 @@ class BasePdfFileWriter(PdfHandler):
 
     def get_object(self, ido, as_metadata_stream: bool = False):
         if ido.pdf not in self._resolves_objs_from:
-            raise PdfError(
-                f'Reference {ido} has no relation to this PDF writer.'
-            )
+            raise PdfError(f"Reference {ido} has no relation to this PDF writer.")
         idnum = ido.idnum
         generation = ido.generation
         try:
@@ -456,7 +447,7 @@ class BasePdfFileWriter(PdfHandler):
             self.objs_in_streams[idnum] = obj
         else:
             raise PdfWriteError(
-                f'Stream {repr(obj_stream)} is unknown to this PDF writer.'
+                f"Stream {repr(obj_stream)} is unknown to this PDF writer."
             )
 
         if preallocated:
@@ -474,9 +465,7 @@ class BasePdfFileWriter(PdfHandler):
             An :class:`.ObjectStream` object.
         """
         if not self.stream_xrefs:
-            raise PdfWriteError(
-                'Object streams require Xref streams to be enabled.'
-            )
+            raise PdfWriteError("Object streams require Xref streams to be enabled.")
         stream = ObjectStream(compress=compress)
         self.object_streams.append(stream)
         return stream
@@ -518,7 +507,7 @@ class BasePdfFileWriter(PdfHandler):
             generation, idnum = ix
             obj = self.objects[ix]
             object_position_dict[ix] = stream.tell()
-            stream.write(('%d %d obj\n' % (idnum, generation)).encode('ascii'))
+            stream.write(("%d %d obj\n" % (idnum, generation)).encode("ascii"))
             handler: Optional[SecurityHandler] = None
             if self.security_handler is not None:
                 assert self._encrypt is not None
@@ -526,7 +515,7 @@ class BasePdfFileWriter(PdfHandler):
                     handler = self.security_handler
             container_ref = generic.Reference(idnum, generation, self)
             obj.write_to_stream(stream, handler, container_ref)
-            stream.write(b'\nendobj\n')
+            stream.write(b"\nendobj\n")
 
     def _prep_dom_for_writing(self):
         # ensure that all font resources are flushed
@@ -549,12 +538,12 @@ class BasePdfFileWriter(PdfHandler):
                 self._meta.xmp_unmanaged
                 or bool(self._meta.xmp_extra)
                 or self.output_version >= (2, 0)
-                or '/Metadata' in self.root
+                or "/Metadata" in self.root
             )
         except ImportError:  # pragma: nocover
             need_xmp = False
 
-        self._meta.last_modified = 'now'
+        self._meta.last_modified = "now"
         if self._info is not None:
             mod = update_info_dict(
                 self._meta,
@@ -573,8 +562,8 @@ class BasePdfFileWriter(PdfHandler):
 
         if need_xmp:
             meta_stm = None
-            if '/Metadata' in self.root:
-                meta_obj = self.root['/Metadata']
+            if "/Metadata" in self.root:
+                meta_obj = self.root["/Metadata"]
                 if isinstance(meta_obj, xmp_xml.MetadataStream):
                     meta_stm = meta_obj
                     meta_stm.update_xmp_with_meta(self._meta)
@@ -585,27 +574,24 @@ class BasePdfFileWriter(PdfHandler):
                 )
                 sh = self.security_handler
                 meta_stm._handler = sh
-                if (
-                    sh is not None
-                    and not self.security_handler.encrypt_metadata
-                ):
+                if sh is not None and not self.security_handler.encrypt_metadata:
                     # note: this will add the /Identity crypt filter, hence
                     # metadata encryption will be omitted
                     meta_stm.add_crypt_filter()
-                self.root['/Metadata'] = self.add_object(meta_stm)
+                self.root["/Metadata"] = self.add_object(meta_stm)
                 self.update_root()
             self.update_root()
 
     def _populate_trailer(self, trailer):
         # prepare trailer dictionary entries
-        trailer[pdf_name('/Root')] = self._root
+        trailer[pdf_name("/Root")] = self._root
         if self._info is not None:
-            trailer[pdf_name('/Info')] = self._info
+            trailer[pdf_name("/Info")] = self._info
         if self._encrypt is not None:
-            trailer[pdf_name('/Encrypt')] = self._encrypt
+            trailer[pdf_name("/Encrypt")] = self._encrypt
         # before doing anything else, we attempt to load the crypto-relevant
         # data, so that we can bail early if something's not right
-        trailer[pdf_name('/ID')] = self._document_id
+        trailer[pdf_name("/ID")] = self._document_id
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:
@@ -637,7 +623,7 @@ class BasePdfFileWriter(PdfHandler):
         else:
             self._write(stream)
 
-    def _init_mac_handler(self, md_algorithm: str = 'sha256'):
+    def _init_mac_handler(self, md_algorithm: str = "sha256"):
         """
         MAC-adding method that can easily be manipulated in tests.
         """
@@ -673,26 +659,24 @@ class BasePdfFileWriter(PdfHandler):
             xrefs_id = self._lastobj_id + 1
             # add position of XRef stream to the XRef stream
             object_positions[(0, xrefs_id)] = xref_location
-            trailer[pdf_name('/Size')] = generic.NumberObject(xrefs_id + 1)
+            trailer[pdf_name("/Size")] = generic.NumberObject(xrefs_id + 1)
             # write XRef stream
-            stream.write(('%d %d obj\n' % (xrefs_id, 0)).encode('ascii'))
+            stream.write(("%d %d obj\n" % (xrefs_id, 0)).encode("ascii"))
             trailer.write_to_stream(stream, None)
-            stream.write(b'\nendobj\n')
+            stream.write(b"\nendobj\n")
         else:
             # classical xref table
             xref_location = write_xref_table(
                 stream, cast(Dict[Tuple[int, int], int], object_positions)
             )
-            trailer[pdf_name('/Size')] = generic.NumberObject(
-                self._lastobj_id + 1
-            )
+            trailer[pdf_name("/Size")] = generic.NumberObject(self._lastobj_id + 1)
             # write trailer
-            stream.write(b'trailer\n')
+            stream.write(b"trailer\n")
             trailer.write_to_stream(stream, None)
 
         # write xref table pointer and EOF
-        xref_pointer_string = '\nstartxref\n%s\n' % xref_location
-        stream.write(xref_pointer_string.encode('ascii') + b'%%EOF\n')
+        xref_pointer_string = "\nstartxref\n%s\n" % xref_location
+        stream.write(xref_pointer_string.encode("ascii") + b"%%EOF\n")
 
     def register_annotation(self, page_ref, annot_ref):
         """
@@ -707,7 +691,7 @@ class BasePdfFileWriter(PdfHandler):
         """
         page_obj = page_ref.get_object()
         try:
-            annot_arr_ref = page_obj.raw_get('/Annots')
+            annot_arr_ref = page_obj.raw_get("/Annots")
             if isinstance(annot_arr_ref, generic.IndirectObject):
                 annots = annot_arr_ref.get_object()
                 self.mark_update(annot_arr_ref)
@@ -719,7 +703,7 @@ class BasePdfFileWriter(PdfHandler):
         except KeyError:
             annots = generic.ArrayObject()
             self.mark_update(page_ref)
-            page_obj[pdf_name('/Annots')] = annots
+            page_obj[pdf_name("/Annots")] = annots
 
         annots.append(annot_ref)
 
@@ -734,14 +718,14 @@ class BasePdfFileWriter(PdfHandler):
         :return:
             A reference to the newly inserted page.
         """
-        if new_page['/Type'] != pdf_name('/Page'):
-            raise PdfWriteError('Not a page object')
-        if '/Parent' in new_page:
-            raise PdfWriteError('/Parent must not be set.')
+        if new_page["/Type"] != pdf_name("/Page"):
+            raise PdfWriteError("Not a page object")
+        if "/Parent" in new_page:
+            raise PdfWriteError("/Parent must not be set.")
 
-        page_tree_root_ref = self.root.raw_get('/Pages')
+        page_tree_root_ref = self.root.raw_get("/Pages")
         if after is None:
-            page_count = page_tree_root_ref.get_object()['/Count']
+            page_count = page_tree_root_ref.get_object()["/Count"]
             after = page_count - 1
 
         if after == -1:
@@ -753,20 +737,20 @@ class BasePdfFileWriter(PdfHandler):
 
         pages_obj = pages_obj_ref.get_object()
         try:
-            kids = pages_obj['/Kids']
+            kids = pages_obj["/Kids"]
         except KeyError:  # pragma: nocover
-            raise PdfError('/Pages must have /Kids')
+            raise PdfError("/Pages must have /Kids")
 
         # increase page count for all parents
         parent = pages_obj
         while parent is not None:
             # can't use += 1 because of the way PyPDF2's generic types work
-            count = parent['/Count']
-            parent[pdf_name('/Count')] = generic.NumberObject(count + 1)
-            parent = parent.get('/Parent')
+            count = parent["/Count"]
+            parent[pdf_name("/Count")] = generic.NumberObject(count + 1)
+            parent = parent.get("/Parent")
         new_page_ref = self.add_object(new_page)
         kids.insert(kid_ix + 1, new_page_ref)
-        new_page[pdf_name('/Parent')] = pages_obj_ref
+        new_page[pdf_name("/Parent")] = pages_obj_ref
         self.update_container(pages_obj)
         self.update_container(kids)
 
@@ -832,23 +816,21 @@ class BasePdfFileWriter(PdfHandler):
         pagetree_obj = page_obj
         while True:
             try:
-                mb = pagetree_obj['/MediaBox']
+                mb = pagetree_obj["/MediaBox"]
                 break
             except KeyError:
                 try:
-                    pagetree_obj = pagetree_obj['/Parent']
+                    pagetree_obj = pagetree_obj["/Parent"]
                 except KeyError:  # pragma: nocover
-                    raise PdfReadError(
-                        f'Page {page_ix} does not have a /MediaBox'
-                    )
+                    raise PdfReadError(f"Page {page_ix} does not have a /MediaBox")
 
         stream_dict = {
-            pdf_name('/BBox'): mb,
-            pdf_name('/Resources'): self.import_object(resources),
-            pdf_name('/Type'): pdf_name('/XObject'),
-            pdf_name('/Subtype'): pdf_name('/Form'),
+            pdf_name("/BBox"): mb,
+            pdf_name("/Resources"): self.import_object(resources),
+            pdf_name("/Type"): pdf_name("/XObject"),
+            pdf_name("/Subtype"): pdf_name("/Form"),
         }
-        command_stream = page_obj['/Contents']
+        command_stream = page_obj["/Contents"]
         # if the page /Contents is an array, retrieve the content stream
         # with the appropriate index
         if isinstance(command_stream, generic.ArrayObject):
@@ -860,7 +842,7 @@ class BasePdfFileWriter(PdfHandler):
                 # Decode and concatenate, then put in a flate filter, and return
                 result = generic.StreamObject(
                     stream_dict,
-                    stream_data=b''.join(
+                    stream_data=b"".join(
                         partial_stream.get_object().data
                         for partial_stream in command_stream
                     ),
@@ -872,26 +854,22 @@ class BasePdfFileWriter(PdfHandler):
         if inherit_filters:
             try:
                 # try to inherit filters from the original command stream
-                filters = command_stream['/Filter']
+                filters = command_stream["/Filter"]
             except KeyError:
                 pass
 
         if filters is not None:
-            stream_dict[pdf_name('/Filter')] = self.import_object(filters)
+            stream_dict[pdf_name("/Filter")] = self.import_object(filters)
             result = generic.StreamObject(
                 stream_dict, encoded_data=command_stream.encoded_data
             )
         else:
-            result = generic.StreamObject(
-                stream_dict, stream_data=command_stream.data
-            )
+            result = generic.StreamObject(stream_dict, stream_data=command_stream.data)
 
         return self.add_object(result)
 
     # TODO these can be simplified considerably using the new update_container
-    def add_stream_to_page(
-        self, page_ix, stream_ref, resources=None, prepend=False
-    ):
+    def add_stream_to_page(self, page_ix, stream_ref, resources=None, prepend=False):
         """Append an indirect stream object to a page in a PDF as a content
         stream.
 
@@ -918,7 +896,7 @@ class BasePdfFileWriter(PdfHandler):
 
         page_obj = page_obj_ref.get_object()
 
-        contents_ref = page_obj.raw_get('/Contents')
+        contents_ref = page_obj.raw_get("/Contents")
 
         if isinstance(contents_ref, generic.IndirectObject):
             contents = contents_ref.get_object()
@@ -939,11 +917,11 @@ class BasePdfFileWriter(PdfHandler):
                     else [contents_ref, stream_ref]
                 )
                 contents = generic.ArrayObject(new)
-                page_obj[pdf_name('/Contents')] = self.add_object(contents)
+                page_obj[pdf_name("/Contents")] = self.add_object(contents)
                 # mark the page to be updated as well
                 self.mark_update(page_obj_ref)
             else:
-                raise PdfError('Unexpected type for page /Contents')
+                raise PdfError("Unexpected type for page /Contents")
         elif isinstance(contents_ref, generic.ArrayObject):
             # make /Contents an indirect array, and append our stream
             contents = contents_ref
@@ -951,10 +929,10 @@ class BasePdfFileWriter(PdfHandler):
                 contents.insert(0, stream_ref)
             else:
                 contents.append(stream_ref)
-            page_obj[pdf_name('/Contents')] = self.add_object(contents)
+            page_obj[pdf_name("/Contents")] = self.add_object(contents)
             self.mark_update(page_obj_ref)
         else:
-            raise PdfError('Unexpected type for page /Contents')
+            raise PdfError("Unexpected type for page /Contents")
 
         if resources is None:
             return
@@ -969,9 +947,7 @@ class BasePdfFileWriter(PdfHandler):
             # don't bother trying to update the resource object, just
             # clone it and add it to the current page object.
             orig_resource_dict = generic.DictionaryObject(res_ref)
-            page_obj[pdf_name('/Resources')] = self.add_object(
-                orig_resource_dict
-            )
+            page_obj[pdf_name("/Resources")] = self.add_object(orig_resource_dict)
             self.merge_resources(orig_resource_dict, resources)
 
         return page_obj_ref
@@ -1006,10 +982,7 @@ class BasePdfFileWriter(PdfHandler):
                 orig_value = orig_value_ref
                 update_needed = True
 
-            if (
-                isinstance(orig_value, generic.ArrayObject)
-                and key == '/ProcSet'
-            ):
+            if isinstance(orig_value, generic.ArrayObject) and key == "/ProcSet":
                 orig_value.extend(
                     x
                     for x in value.get_object()
@@ -1019,8 +992,8 @@ class BasePdfFileWriter(PdfHandler):
                 for key_, value_ in value.items():
                     if key_ in orig_value:
                         raise PdfError(
-                            'Naming conflict in resource of type %s: '
-                            'key %s occurs in both.' % (key, key_)
+                            "Naming conflict in resource of type %s: "
+                            "key %s occurs in both." % (key, key_)
                         )
                     orig_value[key_] = value_
 
@@ -1040,25 +1013,25 @@ class PageObject(generic.DictionaryObject):
         if isinstance(contents, list):
             if not all(map(instance_test(generic.IndirectObject), contents)):
                 raise PdfWriteError(
-                    'Contents array must consist of indirect references'
+                    "Contents array must consist of indirect references"
                 )
             if not isinstance(contents, generic.ArrayObject):
                 contents = generic.ArrayObject(contents)
         elif not isinstance(contents, generic.IndirectObject):
             raise PdfWriteError(
-                'Contents must be either an indirect reference or an array'
+                "Contents must be either an indirect reference or an array"
             )
 
         if len(media_box) != 4:
-            raise ValueError('Media box must consist of 4 coordinates.')
+            raise ValueError("Media box must consist of 4 coordinates.")
         super().__init__(
             {
-                pdf_name('/Type'): pdf_name('/Page'),
-                pdf_name('/MediaBox'): generic.ArrayObject(
+                pdf_name("/Type"): pdf_name("/Page"),
+                pdf_name("/MediaBox"): generic.ArrayObject(
                     map(generic.FloatObject, media_box)
                 ),
-                pdf_name('/Resources'): resources,
-                pdf_name('/Contents'): contents,
+                pdf_name("/Resources"): resources,
+                pdf_name("/Contents"): contents,
             }
         )
 
@@ -1090,14 +1063,14 @@ class PdfFileWriter(BasePdfFileWriter):
                 }
             )
 
-            root[pdf_name('/Pages')] = self.add_object(pages)
+            root[pdf_name("/Pages")] = self.add_object(pages)
 
     def _write_header(self, stream):
         major, minor = self.output_version
-        stream.write(f'%PDF-{major}.{minor}\n'.encode('ascii'))
+        stream.write(f"%PDF-{major}.{minor}\n".encode("ascii"))
         # write some binary characters to make sure the file is flagged
         # as binary (see § 7.5.2 in ISO 32000-1)
-        stream.write(b'%\xc2\xa5\xc2\xb1\xc3\xab\n')
+        stream.write(b"%\xc2\xa5\xc2\xb1\xc3\xab\n")
 
     def encrypt(self, owner_pass, user_pass=None, **kwargs):
         """
@@ -1137,9 +1110,7 @@ class PdfFileWriter(BasePdfFileWriter):
             Other keyword arguments to be passed to
             :meth:`.StandardSecurityHandler.build_from_pw`.
         """
-        sh = StandardSecurityHandler.build_from_pw(
-            owner_pass, user_pass, **kwargs
-        )
+        sh = StandardSecurityHandler.build_from_pw(owner_pass, user_pass, **kwargs)
         self._assign_security_handler(sh)
 
     def encrypt_pubkey(self, recipients: List[x509.Certificate], **kwargs):
@@ -1204,9 +1175,7 @@ class _ObjectImporter:
         self.source = source
         self.target = target
         self.obj_stream = obj_stream
-        self.queued_references: List[
-            Tuple[generic.Reference, generic.Reference]
-        ] = []
+        self.queued_references: List[Tuple[generic.Reference, generic.Reference]] = []
         self.reference_map = reference_map
 
     def import_object(self, obj: generic.PdfObject) -> generic.PdfObject:
@@ -1237,18 +1206,14 @@ class _ObjectImporter:
         if isinstance(obj, generic.IndirectObject):
             return self.process_reference(obj.reference)
         elif isinstance(obj, generic.DictionaryObject):
-            raw_dict = {
-                k: self._ingest(v) for k, v in obj.items() if k != '/Metadata'
-            }
+            raw_dict = {k: self._ingest(v) for k, v in obj.items() if k != "/Metadata"}
             try:
                 # make sure to import metadata streams as such
-                meta_ref = obj.get_value_as_reference('/Metadata')
+                meta_ref = obj.get_value_as_reference("/Metadata")
                 # ensure a MetadataStream object ends up in the cache
-                meta_ref.get_pdf_handler().get_object(
-                    meta_ref, as_metadata_stream=True
-                )
+                meta_ref.get_pdf_handler().get_object(meta_ref, as_metadata_stream=True)
                 # ...then import the reference
-                raw_dict['/Metadata'] = self.process_reference(meta_ref)
+                raw_dict["/Metadata"] = self.process_reference(meta_ref)
             except (KeyError, IndirectObjectExpected):
                 pass
 
@@ -1309,13 +1274,11 @@ class _ObjectImporter:
             sig_dict = ref.get_object()
             assert isinstance(sig_dict, generic.DictionaryObject)
             raw_dict = {
-                k: self._ingest(v)
-                for k, v in sig_dict.items()
-                if k != '/Contents'
+                k: self._ingest(v) for k, v in sig_dict.items() if k != "/Contents"
             }
-            raw_dict['/Contents'] = generic.ByteStringObject(
+            raw_dict["/Contents"] = generic.ByteStringObject(
                 sig_dict.raw_get(
-                    '/Contents', decrypt=generic.EncryptedObjAccess.RAW
+                    "/Contents", decrypt=generic.EncryptedObjAccess.RAW
                 ).original_bytes
             )
             self.reference_map[ref] = self.target.add_object(
@@ -1385,7 +1348,7 @@ def copy_into_new_writer(
             # with the producer string handling, and to keep a nice separation
             # between user-supplied metadata values and values that were present
             # in the original doc.
-            info_dict = input_handler.trailer_view['/Info']
+            info_dict = input_handler.trailer_view["/Info"]
         except KeyError:
             info_dict = None
         if info_dict is not None:

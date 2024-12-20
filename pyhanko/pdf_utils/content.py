@@ -2,6 +2,7 @@ import binascii
 import uuid
 from enum import Enum
 from typing import Optional
+
 from pyhanko.pdf_utils import generic
 from .generic import (
     DictionaryObject,
@@ -15,12 +16,12 @@ from .reader import PdfFileReader
 from .writer import BasePdfFileWriter
 
 __all__ = [
-    'ResourceType',
-    'ResourceManagementError',
-    'PdfResources',
-    'PdfContent',
-    'RawContent',
-    'ImportedPdfPage',
+    "ResourceType",
+    "ResourceManagementError",
+    "PdfResources",
+    "PdfContent",
+    "RawContent",
+    "ImportedPdfPage",
 ]
 
 # TODO have the merge_resources helper in incremental_writer rely on some
@@ -34,43 +35,43 @@ class ResourceType(Enum):
     See ISO 32000-1, § 7.8.3 Table 34.
     """
 
-    EXT_G_STATE = pdf_name('/ExtGState')
+    EXT_G_STATE = pdf_name("/ExtGState")
     """
     External graphics state specifications.
     See ISO 32000-1, § 8.4.5.
     """
 
-    COLOR_SPACE = pdf_name('/ColorSpace')
+    COLOR_SPACE = pdf_name("/ColorSpace")
     """
     Colour space definitions.
     See ISO 32000-1, § 8.6.
     """
 
-    PATTERN = pdf_name('/Pattern')
+    PATTERN = pdf_name("/Pattern")
     """
     Pattern definitions.
     See ISO 32000-1, § 8.7.
     """
 
-    SHADING = pdf_name('/Shading')
+    SHADING = pdf_name("/Shading")
     """
     Shading definitions.
     See ISO 32000-1, § 8.7.4.3.
     """
 
-    XOBJECT = pdf_name('/XObject')
+    XOBJECT = pdf_name("/XObject")
     """
     External object definitions (images and form XObjects).
     See ISO 32000-1, § 8.8.
     """
 
-    FONT = pdf_name('/Font')
+    FONT = pdf_name("/Font")
     """
     Font specifications.
     See ISO 32000-1, § 9.
     """
 
-    PROPERTIES = pdf_name('/Properties')
+    PROPERTIES = pdf_name("/Properties")
     """
     Marked content properties.
     See ISO 32000-1, § 14.6.2.
@@ -164,7 +165,7 @@ class PdfContent:
         Whether :class:`.PdfContent` instances can be reused or not
         is left up to the subclasses.
     """
-    
+
     writer = None
     """
     The :meth:`__init__` method comes with an optional ``writer`` 
@@ -173,7 +174,7 @@ class PdfContent:
     
     It can also be set after the fact by calling :meth:`set_writer`.
     """
-    
+
     matrix = None
     """
     Transformation Matrix that would rotate the content
@@ -184,7 +185,7 @@ class PdfContent:
         resources: Optional[PdfResources] = None,
         box: Optional[BoxConstraints] = None,
         writer: Optional[BasePdfFileWriter] = None,
-        matrix: Optional[generic.DictionaryObject] = None
+        matrix: Optional[generic.DictionaryObject] = None,
     ):
         self._resources: PdfResources = resources or PdfResources()
         self.box: BoxConstraints = box or BoxConstraints()
@@ -199,9 +200,7 @@ class PdfContent:
 
     # TODO support a set-if-not-taken mechanism, that suggests alternative names
     #  if necessary.
-    def set_resource(
-        self, category: ResourceType, name: NameObject, value: PdfObject
-    ):
+    def set_resource(self, category: ResourceType, name: NameObject, value: PdfObject):
         """Set a value in the resource dictionary associated with this content
         fragment.
 
@@ -261,7 +260,7 @@ class PdfContent:
             box_width=self.box.width,
             box_height=self.box.height,
             resources=self._resources.as_pdf_object(),
-            matrix=self.matrix
+            matrix=self.matrix,
         )
 
     def set_writer(self, writer):
@@ -312,7 +311,7 @@ class RawContent(PdfContent):
         data: bytes,
         resources: Optional[PdfResources] = None,
         box: Optional[BoxConstraints] = None,
-        matrix: Optional[generic.DictionaryObject] = None
+        matrix: Optional[generic.DictionaryObject] = None,
     ):
         super().__init__(resources, box, matrix=matrix)
         self.data = data
@@ -333,14 +332,14 @@ class ImportedPdfPage(PdfContent):
         from .writer import BasePdfFileWriter
 
         w: BasePdfFileWriter = self._ensure_writer
-        with open(self.file_name, 'rb') as inf:
+        with open(self.file_name, "rb") as inf:
             r = PdfFileReader(inf)
             xobj = w.import_page_as_xobject(r, page_ix=self.page_ix)
-        resource_name = b'/Import' + binascii.hexlify(uuid.uuid4().bytes)
-        self.resources.xobject[resource_name.decode('ascii')] = xobj
+        resource_name = b"/Import" + binascii.hexlify(uuid.uuid4().bytes)
+        self.resources.xobject[resource_name.decode("ascii")] = xobj
 
         # make sure to take the bounding box (i.e. the page's MediaBox)
         # into account when doing layout computations
-        x1, y1, x2, y2 = xobj.get_object()['/BBox']
+        x1, y1, x2, y2 = xobj.get_object()["/BBox"]
         self.box = BoxConstraints(width=abs(x1 - x2), height=abs(y1 - y2))
-        return resource_name + b' Do'
+        return resource_name + b" Do"
