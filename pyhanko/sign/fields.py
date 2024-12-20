@@ -1829,8 +1829,8 @@ class SignatureFormField(generic.DictionaryObject):
         pagetree_obj = include_on_page.get_object()
         obj = pagetree_obj.get("/Rotate", 0)
         media_box = pagetree_obj["/MediaBox"]
-        page_width = float(media_box[2] - media_box[0])
-        page_height = float(media_box[3] - media_box[1])
+        page_width = generic.FloatObject(media_box[2] - media_box[0])
+        page_height = generic.FloatObject(media_box[3] - media_box[1])
         x1, y1, x2, y2 = rect
         rotate = obj if isinstance(obj, int) else obj.get_object()
         if rotate == 90:
