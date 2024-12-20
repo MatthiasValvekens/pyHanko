@@ -1736,6 +1736,17 @@ def append_signature_field(
 
     if sig_field_spec.box is not None:
         llx, lly, urx, ury = sig_field_spec.box
+        matrix = None
+        pagetree_obj = page_ref.get_object()
+        obj = pagetree_obj.get("/Rotate", 0)
+        rotation = obj if isinstance(obj, int) else obj.get_object()
+        print(f"pdf rotated: {rotation}")
+        if rotation == 90:
+            matrix = [0.0, 1.0, -1.0, 0.0, 0.0, 0.0]
+        elif rotation == 180:
+            matrix = [-1.0, 0.0, 0.0, -1.0, 0.0, 0.0]
+        elif rotation == 270:
+            matrix = [0.0, -1.0, 1.0, 0.0, 0.0, 0.0]
         w = abs(urx - llx)
         h = abs(ury - lly)
         if w and h:
@@ -1753,10 +1764,12 @@ def append_signature_field(
                 ap_stream = RawContent(
                     b' '.join(appearance_cmds),
                     box=BoxConstraints(width=w, height=h),
+                    matrix=matrix
                 ).as_form_xobject()
             else:
                 ap_stream = RawContent(
-                    b'', box=BoxConstraints(width=w, height=h)
+                    b'', box=BoxConstraints(width=w, height=h),
+                    matrix=matrix
                 ).as_form_xobject()
             ap_dict[pdf_name('/N')] = pdf_out.add_object(ap_stream)
 
@@ -1842,7 +1855,25 @@ class SignatureFormField(generic.DictionaryObject):
                     annot_flags |= 0b10000
 
         annot_dict['/F'] = generic.NumberObject(annot_flags)
-        annot_dict['/Rect'] = generic.ArrayObject(rect)
+        
+        pagetree_obj = include_on_page.get_object()
+        obj = pagetree_obj.get("/Rotate", 0)
+        media_box = pagetree_obj["/MediaBox"]
+        page_width = media_box[2] - media_box[0]
+        page_height = media_box[3] - media_box[1]
+        x1, y1, x2, y2 = rect
+        rotate = obj if isinstance(obj, int) else obj.get_object()
+        if rotate == 90:
+            rect = [page_width - y2, x1, page_width - y1, x2]
+        elif rotate == 180:
+            rect = [page_width - x2, page_height - y2, page_width - x1, page_height - y1]
+        elif rotate == 270:
+            rect = [y1, page_height - x2, y2, page_height - x1]
+        annot_dict['/Rect'] = generic.ArrayObject(
+                                list(
+                                        map(generic.FloatObject, rect)
+                                    )
+                              )
 
         self.page_ref = include_on_page
         if include_on_page is not None:

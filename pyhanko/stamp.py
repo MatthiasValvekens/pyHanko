@@ -176,6 +176,7 @@ class BaseStampStyle(ConfigurableMixin):
         writer: BasePdfFileWriter,
         box: layout.BoxConstraints,
         text_params: dict,
+        rotate: int
     ) -> 'BaseStamp':
         raise NotImplementedError
 
@@ -220,8 +221,9 @@ class StaticStampStyle(BaseStampStyle):
         writer: BasePdfFileWriter,
         box: layout.BoxConstraints,
         text_params: dict,
+        rotate: int
     ) -> 'StaticContentStamp':
-        return StaticContentStamp(writer=writer, style=self, box=box)
+        return StaticContentStamp(writer=writer, style=self, box=box, rotate=rotate)
 
 
 @dataclass(frozen=True)
@@ -268,9 +270,10 @@ class TextStampStyle(BaseStampStyle):
         writer: BasePdfFileWriter,
         box: layout.BoxConstraints,
         text_params: dict,
+        rotate: int
     ) -> 'TextStamp':
         return TextStamp(
-            writer=writer, style=self, box=box, text_params=text_params
+            writer=writer, style=self, box=box, text_params=text_params, rotate=rotate
         )
 
 
@@ -395,6 +398,7 @@ class QRStampStyle(TextStampStyle):
         writer: BasePdfFileWriter,
         box: layout.BoxConstraints,
         text_params: dict,
+        rotate = int
     ) -> 'QRStamp':
         # extract the URL parameter
         try:
@@ -404,7 +408,7 @@ class QRStampStyle(TextStampStyle):
                 "Using a QR stamp style requires a 'url' text parameter."
             )
         return QRStamp(
-            writer, style=self, url=url, text_params=text_params, box=box
+            writer, style=self, url=url, text_params=text_params, box=box, rotate=rotate
         )
 
 
@@ -413,12 +417,19 @@ class BaseStamp(content.PdfContent):
         self,
         writer: BasePdfFileWriter,
         style,
+        rotate = int,
         box: Optional[layout.BoxConstraints] = None,
     ):
         super().__init__(box=box, writer=writer)
         self.style = style
         self._resources_ready = False
         self._stamp_ref: Optional[IndirectObject] = None
+        if rotate == 90:
+            self.matrix = [0.0, 1.0, -1.0, 0.0, 0.0, 0.0]
+        elif rotate == 180:
+            self.matrix = [-1.0, 0.0, 0.0, -1.0, 0.0, 0.0]
+        elif rotate == 270:
+            self.matrix = [0.0, -1.0, 1.0, 0.0, 0.0, 0.0]
 
     def _render_background(self):
         bg = self.style.background
@@ -566,12 +577,13 @@ class StaticContentStamp(BaseStamp):
         writer: BasePdfFileWriter,
         style: StaticStampStyle,
         box: layout.BoxConstraints,
+        rotate: int
     ):
         if not (box and box.height_defined and box.width_defined):
             raise layout.LayoutError(
                 "StaticContentStamp requires a predetermined bounding box."
             )
-        super().__init__(box=box, style=style, writer=writer)
+        super().__init__(box=box, style=style, writer=writer, rotate=rotate)
 
     def _render_inner_content(self):
         return []
@@ -587,10 +599,11 @@ class TextStamp(BaseStamp):
         self,
         writer: BasePdfFileWriter,
         style,
+        rotate: int,
         text_params=None,
         box: Optional[layout.BoxConstraints] = None,
     ):
-        super().__init__(box=box, style=style, writer=writer)
+        super().__init__(box=box, style=style, writer=writer, rotate=rotate)
         self.text_params = text_params
 
         self.text_box: Optional[TextBox] = None
@@ -670,10 +683,11 @@ class QRStamp(TextStamp):
         writer: BasePdfFileWriter,
         url: str,
         style: QRStampStyle,
+        rotate: int,
         text_params=None,
         box: Optional[layout.BoxConstraints] = None,
     ):
-        super().__init__(writer, style, text_params=text_params, box=box)
+        super().__init__(writer, style, text_params=text_params, box=box, rotate=rotate)
         self.url = url
         self._qr_size = None
 
