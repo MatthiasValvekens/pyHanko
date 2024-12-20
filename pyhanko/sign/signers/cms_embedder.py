@@ -466,7 +466,11 @@ class PdfCMSEmbedder:
         appearance_setup = sig_obj_setup.appearance_setup
         if appearance_setup is not None:
             sig_annot = get_sig_field_annot(sig_field)
-            appearance_setup.apply(sig_annot, writer)
+            page_ref = writer.find_page_for_modification(new_field_spec.on_page)[0]
+            ref = page_ref.get_object()
+            obj = ref.get("/Rotate", 0)
+            rotate = obj if isinstance(obj, int) else obj.get_object()
+            appearance_setup.apply(sig_annot, writer, rotate)
 
         sig_obj = sig_obj_setup.sig_placeholder
         sig_obj_ref = writer.add_object(sig_obj)
