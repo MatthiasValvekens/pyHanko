@@ -200,7 +200,9 @@ class PdfContent:
 
     # TODO support a set-if-not-taken mechanism, that suggests alternative names
     #  if necessary.
-    def set_resource(self, category: ResourceType, name: NameObject, value: PdfObject):
+    def set_resource(
+        self, category: ResourceType, name: NameObject, value: PdfObject
+    ):
         """Set a value in the resource dictionary associated with this content
         fragment.
 

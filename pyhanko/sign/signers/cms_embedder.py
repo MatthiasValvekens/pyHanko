@@ -46,7 +46,9 @@ def docmdp_reference_dictionary(permission_level: MDPPerm):
                 {
                     pdf_name('/Type'): pdf_name('/TransformParams'),
                     pdf_name('/V'): pdf_name('/1.2'),
-                    pdf_name('/P'): generic.NumberObject(permission_level.value),
+                    pdf_name('/P'): generic.NumberObject(
+                        permission_level.value
+                    ),
                 }
             ),
         }
@@ -102,7 +104,8 @@ def _get_or_create_sigfield(
         if others:
             raise SigningError(
                 'There are several empty signature fields. Please specify '
-                'a field name. The options are %s, %s.' % (found_field_name, others)
+                'a field name. The options are %s, %s.'
+                % (found_field_name, others)
             )
     else:
         # grab or create a sig field
@@ -199,7 +202,9 @@ class SigMDPSetup:
             reference_array.append(docmdp_reference_dictionary(docmdp_perms))
 
         if lock is not None:
-            fieldmdp_ref = fieldmdp_reference_dictionary(lock, data_ref=writer.root_ref)
+            fieldmdp_ref = fieldmdp_reference_dictionary(
+                lock, data_ref=writer.root_ref
+            )
             reference_array.append(fieldmdp_ref)
 
             if docmdp_perms is not None:
@@ -265,7 +270,9 @@ class SigAppearanceSetup:
                 and '/N' in sig_annot['/AP']
                 and '/Matrix' in sig_annot['/AP']['/N']
             ):
-                normalappearence['/N']['/Matrix'] = sig_annot['/AP']['/N']['/Matrix']
+                normalappearence['/N']['/Matrix'] = sig_annot['/AP']['/N'][
+                    '/Matrix'
+                ]
             sig_annot['/AP'] = normalappearence
             try:
                 # if there was an entry like this, it's meaningless now
@@ -446,7 +453,9 @@ class PdfCMSEmbedder:
             A generator coroutine implementing the protocol described above.
         """
 
-        new_field_spec = self.new_field_spec if not existing_fields_only else None
+        new_field_spec = (
+            self.new_field_spec if not existing_fields_only else None
+        )
         # start by creating or fetching the appropriate signature field
         field_created, sig_field_ref = _get_or_create_sigfield(
             field_name,
@@ -466,7 +475,9 @@ class PdfCMSEmbedder:
         appearance_setup = sig_obj_setup.appearance_setup
         if appearance_setup is not None:
             sig_annot = get_sig_field_annot(sig_field)
-            page_ref = writer.find_page_for_modification(new_field_spec.on_page)[0]
+            page_ref = writer.find_page_for_modification(
+                new_field_spec.on_page
+            )[0]
             ref = page_ref.get_object()
             obj = ref.get('/Rotate', 0)
             rotate = obj if isinstance(obj, int) else obj.get_object()

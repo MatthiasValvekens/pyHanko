@@ -149,7 +149,9 @@ class BasePdfFileWriter(PdfHandler):
             if not isinstance(info, generic.IndirectObject):
                 info_ref = self.add_object(info)
             else:
-                info_ref = generic.IndirectObject(info.idnum, info.generation, self)
+                info_ref = generic.IndirectObject(
+                    info.idnum, info.generation, self
+                )
         self._info = info_ref
         self._meta: DocumentMetadata = DocumentMetadata()
 
@@ -230,7 +232,9 @@ class BasePdfFileWriter(PdfHandler):
         id_arr = self._document_id
         return id_arr[0].original_bytes, id_arr[1].original_bytes
 
-    def mark_update(self, obj_ref: Union[generic.Reference, generic.IndirectObject]):
+    def mark_update(
+        self, obj_ref: Union[generic.Reference, generic.IndirectObject]
+    ):
         """
         Mark an object reference to be updated.
         This is only relevant for incremental updates, but is included
@@ -373,7 +377,9 @@ class BasePdfFileWriter(PdfHandler):
 
     def get_object(self, ido, as_metadata_stream: bool = False):
         if ido.pdf not in self._resolves_objs_from:
-            raise PdfError(f'Reference {ido} has no relation to this PDF writer.')
+            raise PdfError(
+                f'Reference {ido} has no relation to this PDF writer.'
+            )
         idnum = ido.idnum
         generation = ido.generation
         try:
@@ -576,7 +582,10 @@ class BasePdfFileWriter(PdfHandler):
                 )
                 sh = self.security_handler
                 meta_stm._handler = sh
-                if sh is not None and not self.security_handler.encrypt_metadata:
+                if (
+                    sh is not None
+                    and not self.security_handler.encrypt_metadata
+                ):
                     # note: this will add the /Identity crypt filter, hence
                     # metadata encryption will be omitted
                     meta_stm.add_crypt_filter()
@@ -671,7 +680,9 @@ class BasePdfFileWriter(PdfHandler):
             xref_location = write_xref_table(
                 stream, cast(Dict[Tuple[int, int], int], object_positions)
             )
-            trailer[pdf_name('/Size')] = generic.NumberObject(self._lastobj_id + 1)
+            trailer[pdf_name('/Size')] = generic.NumberObject(
+                self._lastobj_id + 1
+            )
             # write trailer
             stream.write(b'trailer\n')
             trailer.write_to_stream(stream, None)
@@ -824,7 +835,9 @@ class BasePdfFileWriter(PdfHandler):
                 try:
                     pagetree_obj = pagetree_obj['/Parent']
                 except KeyError:  # pragma: nocover
-                    raise PdfReadError(f'Page {page_ix} does not have a /MediaBox')
+                    raise PdfReadError(
+                        f'Page {page_ix} does not have a /MediaBox'
+                    )
 
         stream_dict = {
             pdf_name('/BBox'): mb,
@@ -866,12 +879,16 @@ class BasePdfFileWriter(PdfHandler):
                 stream_dict, encoded_data=command_stream.encoded_data
             )
         else:
-            result = generic.StreamObject(stream_dict, stream_data=command_stream.data)
+            result = generic.StreamObject(
+                stream_dict, stream_data=command_stream.data
+            )
 
         return self.add_object(result)
 
     # TODO these can be simplified considerably using the new update_container
-    def add_stream_to_page(self, page_ix, stream_ref, resources=None, prepend=False):
+    def add_stream_to_page(
+        self, page_ix, stream_ref, resources=None, prepend=False
+    ):
         """Append an indirect stream object to a page in a PDF as a content
         stream.
 
@@ -949,7 +966,9 @@ class BasePdfFileWriter(PdfHandler):
             # don't bother trying to update the resource object, just
             # clone it and add it to the current page object.
             orig_resource_dict = generic.DictionaryObject(res_ref)
-            page_obj[pdf_name('/Resources')] = self.add_object(orig_resource_dict)
+            page_obj[pdf_name('/Resources')] = self.add_object(
+                orig_resource_dict
+            )
             self.merge_resources(orig_resource_dict, resources)
 
         return page_obj_ref
@@ -984,7 +1003,10 @@ class BasePdfFileWriter(PdfHandler):
                 orig_value = orig_value_ref
                 update_needed = True
 
-            if isinstance(orig_value, generic.ArrayObject) and key == '/ProcSet':
+            if (
+                isinstance(orig_value, generic.ArrayObject)
+                and key == '/ProcSet'
+            ):
                 orig_value.extend(
                     x
                     for x in value.get_object()
@@ -1112,7 +1134,9 @@ class PdfFileWriter(BasePdfFileWriter):
             Other keyword arguments to be passed to
             :meth:`.StandardSecurityHandler.build_from_pw`.
         """
-        sh = StandardSecurityHandler.build_from_pw(owner_pass, user_pass, **kwargs)
+        sh = StandardSecurityHandler.build_from_pw(
+            owner_pass, user_pass, **kwargs
+        )
         self._assign_security_handler(sh)
 
     def encrypt_pubkey(self, recipients: List[x509.Certificate], **kwargs):
@@ -1177,7 +1201,9 @@ class _ObjectImporter:
         self.source = source
         self.target = target
         self.obj_stream = obj_stream
-        self.queued_references: List[Tuple[generic.Reference, generic.Reference]] = []
+        self.queued_references: List[
+            Tuple[generic.Reference, generic.Reference]
+        ] = []
         self.reference_map = reference_map
 
     def import_object(self, obj: generic.PdfObject) -> generic.PdfObject:
@@ -1208,12 +1234,16 @@ class _ObjectImporter:
         if isinstance(obj, generic.IndirectObject):
             return self.process_reference(obj.reference)
         elif isinstance(obj, generic.DictionaryObject):
-            raw_dict = {k: self._ingest(v) for k, v in obj.items() if k != '/Metadata'}
+            raw_dict = {
+                k: self._ingest(v) for k, v in obj.items() if k != '/Metadata'
+            }
             try:
                 # make sure to import metadata streams as such
                 meta_ref = obj.get_value_as_reference('/Metadata')
                 # ensure a MetadataStream object ends up in the cache
-                meta_ref.get_pdf_handler().get_object(meta_ref, as_metadata_stream=True)
+                meta_ref.get_pdf_handler().get_object(
+                    meta_ref, as_metadata_stream=True
+                )
                 # ...then import the reference
                 raw_dict['/Metadata'] = self.process_reference(meta_ref)
             except (KeyError, IndirectObjectExpected):
@@ -1276,8 +1306,8 @@ class _ObjectImporter:
             sig_dict = ref.get_object()
             assert isinstance(sig_dict, generic.DictionaryObject)
             raw_dict = {
-                k: self._ingest(v) 
-                for k, v in sig_dict.items() 
+                k: self._ingest(v)
+                for k, v in sig_dict.items()
                 if k != '/Contents'
             }
             raw_dict['/Contents'] = generic.ByteStringObject(

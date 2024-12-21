@@ -195,7 +195,9 @@ class StaticStampStyle(BaseStampStyle):
     """
 
     @classmethod
-    def from_pdf_file(cls, file_name, page_ix=0, **kwargs) -> 'StaticStampStyle':
+    def from_pdf_file(
+        cls, file_name, page_ix=0, **kwargs
+    ) -> 'StaticStampStyle':
         """
         Create a :class:`StaticStampStyle` from a page from an external PDF
         document. This is a convenience wrapper around
@@ -221,7 +223,9 @@ class StaticStampStyle(BaseStampStyle):
         text_params: dict,
         rotate: int,
     ) -> 'StaticContentStamp':
-        return StaticContentStamp(writer=writer, style=self, box=box, rotate=rotate)
+        return StaticContentStamp(
+            writer=writer, style=self, box=box, rotate=rotate
+        )
 
 
 @dataclass(frozen=True)
@@ -271,7 +275,11 @@ class TextStampStyle(BaseStampStyle):
         rotate: int,
     ) -> 'TextStamp':
         return TextStamp(
-            writer=writer, style=self, box=box, text_params=text_params, rotate=rotate
+            writer=writer,
+            style=self,
+            box=box,
+            text_params=text_params,
+            rotate=rotate,
         )
 
 
@@ -351,8 +359,8 @@ class QRStampStyle(TextStampStyle):
     """
 
     stamp_text: str = (
-        "Digital version available at\n" 
-        "this url: %(url)s\n" 
+        "Digital version available at\n"
+        "this url: %(url)s\n"
         "Timestamp: %(ts)s"
     )
     """
@@ -406,7 +414,12 @@ class QRStampStyle(TextStampStyle):
                 "Using a QR stamp style requires a 'url' text parameter."
             )
         return QRStamp(
-            writer, style=self, url=url, text_params=text_params, box=box, rotate=rotate
+            writer,
+            style=self,
+            url=url,
+            text_params=text_params,
+            box=box,
+            rotate=rotate,
         )
 
 
@@ -685,7 +698,9 @@ class QRStamp(TextStamp):
         text_params=None,
         box: Optional[layout.BoxConstraints] = None,
     ):
-        super().__init__(writer, style, text_params=text_params, box=box, rotate=rotate)
+        super().__init__(
+            writer, style, text_params=text_params, box=box, rotate=rotate
+        )
         self.url = url
         self._qr_size = None
 
@@ -774,13 +789,21 @@ class QRStamp(TextStamp):
 
         # Time to put in the text box now
         if style.qr_position == QRPosition.LEFT_OF_TEXT:
-            tb_margins = layout.Margins(left=qr_padded, right=0, top=0, bottom=0)
+            tb_margins = layout.Margins(
+                left=qr_padded, right=0, top=0, bottom=0
+            )
         elif style.qr_position == QRPosition.RIGHT_OF_TEXT:
-            tb_margins = layout.Margins(right=qr_padded, left=0, top=0, bottom=0)
+            tb_margins = layout.Margins(
+                right=qr_padded, left=0, top=0, bottom=0
+            )
         elif style.qr_position == QRPosition.BELOW_TEXT:
-            tb_margins = layout.Margins(bottom=qr_padded, right=0, left=0, top=0)
+            tb_margins = layout.Margins(
+                bottom=qr_padded, right=0, left=0, top=0
+            )
         else:
-            tb_margins = layout.Margins(top=qr_padded, right=0, left=0, bottom=0)
+            tb_margins = layout.Margins(
+                top=qr_padded, right=0, left=0, bottom=0
+            )
 
         tb_layout_rule = layout.SimpleBoxLayoutRule(
             # flip around the alignment conventions of the default layout
@@ -957,7 +980,7 @@ def qr_stamp_file(
 
 STAMP_ART_CONTENT = content.RawContent(
     box=layout.BoxConstraints(width=100, height=100),
-    data=b"""
+    data=b'''
 q 1 0 0 -1 0 100 cm 
 0.603922 0.345098 0.54902 rg
 3.699 65.215 m 3.699 65.215 2.375 57.277 7.668 51.984 c 12.957 46.695 27.512
@@ -972,7 +995,7 @@ c 72.488 49.34 87.043 46.695 92.332 51.984 c 97.625 57.277 96.301 65.215
 3.801 79.512 92.398 7.391 re f
 3.801 90.289 92.398 7.391 re f
 Q
-""",
+''',
 )
 """
 Hardcoded stamp background that will render a stylised image of a stamp using 
