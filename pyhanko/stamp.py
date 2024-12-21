@@ -87,11 +87,11 @@ class AnnotAppearances:
             into the ``/AP`` entry of an annotation dictionary.
         """
 
-        res = generic.DictionaryObject({pdf_name("/N"): self.normal})
+        res = generic.DictionaryObject({pdf_name('/N'): self.normal})
         if self.rollover is not None:
-            res[pdf_name("/R")] = self.rollover
+            res[pdf_name('/R')] = self.rollover
         if self.down is not None:
-            res[pdf_name("/D")] = self.down
+            res[pdf_name('/D')] = self.down
         return res
 
 
@@ -100,9 +100,9 @@ def _get_background_content(bg_spec) -> content.PdfContent:
         raise ConfigurationError("Background specification must be a string")
     # 'special' value to use the stamp vector image baked into
     # the module
-    if bg_spec == "__stamp__":
+    if bg_spec == '__stamp__':
         return STAMP_ART_CONTENT
-    elif bg_spec.endswith(".pdf"):
+    elif bg_spec.endswith('.pdf'):
         # import first page of PDF as background
         return content.ImportedPdfPage(bg_spec)
     else:
@@ -165,11 +165,11 @@ class BaseStampStyle(ConfigurableMixin):
         super().process_entries(config_dict)
         bg_spec = None
         try:
-            bg_spec = config_dict["background"]
+            bg_spec = config_dict['background']
         except KeyError:
             pass
         if bg_spec is not None:
-            config_dict["background"] = _get_background_content(bg_spec)
+            config_dict['background'] = _get_background_content(bg_spec)
 
     def create_stamp(
         self,
@@ -177,7 +177,7 @@ class BaseStampStyle(ConfigurableMixin):
         box: layout.BoxConstraints,
         text_params: dict,
         rotate: int,
-    ) -> "BaseStamp":
+    ) -> 'BaseStamp':
         raise NotImplementedError
 
 
@@ -195,7 +195,7 @@ class StaticStampStyle(BaseStampStyle):
     """
 
     @classmethod
-    def from_pdf_file(cls, file_name, page_ix=0, **kwargs) -> "StaticStampStyle":
+    def from_pdf_file(cls, file_name, page_ix=0, **kwargs) -> 'StaticStampStyle':
         """
         Create a :class:`StaticStampStyle` from a page from an external PDF
         document. This is a convenience wrapper around
@@ -220,7 +220,7 @@ class StaticStampStyle(BaseStampStyle):
         box: layout.BoxConstraints,
         text_params: dict,
         rotate: int,
-    ) -> "StaticContentStamp":
+    ) -> 'StaticContentStamp':
         return StaticContentStamp(writer=writer, style=self, box=box, rotate=rotate)
 
 
@@ -248,7 +248,7 @@ class TextStampStyle(BaseStampStyle):
         text within.
     """
 
-    stamp_text: str = "%(ts)s"
+    stamp_text: str = '%(ts)s'
     """
     Text template for the stamp. The template can contain an interpolation
     parameter ``ts`` that will be replaced by the stamping time.
@@ -258,7 +258,7 @@ class TextStampStyle(BaseStampStyle):
     :class:`.TextStamp` class in the ``text_params`` argument.
     """
 
-    timestamp_format: str = "%Y-%m-%d %H:%M:%S %Z"
+    timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
     """
     Datetime format used to render the timestamp.
     """
@@ -269,7 +269,7 @@ class TextStampStyle(BaseStampStyle):
         box: layout.BoxConstraints,
         text_params: dict,
         rotate: int,
-    ) -> "TextStamp":
+    ) -> 'TextStamp':
         return TextStamp(
             writer=writer, style=self, box=box, text_params=text_params, rotate=rotate
         )
@@ -303,7 +303,7 @@ class QRPosition(enum.Enum):
         return self in (QRPosition.LEFT_OF_TEXT, QRPosition.RIGHT_OF_TEXT)
 
     @classmethod
-    def from_config(cls, config_str) -> "QRPosition":
+    def from_config(cls, config_str) -> 'QRPosition':
         """
         Convert from a configuration string.
 
@@ -315,10 +315,10 @@ class QRPosition(enum.Enum):
         """
         try:
             return {
-                "left": QRPosition.LEFT_OF_TEXT,
-                "right": QRPosition.RIGHT_OF_TEXT,
-                "top": QRPosition.ABOVE_TEXT,
-                "bottom": QRPosition.BELOW_TEXT,
+                'left': QRPosition.LEFT_OF_TEXT,
+                'right': QRPosition.RIGHT_OF_TEXT,
+                'top': QRPosition.ABOVE_TEXT,
+                'bottom': QRPosition.BELOW_TEXT,
             }[config_str.lower()]
         except KeyError:
             raise ConfigurationError(
@@ -351,7 +351,9 @@ class QRStampStyle(TextStampStyle):
     """
 
     stamp_text: str = (
-        "Digital version available at\n" "this url: %(url)s\n" "Timestamp: %(ts)s"
+        "Digital version available at\n" 
+        "this url: %(url)s\n" 
+        "Timestamp: %(ts)s"
     )
     """
     Text template for the stamp.
@@ -384,8 +386,8 @@ class QRStampStyle(TextStampStyle):
         super().process_entries(config_dict)
 
         try:
-            qr_pos = config_dict["qr_position"]
-            config_dict["qr_position"] = QRPosition.from_config(qr_pos)
+            qr_pos = config_dict['qr_position']
+            config_dict['qr_position'] = QRPosition.from_config(qr_pos)
         except KeyError:
             pass
 
@@ -395,10 +397,10 @@ class QRStampStyle(TextStampStyle):
         box: layout.BoxConstraints,
         text_params: dict,
         rotate=int,
-    ) -> "QRStamp":
+    ) -> 'QRStamp':
         # extract the URL parameter
         try:
-            url = text_params.pop("url")
+            url = text_params.pop('url')
         except KeyError:
             raise layout.LayoutError(
                 "Using a QR stamp style requires a 'url' text parameter."
@@ -450,14 +452,14 @@ class BaseStamp(content.PdfContent):
         opacity = generic.FloatObject(self.style.background_opacity)
         self.set_resource(
             category=content.ResourceType.EXT_G_STATE,
-            name=pdf_name("/BackgroundGS"),
+            name=pdf_name('/BackgroundGS'),
             value=generic.DictionaryObject(
-                {pdf_name("/CA"): opacity, pdf_name("/ca"): opacity}
+                {pdf_name('/CA'): opacity, pdf_name('/ca'): opacity}
             ),
         )
 
         # Position & render the background
-        command = b"q /BackgroundGS gs %s %s Q" % (
+        command = b'q /BackgroundGS gs %s %s Q' % (
             positioning.as_cm(),
             bg_content,
         )
@@ -470,7 +472,7 @@ class BaseStamp(content.PdfContent):
         raise NotImplementedError
 
     def render(self):
-        command_stream = [b"q"]
+        command_stream = [b'q']
 
         inner_content = self._render_inner_content()
 
@@ -489,10 +491,10 @@ class BaseStamp(content.PdfContent):
         border_width = self.style.border_width
         if border_width:
             command_stream.append(
-                b"%g w 0 0 %g %g re S" % (border_width, bbox.width, bbox.height)
+                b'%g w 0 0 %g %g re S' % (border_width, bbox.width, bbox.height)
             )
-        command_stream.append(b"Q")
-        return b" ".join(command_stream)
+        command_stream.append(b'Q')
+        return b' '.join(command_stream)
 
     def register(self) -> generic.IndirectObject:
         """
@@ -528,8 +530,8 @@ class BaseStamp(content.PdfContent):
             a ``(width, height)`` tuple describing the dimensions of the stamp.
         """
         stamp_ref = self.register()
-        resource_name = b"/Stamp" + hexlify(uuid.uuid4().bytes)
-        stamp_paint = b"q 1 0 0 1 %g %g cm %s Do Q" % (
+        resource_name = b'/Stamp' + hexlify(uuid.uuid4().bytes)
+        stamp_paint = b'q 1 0 0 1 %g %g cm %s Do Q' % (
             rd(x),
             rd(y),
             resource_name,
@@ -537,8 +539,8 @@ class BaseStamp(content.PdfContent):
         stamp_wrapper_stream = generic.StreamObject(stream_data=stamp_paint)
         resources = generic.DictionaryObject(
             {
-                pdf_name("/XObject"): generic.DictionaryObject(
-                    {pdf_name(resource_name.decode("ascii")): stamp_ref}
+                pdf_name('/XObject'): generic.DictionaryObject(
+                    {pdf_name(resource_name.decode('ascii')): stamp_ref}
                 )
             }
         )
@@ -616,7 +618,7 @@ class TextStamp(BaseStamp):
         """
         ts = datetime.now(tz=tzlocal.get_localzone())
         return {
-            "ts": ts.strftime(self.style.timestamp_format),
+            'ts': ts.strftime(self.style.timestamp_format),
         }
 
     def _text_layout(self):
@@ -651,7 +653,7 @@ class TextStamp(BaseStamp):
         return self.style.inner_content_layout or DEFAULT_BOX_LAYOUT
 
     def _render_inner_content(self):
-        command_stream = [b"q"]
+        command_stream = [b'q']
 
         # compute the inner bounding box
         inn_commands, (
@@ -668,7 +670,7 @@ class TextStamp(BaseStamp):
 
         command_stream.append(inn_position.as_cm())
         command_stream.extend(inn_commands)
-        command_stream.append(b"Q")
+        command_stream.append(b'Q')
 
         return command_stream
 
@@ -704,7 +706,7 @@ class QRStamp(TextStamp):
         qr_ref, natural_qr_size = self._qr_xobject()
         self.set_resource(
             category=content.ResourceType.XOBJECT,
-            name=pdf_name("/QR"),
+            name=pdf_name('/QR'),
             value=qr_ref,
         )
 
@@ -763,7 +765,7 @@ class QRStamp(TextStamp):
 
         # we still need to take the axis reversal into account
         # (which also implies an adjustment in the y displacement)
-        draw_qr_command = b"q %g 0 0 %g %g %g cm /QR Do Q" % (
+        draw_qr_command = b'q %g 0 0 %g %g %g cm /QR Do Q' % (
             qr_inn_pos.x_scale * qr_innunits_scale,
             qr_inn_pos.y_scale * qr_innunits_scale,
             qr_inn_pos.x_pos,
@@ -792,9 +794,9 @@ class QRStamp(TextStamp):
         # position the text box
         text_inn_pos = tb_layout_rule.fit(inner_box, text_width, text_height)
 
-        commands = [draw_qr_command, b"q", text_inn_pos.as_cm()]
+        commands = [draw_qr_command, b'q', text_inn_pos.as_cm()]
         commands.extend(text_commands)
-        commands.append(b"Q")
+        commands.append(b'Q')
         return commands, (inn_width, inn_height)
 
     def _qr_xobject(self):
@@ -825,7 +827,7 @@ class QRStamp(TextStamp):
 
     def get_default_text_params(self):
         tp = super().get_default_text_params()
-        tp["url"] = self.url
+        tp['url'] = self.url
         return tp
 
     def apply(self, dest_page, x, y):
@@ -833,15 +835,15 @@ class QRStamp(TextStamp):
         link_rect = (x, y, x + w, y + h)
         link_annot = generic.DictionaryObject(
             {
-                pdf_name("/Type"): pdf_name("/Annot"),
-                pdf_name("/Subtype"): pdf_name("/Link"),
-                pdf_name("/Rect"): generic.ArrayObject(
+                pdf_name('/Type'): pdf_name('/Annot'),
+                pdf_name('/Subtype'): pdf_name('/Link'),
+                pdf_name('/Rect'): generic.ArrayObject(
                     list(map(generic.FloatObject, link_rect))
                 ),
-                pdf_name("/A"): generic.DictionaryObject(
+                pdf_name('/A'): generic.DictionaryObject(
                     {
-                        pdf_name("/S"): pdf_name("/URI"),
-                        pdf_name("/URI"): pdf_string(self.url),
+                        pdf_name('/S'): pdf_name('/URI'),
+                        pdf_name('/URI'): pdf_string(self.url),
                     }
                 ),
             }
@@ -861,12 +863,12 @@ def _stamp_file(
     y: int,
     **stamp_kwargs,
 ):
-    with open(input_name, "rb") as fin:
+    with open(input_name, 'rb') as fin:
         pdf_out = IncrementalPdfFileWriter(fin, strict=False)
         stamp = stamp_class(writer=pdf_out, style=style, **stamp_kwargs)
         stamp.apply(dest_page, x, y)
 
-        with open(output_name, "wb") as out:
+        with open(output_name, 'wb') as out:
             pdf_out.write(out)
 
 

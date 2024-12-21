@@ -16,12 +16,12 @@ from .reader import PdfFileReader
 from .writer import BasePdfFileWriter
 
 __all__ = [
-    "ResourceType",
-    "ResourceManagementError",
-    "PdfResources",
-    "PdfContent",
-    "RawContent",
-    "ImportedPdfPage",
+    'ResourceType',
+    'ResourceManagementError',
+    'PdfResources',
+    'PdfContent',
+    'RawContent',
+    'ImportedPdfPage',
 ]
 
 # TODO have the merge_resources helper in incremental_writer rely on some
@@ -35,43 +35,43 @@ class ResourceType(Enum):
     See ISO 32000-1, § 7.8.3 Table 34.
     """
 
-    EXT_G_STATE = pdf_name("/ExtGState")
+    EXT_G_STATE = pdf_name('/ExtGState')
     """
     External graphics state specifications.
     See ISO 32000-1, § 8.4.5.
     """
 
-    COLOR_SPACE = pdf_name("/ColorSpace")
+    COLOR_SPACE = pdf_name('/ColorSpace')
     """
     Colour space definitions.
     See ISO 32000-1, § 8.6.
     """
 
-    PATTERN = pdf_name("/Pattern")
+    PATTERN = pdf_name('/Pattern')
     """
     Pattern definitions.
     See ISO 32000-1, § 8.7.
     """
 
-    SHADING = pdf_name("/Shading")
+    SHADING = pdf_name('/Shading')
     """
     Shading definitions.
     See ISO 32000-1, § 8.7.4.3.
     """
 
-    XOBJECT = pdf_name("/XObject")
+    XOBJECT = pdf_name('/XObject')
     """
     External object definitions (images and form XObjects).
     See ISO 32000-1, § 8.8.
     """
 
-    FONT = pdf_name("/Font")
+    FONT = pdf_name('/Font')
     """
     Font specifications.
     See ISO 32000-1, § 9.
     """
 
-    PROPERTIES = pdf_name("/Properties")
+    PROPERTIES = pdf_name('/Properties')
     """
     Marked content properties.
     See ISO 32000-1, § 14.6.2.
@@ -332,14 +332,14 @@ class ImportedPdfPage(PdfContent):
         from .writer import BasePdfFileWriter
 
         w: BasePdfFileWriter = self._ensure_writer
-        with open(self.file_name, "rb") as inf:
+        with open(self.file_name, 'rb') as inf:
             r = PdfFileReader(inf)
             xobj = w.import_page_as_xobject(r, page_ix=self.page_ix)
-        resource_name = b"/Import" + binascii.hexlify(uuid.uuid4().bytes)
-        self.resources.xobject[resource_name.decode("ascii")] = xobj
+        resource_name = b'/Import' + binascii.hexlify(uuid.uuid4().bytes)
+        self.resources.xobject[resource_name.decode('ascii')] = xobj
 
         # make sure to take the bounding box (i.e. the page's MediaBox)
         # into account when doing layout computations
-        x1, y1, x2, y2 = xobj.get_object()["/BBox"]
+        x1, y1, x2, y2 = xobj.get_object()['/BBox']
         self.box = BoxConstraints(width=abs(x1 - x2), height=abs(y1 - y2))
-        return resource_name + b" Do"
+        return resource_name + b' Do'
