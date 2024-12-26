@@ -1856,7 +1856,17 @@ class SignatureFormField(generic.DictionaryObject):
 
         pagetree_obj = include_on_page.get_object()
         obj = pagetree_obj.get('/Rotate', 0)
-        media_box = pagetree_obj['/MediaBox']
+        while True:
+            try:
+                media_box = pagetree_obj['/MediaBox']
+                break
+            except KeyError:
+                try:
+                    pagetree_obj = pagetree_obj['/Parent']
+                except KeyError:  # pragma: nocover
+                    raise PdfReadError(
+                        f'Page does not have a /MediaBox'
+                    )
         page_width = generic.FloatObject(media_box[2] - media_box[0])
         page_height = generic.FloatObject(media_box[3] - media_box[1])
         x1, y1, x2, y2 = rect
