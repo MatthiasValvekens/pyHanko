@@ -65,7 +65,7 @@ opentype = [
     "fonttools>=4.33.3",
     # uharfbuzz sometimes includes breaking changes, so
     # we set an explicit range
-    "uharfbuzz>=0.25.0,<0.45.0",
+    "uharfbuzz>=0.25.0,<0.46.0",
 ]
 image-support = [
     # Only tested systematically on 8.x,
