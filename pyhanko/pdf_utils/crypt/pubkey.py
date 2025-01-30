@@ -1107,30 +1107,13 @@ def read_seed_from_recipient_cms(
     except (ValueError, KeyError):
         cipher_name = algo['algorithm'].native
 
-    with_iv = {'aes': aes_cbc_decrypt}
-    try:
-        # noinspection PyUnresolvedReferences
-        from oscrypto import symmetric
-
-        # The spec mandates that we support these, but pyca/cryptography
-        # doesn't offer implementations.
-        # (DES and 3DES have fortunately gone out of style, but some libraries
-        #  still rely on RC2)
-        with_iv.update(
-            {
-                'des': symmetric.des_cbc_pkcs5_decrypt,
-                'tripledes': symmetric.tripledes_cbc_pkcs5_decrypt,
-                'rc2': symmetric.rc2_cbc_pkcs5_decrypt,
-            }
+    if cipher_name in ('des', 'tripledes', 'rc2'):
+        raise NotImplementedError(
+            "Support for DES, 3DES and RC2 has been dropped in pyHanko 0.26.0"
         )
-    except Exception as e:  # pragma: nocover
-        if cipher_name in ('des', 'tripledes', 'rc2'):
-            raise NotImplementedError(
-                "DES, 3DES and RC2 require oscrypto to be present"
-            ) from e
 
-    if cipher_name in with_iv:
-        decryption_fun = with_iv[cipher_name]
+    if cipher_name == 'aes':
+        decryption_fun = aes_cbc_decrypt
         iv = algo.encryption_iv
         content = decryption_fun(envelope_key, encrypted_envelope_content, iv)
     elif cipher_name == 'rc4':

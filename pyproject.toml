@@ -59,7 +59,6 @@ Changes = "https://pyhanko.readthedocs.io/en/latest/changelog.html"
 "Issue Tracker" = "https://github.com/MatthiasValvekens/pyHanko/issues"
 
 [project.optional-dependencies]
-extra-pubkey-algs = ["oscrypto>=1.2.1"]
 xmp = ["defusedxml~=0.7.1"]
 opentype = [
     "fonttools>=4.33.3",
@@ -87,20 +86,20 @@ testing-basic = [
     "backports.zoneinfo[tzdata];python_version<\"3.9\"",
 ]
 testing = [
-    "pyHanko[testing-basic,pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
+    "pyHanko[testing-basic,pkcs11,xmp,opentype,image-support,async-http]",
     "pyHanko[etsi]",
     "pytest-aiohttp~=1.0.4",
     "certomancer-csc-dummy==0.3.0",
 ]
 live-test = [
-    "pyHanko[testing-basic,xmp,async-http,extra-pubkey-algs]",
+    "pyHanko[testing-basic,xmp,async-http]",
     "pytest-aiohttp~=1.0.4",
     "certomancer-csc-dummy==0.3.0",
     "certomancer[web-api]>=0.12.3,<0.13",
     "pytest-cov>=4.0,<6.1",
 ]
 mypy = [
-    "pyHanko[pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs,etsi]",
+    "pyHanko[pkcs11,xmp,opentype,image-support,async-http,etsi]",
     "types-requests",
     "types-python-dateutil",
     "types-PyYAML",
@@ -135,7 +134,6 @@ files = "pyhanko"
 module = [
     "asn1crypto.*",
     "pkcs11.*",
-    "oscrypto.*",
     "uritools.*",
     "barcode.*",
     "PIL.*",
