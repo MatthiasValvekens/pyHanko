@@ -698,7 +698,7 @@ class NumberObject(int, PdfObject):
 
 
 def pdf_string(
-    string: Union[str, bytes, bytearray]
+    string: Union[str, bytes, bytearray],
 ) -> Union['ByteStringObject', 'TextStringObject']:
     """
     Encode a string as a :class:`.TextStringObject` if possible,

@@ -128,7 +128,11 @@ from .ts_11910202 import (
     XAdESSignaturePtr,
     XAdESSignaturePtrType,
 )
-from .xades import SPURI, AllDataObjectsTimeStamp, Anytype
+from .xades import (
+    SPURI,
+    AllDataObjectsTimeStamp,
+    Anytype,
+)
 from .xades import AnyType as XadesAnyType
 from .xades import (
     ArchiveTimeStamp,
