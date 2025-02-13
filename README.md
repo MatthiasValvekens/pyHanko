@@ -1,6 +1,5 @@
 ![pyHanko](docs/images/pyhanko-logo.svg)
 
-![status](https://github.com/MatthiasValvekens/pyHanko/workflows/pytest/badge.svg)
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pyHanko)
 ![pypi](https://img.shields.io/pypi/v/pyHanko.svg)
 
