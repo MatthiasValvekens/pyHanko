@@ -317,7 +317,7 @@ async def ocsp_job_get_earliest(jobs):
 
 
 def gather_aia_issuer_urls(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
 ):
     if isinstance(cert, x509.Certificate):
         aia_value = cert.authority_information_access_value

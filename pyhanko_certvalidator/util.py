@@ -48,7 +48,7 @@ def extract_ac_issuer_dir_name(
 
 
 def get_issuer_dn(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
 ) -> x509.Name:
     if isinstance(cert, x509.Certificate):
         return cert.issuer
@@ -57,7 +57,7 @@ def get_issuer_dn(
 
 
 def issuer_serial(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
 ) -> bytes:
     if isinstance(cert, x509.Certificate):
         return cert.issuer_serial
@@ -172,7 +172,7 @@ def get_ocsp_urls(cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
 
 
 def get_declared_revinfo(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
 ):
     if isinstance(cert, x509.Certificate):
         aia = cert.authority_information_access_value
