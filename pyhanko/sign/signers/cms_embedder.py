@@ -248,7 +248,7 @@ class SigAppearanceSetup:
     stamp style.
     """
 
-    def apply(self, sig_annot, writer):
+    def apply(self, sig_annot, writer, rotate):
         """
         Apply the settings to an annotation.
 
@@ -261,16 +261,26 @@ class SigAppearanceSetup:
             # the field is probably a visible one, so we change its appearance
             # stream to show some data about the signature
             stamp = self._appearance_stamp(
-                writer, BoxConstraints(width=w, height=h)
+                writer, BoxConstraints(width=w, height=h), rotate
             )
-            sig_annot['/AP'] = stamp.as_appearances().as_pdf_object()
+            normalappearence = stamp.as_appearances().as_pdf_object()
+            # Remove this when appearence stream in sig_annot['/AP'] is no longer replaced with the one from 'normalappearence'
+            if (
+                '/AP' in sig_annot
+                and '/N' in sig_annot['/AP']
+                and '/Matrix' in sig_annot['/AP']['/N']
+            ):
+                normalappearence['/N']['/Matrix'] = sig_annot['/AP']['/N'][
+                    '/Matrix'
+                ]
+            sig_annot['/AP'] = normalappearence
             try:
                 # if there was an entry like this, it's meaningless now
                 del sig_annot[pdf_name('/AS')]
             except KeyError:
                 pass
 
-    def _appearance_stamp(self, writer, box):
+    def _appearance_stamp(self, writer, box, rotate):
         style = self.style
 
         name = self.name
@@ -283,7 +293,7 @@ class SigAppearanceSetup:
         if isinstance(style, TextStampStyle):
             text_params['ts'] = timestamp.strftime(style.timestamp_format)
 
-        return style.create_stamp(writer, box, text_params)
+        return style.create_stamp(writer, box, text_params, rotate)
 
 
 @dataclass(frozen=True)
@@ -465,7 +475,13 @@ class PdfCMSEmbedder:
         appearance_setup = sig_obj_setup.appearance_setup
         if appearance_setup is not None:
             sig_annot = get_sig_field_annot(sig_field)
-            appearance_setup.apply(sig_annot, writer)
+            page_ref = writer.find_page_for_modification(
+                new_field_spec.on_page
+            )[0]
+            ref = page_ref.get_object()
+            obj = ref.get('/Rotate', 0)
+            rotate = obj if isinstance(obj, int) else obj.get_object()
+            appearance_setup.apply(sig_annot, writer, rotate)
 
         sig_obj = sig_obj_setup.sig_placeholder
         sig_obj_ref = writer.add_object(sig_obj)
