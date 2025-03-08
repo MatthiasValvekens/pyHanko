@@ -5,6 +5,9 @@ Release history
 
 .. _release-0.25.3:
 
+0.25.3
+======
+
 *Release date:* 2024-11-17
 
 Dependency changes
@@ -21,6 +24,10 @@ which is nevertheless already being shipped in some distros.
 
 
 .. _release-0.25.2:
+
+0.25.2
+======
+
 
 *Release date:* 2024-11-11
 
@@ -41,6 +48,10 @@ Bugs fixed
 
 .. _release-0.25.1:
 
+0.25.1
+======
+
+
 *Release date:* 2024-07-18
 
 
@@ -51,6 +62,10 @@ Bugs fixed
 
 
 .. _release-0.25.0:
+
+0.25.0
+======
+
 
 *Release date:* 2024-05-06
 
@@ -69,6 +84,10 @@ Encryption
 
 
 .. _release-0.24.0:
+
+0.24.0
+======
+
 
 *Release date:* 2024-04-27
 
@@ -99,6 +118,10 @@ Bugs fixed
 
 .. _release-0.23.2:
 
+0.23.2
+======
+
+
 *Release date:* 2024-03-25
 
 
@@ -120,6 +143,10 @@ Bugs fixed
 
 .. _release-0.23.1:
 
+0.23.1
+======
+
+
 *Release date:* 2024-03-14
 
 
@@ -130,6 +157,9 @@ Bugs fixed
 
 
 .. _release-0.23.0:
+
+0.23.0
+======
 
 *Release date:* 2024-03-10
 
@@ -149,6 +179,9 @@ Breaking changes
 
 
 .. _release-0.22.0:
+
+0.22.0
+======
 
 *Release date:* 2024-03-07
 
@@ -185,6 +218,9 @@ Bugs fixed
  * Gracefully handle lack of ``/Type`` entry in signature objects vailidation.
 
 .. _release-0.21.0:
+
+0.21.0
+======
 
 *Release date:* 2023-11-26
 
