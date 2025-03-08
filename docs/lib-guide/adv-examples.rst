@@ -138,7 +138,7 @@ about ``aiohttp`` usage and resource management.
 Using Google Cloud KMS via PKCS#11
 ----------------------------------
 
-.. versionadded:: 0.25.4
+.. versionadded:: 0.26.0
 
 This example demonstrates producing a signature with Google Cloud KMS
 using Google's `PKCS#11 library <https://cloud.google.com/kms/docs/reference/pkcs11-library>`_
@@ -240,7 +240,7 @@ The name of the key in the keyring is ``my-test-key`` in the example below.
 A custom |Signer| to use Google Cloud KMS asynchronously
 --------------------------------------------------------
 
-.. versionadded:: 0.25.4
+.. versionadded:: 0.26.0
 
 
 The example below demonstrates how to use Google's GCP client library

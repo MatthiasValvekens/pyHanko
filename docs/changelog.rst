@@ -3,6 +3,40 @@ Release history
 ***************
 
 
+.. _release-0.26.0:
+
+0.26.0
+======
+
+*Release date:* 2025-03-08
+
+
+Breaking changes
+----------------
+
+ * Some outdated algos for encrypting the security handler seed in
+   a public-key encrypted PDF were dropped to get rid of ``oscrypto``
+   as a direct dependency of ``pyhanko``. It is still pulled in
+   via ``pyhanko-certvalidator``, but it is no longer used for
+   any cryptographic operations (which is significant, because
+   of compatibility issues on systems that no longer ship OpenSSL 1.1.1)
+
+
+Dependency changes
+------------------
+
+ * Relax ``uharfbuzz`` upper bound to ``<0.47.0``.
+ * Make ``defusedxml`` a regular dependency, remove ``[xmp]`` dependency group.
+ * Remove ``[extra-pubkey-algs]`` dependency group (see breaking change list)
+
+
+
+New features and enhancements
+-----------------------------
+
+ * Expose ``signature_mechanism`` parameter in PKCS#11 API.
+
+
 .. _release-0.25.3:
 
 0.25.3
