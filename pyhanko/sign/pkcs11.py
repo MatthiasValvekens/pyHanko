@@ -508,6 +508,7 @@ class PKCS11Signer(Signer):
         key_id: Optional[bytes] = None,
         cert_id: Optional[bytes] = None,
         use_raw_mechanism=False,
+        signature_mechanism: Optional[algos.SignedDigestAlgorithm] = None,
     ):
         """
         Initialise a PKCS11 signer.
@@ -533,6 +534,7 @@ class PKCS11Signer(Signer):
             prefer_pss=prefer_pss,
             embed_roots=embed_roots,
             signing_cert=signing_cert,
+            signature_mechanism=signature_mechanism,
         )
         if ca_chain is not None:
             self._cert_registry.register_multiple(ca_chain)
@@ -728,6 +730,7 @@ class PKCS11SigningContext:
             key_id=config.key_id,
             cert_id=config.cert_id,
             signing_cert=config.signing_certificate,
+            signature_mechanism=config.signature_mechanism,
         )
 
     def __enter__(self):
