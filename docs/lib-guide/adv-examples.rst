@@ -358,7 +358,8 @@ to use this sample implementation.
 
 
 .. warning::
-    The warning about RSASSA-PSS parameter choice also applies when using the API,
-    except, as the above code sample shows, the API doesn't allow passing through
-    the parameter choices anywhere! As such, getting them wrong will result in the
-    signing process completing without errors, but with a garbage signature.
+    The warning about RSASSA-PSS parameter choice from :ref:`the preceding example <gcp-kms-p11>`
+    also applies when using the API directly. However, as the above code sample shows,
+    the API doesn't allow passing through the parameter choices anywhere!
+    As such, getting them wrong will result in the signing process completing without errors,
+    but with a garbage signature.
