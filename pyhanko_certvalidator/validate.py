@@ -1015,6 +1015,11 @@ SUPPORTED_EXTENSIONS = frozenset(
         'name_constraints',
         'subject_alt_name',
         'aa_controls',
+        # Include the OID and human-readable name for the qcStatements
+        # injection. ETSI EN 319 412-5 mandates that this extension _not_
+        # be marked critical, but some CAs do it anyway.
+        '1.3.6.1.5.5.7.1.3',
+        'qc_statements',
     ]
 )
 
