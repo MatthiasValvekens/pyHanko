@@ -1,11 +1,11 @@
 import os
 
-import pytest
-from asn1crypto import cms, x509
+from certomancer.crypto_utils import load_cert_from_pemder
 
-from pyhanko_certvalidator.fetchers.common_utils import unpack_cert_content
-
-from .common import load_cert_object
+from pyhanko_certvalidator.fetchers.common_utils import (
+    enumerate_delivery_point_urls,
+    unpack_cert_content,
+)
 
 TESTS_ROOT = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.join(TESTS_ROOT, 'fixtures')
@@ -24,3 +24,12 @@ def test_unpack_cert_content_pkcs7_with_binary_octet_stream_alias():
         url="http://repositorio.serpro.gov.br/cadeias/acserprorfbv5.p7b",
     )
     assert len(list(certs_returned)) == 3
+
+
+def test_crl_distribution_point_enumeration_skip_ldap():
+    cert = load_cert_from_pemder(
+        os.path.join(FIXTURES_DIR, 'PostaSrbijeCA1.pem')
+    )
+    (dist_point,) = cert.crl_distribution_points_value
+    (url,) = enumerate_delivery_point_urls(dist_point)
+    assert url.startswith('http://')

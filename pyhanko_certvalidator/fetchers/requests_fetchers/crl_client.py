@@ -7,7 +7,10 @@ from asn1crypto import cms, crl, pem, x509
 from ... import errors
 from ...util import get_relevant_crl_dps, issuer_serial
 from ..api import CRLFetcher
-from ..common_utils import crl_job_results_as_completed
+from ..common_utils import (
+    crl_job_results_as_completed,
+    enumerate_delivery_point_urls,
+)
 from .util import RequestsFetcherMixin
 
 logger = logging.getLogger(__name__)
@@ -59,11 +62,7 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
 
         def _fetch_jobs():
             for distribution_point in sources:
-                url = distribution_point.url
-                # Only fetch CRLs over http
-                #  (or https, but that doesn't really happen all that often)
-                # In particular, don't attempt to grab CRLs over LDAP
-                if url.startswith('http'):
+                for url in enumerate_delivery_point_urls(distribution_point):
                     yield self._fetch_single(url)
 
         async for result in crl_job_results_as_completed(_fetch_jobs()):

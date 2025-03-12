@@ -7,7 +7,10 @@ from asn1crypto import cms, crl, pem, x509
 from ... import errors
 from ...util import get_relevant_crl_dps, issuer_serial
 from ..api import CRLFetcher
-from ..common_utils import crl_job_results_as_completed
+from ..common_utils import (
+    crl_job_results_as_completed,
+    enumerate_delivery_point_urls,
+)
 from .util import AIOHttpMixin, LazySession
 
 logger = logging.getLogger(__name__)
@@ -56,11 +59,7 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
 
         def _fetch_jobs():
             for distribution_point in sources:
-                url = distribution_point.url
-                # Only fetch CRLs over http
-                #  (or https, but that doesn't really happen all that often)
-                # In particular, don't attempt to grab CRLs over LDAP
-                if url.startswith('http'):
+                for url in enumerate_delivery_point_urls(distribution_point):
                     yield self._single_fetch(url)
 
         # when the issue with .crl_distribution_points is fixed,

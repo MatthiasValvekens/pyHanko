@@ -6,9 +6,10 @@ and OCSP responses.
 import asyncio
 import logging
 import os
-from typing import Awaitable, Callable, Dict, Optional, TypeVar, Union
+from typing import Awaitable, Callable, Dict, Iterable, Optional, TypeVar, Union
 
 from asn1crypto import algos, cms, core, ocsp, pem, x509
+from asn1crypto.x509 import DistributionPoint
 
 from .. import errors
 from ..authority import Authority
@@ -347,3 +348,20 @@ async def complete_certificate_fetch_jobs(fetch_jobs):
             continue
         for cert in certs_fetched:
             yield cert
+
+
+def enumerate_delivery_point_urls(distribution_point: DistributionPoint):
+    name = distribution_point['distribution_point']
+    if name.name != 'full_name':
+        # We don't support relative DPs
+        #  (esp. since we don't support directory-based lookups at all)
+        return
+
+    for general_name in name.chosen:
+        if general_name.name == 'uniform_resource_identifier':
+            url = general_name.native
+            # Only fetch CRLs over http
+            #  (or https, but that doesn't really happen all that often)
+            # In particular, don't attempt to grab CRLs over LDAP
+            if url.lower().startswith(('http://', 'https://')):
+                yield url
