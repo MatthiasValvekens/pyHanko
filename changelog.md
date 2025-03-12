@@ -1,5 +1,9 @@
 # changelog
 
+## 0.26.6
+
+- Drop Python 3.7
+- List `qcStatements` as a known extension
 
 ## 0.26.5
 
