@@ -111,7 +111,7 @@ jobs:
         files: |
           dist/*.whl
           dist/*.tar.gz
-          dist/*.sigstore
+          dist/*.sigstore.json
           provenance/multiple.intoto.jsonl
         body_path: release-body/release.md
         fail_on_unmatched_files: true

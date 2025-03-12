@@ -1,5 +1,10 @@
 # changelog
 
+
+## 0.26.7
+
+- No functional changes.
+
 ## 0.26.6
 
 - Drop Python 3.7
