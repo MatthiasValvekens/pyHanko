@@ -1,6 +1,6 @@
 import os
 
-from certomancer.crypto_utils import load_cert_from_pemder
+from asn1crypto import x509
 
 from pyhanko_certvalidator.fetchers.common_utils import (
     enumerate_delivery_point_urls,
@@ -27,9 +27,8 @@ def test_unpack_cert_content_pkcs7_with_binary_octet_stream_alias():
 
 
 def test_crl_distribution_point_enumeration_skip_ldap():
-    cert = load_cert_from_pemder(
-        os.path.join(FIXTURES_DIR, 'PostaSrbijeCA1.pem')
-    )
+    with open(os.path.join(FIXTURES_DIR, 'PostaSrbijeCA1.der'), 'rb') as f:
+        cert = x509.Certificate.load(f.read())
     (dist_point,) = cert.crl_distribution_points_value
     (url,) = enumerate_delivery_point_urls(dist_point)
     assert url.startswith('http://')
