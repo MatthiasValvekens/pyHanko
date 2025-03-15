@@ -1,6 +1,13 @@
 # changelog
 
 
+## 0.26.8
+
+- Fixed bug where an HTTP(S) CRL URI appearing next to
+  an LDAP one as part of the same DP entry would not
+  always be picked up.
+- Dramatically improved processing speed for large CRLs.
+
 ## 0.26.7
 
 - No functional changes.
