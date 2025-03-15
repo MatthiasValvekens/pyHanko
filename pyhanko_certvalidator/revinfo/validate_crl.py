@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple, Union
 
 from asn1crypto import cms, crl, x509
+from asn1crypto.crl import CRLEntryExtensionId
 from cryptography.exceptions import InvalidSignature
 
 from pyhanko_certvalidator._state import ValProcState
@@ -1387,9 +1388,20 @@ def find_cert_in_list(
         cert_serial = cert['ac_info']['serial_number'].dump()
 
     last_issuer_name = crl_authority_name
+
+    cert_issuer_extension_id = CRLEntryExtensionId('certificate_issuer').dump()
+
     for revoked_cert in revoked_certificates:
-        if revoked_cert.issuer_name:
-            last_issuer_name = revoked_cert.issuer_name
+        # This looks like a hack, but we have to look up the certificate_issuer
+        # extension for every entry, since its value remains in effect for
+        # future entries as well! (and PKITS has a test case for that...)
+        # Since parsing those extensions every time is expensive for large CRLs,
+        # we guard it with a dumb heuristic check: does the binary encoding
+        # of that extension's OID appear anywhere in the entry's payload?
+        # If not, we move on. If it does appear, we parse the extensions.
+        if cert_issuer_extension_id in revoked_cert.dump():
+            if revoked_cert.issuer_name:
+                last_issuer_name = revoked_cert.issuer_name
         if revoked_cert['user_certificate'].dump() != cert_serial:
             continue
         if last_issuer_name != cert_issuer_name:
