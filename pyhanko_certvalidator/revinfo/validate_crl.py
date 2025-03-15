@@ -1382,31 +1382,26 @@ def find_cert_in_list(
     ]
 
     if isinstance(cert, x509.Certificate):
-        cert_serial = cert.serial_number
+        cert_serial = cert['tbs_certificate']['serial_number'].dump()
     else:
-        cert_serial = cert['ac_info']['serial_number'].native
+        cert_serial = cert['ac_info']['serial_number'].dump()
 
     last_issuer_name = crl_authority_name
     for revoked_cert in revoked_certificates:
-        # If any unknown critical extensions, the entry can not be used
-        if revoked_cert.critical_extensions - KNOWN_CRL_ENTRY_EXTENSIONS:
-            raise NotImplementedError()
-
-        if (
-            revoked_cert.issuer_name
-            and revoked_cert.issuer_name != last_issuer_name
-        ):
+        if revoked_cert.issuer_name:
             last_issuer_name = revoked_cert.issuer_name
-        if last_issuer_name != cert_issuer_name:
+        if revoked_cert['user_certificate'].dump() != cert_serial:
             continue
-
-        if revoked_cert['user_certificate'].native != cert_serial:
+        if last_issuer_name != cert_issuer_name:
             continue
 
         if not revoked_cert.crl_reason_value:
             crl_reason = crl.CRLReason('unspecified')
         else:
             crl_reason = revoked_cert.crl_reason_value
+        # If any unknown critical extensions, the entry can not be used
+        if revoked_cert.critical_extensions - KNOWN_CRL_ENTRY_EXTENSIONS:
+            raise NotImplementedError()
 
         return revoked_cert['revocation_date'].native, crl_reason
 
