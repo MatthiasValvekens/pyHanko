@@ -1,10 +1,19 @@
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Set
+from typing import (
+    AsyncGenerator,
+    AsyncIterable,
+    AsyncIterator,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+)
 
 from asn1crypto import crl, ocsp, x509
 
 from pyhanko_certvalidator.authority import Authority
-from pyhanko_certvalidator.errors import OCSPFetchError
+from pyhanko_certvalidator.errors import CRLFetchError, OCSPFetchError
 from pyhanko_certvalidator.fetchers import Fetchers
 from pyhanko_certvalidator.ltv.poe import (
     KnownPOE,
@@ -189,6 +198,44 @@ class RevinfoManager:
 
         return self._crl_issuer_map.get(certificate_list.signature)
 
+    def currently_available_crls(self) -> List[CRLContainer]:
+        """
+        .. versionadded:: 0.27.0
+
+        Return all currently available CRLs.
+
+        :return:
+            A list of :class:`CRLContainer` objects
+        """
+        result = list(self._crls)
+        if self._fetchers:
+            crls = self._fetchers.crl_fetcher.fetched_crls()
+            result.extend(CRLContainer(crl_data) for crl_data in crls)
+        return result
+
+    async def fetch_crls(self, cert) -> List[CRLContainer]:
+        """
+        .. versionadded:: 0.27.0
+
+        Download all relevant CRLs for a given certificate.
+
+        :param cert:
+            An asn1crypto.x509.Certificate object
+
+        :return:
+            A list of :class:`CRLContainer` objects
+        """
+        if not self._fetchers:
+            raise CRLFetchError("No CRL fetcher available")
+
+        fetchers = self._fetchers
+        try:
+            crls = fetchers.crl_fetcher.fetched_crls_for_cert(cert)
+        except KeyError:
+            crls = await fetchers.crl_fetcher.fetch(cert)
+        conts = [CRLContainer(crl_data) for crl_data in crls]
+        return conts
+
     async def async_retrieve_crls(self, cert) -> List[CRLContainer]:
         """
         .. versionadded:: 0.20.0
@@ -199,16 +246,10 @@ class RevinfoManager:
         :return:
             A list of :class:`CRLContainer` objects
         """
-        if not self._fetchers:
-            return self._crls
-
-        fetchers = self._fetchers
-        try:
-            crls = fetchers.crl_fetcher.fetched_crls_for_cert(cert)
-        except KeyError:
-            crls = await fetchers.crl_fetcher.fetch(cert)
-        conts = [CRLContainer(crl_data) for crl_data in crls]
-        return conts + self._crls
+        crls = self.currently_available_crls()
+        if self._fetchers:
+            crls.extend(await self.fetch_crls(cert))
+        return crls
 
     async def async_retrieve_ocsps(
         self, cert, authority: Authority

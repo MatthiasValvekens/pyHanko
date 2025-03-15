@@ -21,6 +21,7 @@ from pyhanko_certvalidator.errors import (
     PSSParameterMismatch,
     RevokedError,
 )
+from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.ltv.types import ValidationTimingParams
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
@@ -729,7 +730,11 @@ def _maybe_get_delta_crl(
         parent_crl_aki=certificate_list.authority_key_identifier,
     )
     if not delta_certificate_list_cont:
-        return None
+        raise CRLValidationIndeterminateError(
+            "Delta CRL matching Freshest CRL extension not available",
+            failures=[],
+            suspect_stale=None,
+        )
 
     delta_certificate_list = delta_certificate_list_cont.crl_data
 
@@ -924,16 +929,13 @@ def _check_cert_on_crl_and_delta(
 
 
 async def _classify_relevant_crls(
-    revinfo_manager: RevinfoManager,
-    cert: x509.Certificate,
+    certificate_lists: List[CRLContainer],
+    poe_manager: POEManager,
     errs: _CRLErrs,
     control_time: Optional[datetime] = None,
 ):
     # NOTE: the control_time parameter is only used in the time sliding
     # algorithm code path for AdES validation
-
-    certificate_lists = await revinfo_manager.async_retrieve_crls(cert)
-    poe_manager = revinfo_manager.poe_manager
 
     complete_lists_by_issuer = defaultdict(list)
     delta_lists_by_issuer = defaultdict(list)
@@ -1046,11 +1048,6 @@ async def verify_crl(
 
     revinfo_manager = validation_context.revinfo_manager
     errs = _CRLErrs()
-    (
-        complete_lists_by_issuer,
-        delta_lists_by_issuer,
-    ) = await _classify_relevant_crls(revinfo_manager, cert, errs)
-
     try:
         cert_issuer_auth = path.find_issuing_authority(cert)
     except LookupError:
@@ -1058,6 +1055,14 @@ async def verify_crl(
             f"Could not determine issuer certificate for "
             f"{proc_state.describe_cert()} in path."
         )
+
+    # First, make an attempt to validate without downloading any extra CRLs
+    certificate_lists = revinfo_manager.currently_available_crls()
+    poe_manager = revinfo_manager.poe_manager
+    (
+        complete_lists_by_issuer,
+        delta_lists_by_issuer,
+    ) = await _classify_relevant_crls(certificate_lists, poe_manager, errs)
 
     # In the main loop, only complete CRLs are processed, so delta CRLs are
     # weeded out of the to-do list
@@ -1068,15 +1073,17 @@ async def verify_crl(
 
     checked_reasons = set()
 
-    for certificate_list_cont in crls_to_process:
+    async def _process(crl_container, deltas):
+        nonlocal checked_reasons
+        nonlocal errs
         try:
             interim_reasons = await _handle_single_crl(
                 cert=cert,
                 cert_issuer_auth=cert_issuer_auth,
-                certificate_list_cont=certificate_list_cont,
+                certificate_list_cont=crl_container,
                 path=path,
                 validation_context=validation_context,
-                delta_lists_by_issuer=delta_lists_by_issuer,
+                delta_lists_by_issuer=deltas,
                 use_deltas=use_deltas,
                 errs=errs,
                 proc_state=proc_state,
@@ -1084,10 +1091,57 @@ async def verify_crl(
             if interim_reasons is not None:
                 # Step l
                 checked_reasons |= interim_reasons
+        except CRLValidationIndeterminateError as e:
+            errs.append(e.msg, certificate_list_cont)
         except ValueError as e:
             msg = "Generic processing error while validating CRL."
             logging.debug(msg, exc_info=e)
             errs.append(msg, certificate_list_cont)
+
+    for certificate_list_cont in crls_to_process:
+        await _process(certificate_list_cont, delta_lists_by_issuer)
+
+    exc = _process_crl_completeness(
+        checked_reasons, total_crls, errs, proc_state
+    )
+    if exc is None:
+        return
+    elif not revinfo_manager.fetching_allowed:
+        raise exc
+
+    # If we're not done checking CRLs, but we are allowed to fetch more,
+    #  let's go download some more CRLs...
+
+    # TODO scan Freshest CRL extensions for delta CRLs?
+
+    extra_certificate_lists = await revinfo_manager.fetch_crls(cert)
+    (
+        extra_complete_lists_by_issuer,
+        extra_delta_lists_by_issuer,
+    ) = await _classify_relevant_crls(
+        extra_certificate_lists, poe_manager, errs
+    )
+
+    combined_deltas = {
+        k: delta_lists_by_issuer.get(k, [])
+        + extra_delta_lists_by_issuer.get(k, [])
+        for k in set(delta_lists_by_issuer.keys()).union(
+            extra_delta_lists_by_issuer.keys()
+        )
+    }
+
+    crls_to_process = []
+    for issuer, issuer_crls in complete_lists_by_issuer.items():
+        # some of the new deltas might complement CRLs that we already had
+        if issuer in extra_delta_lists_by_issuer:
+            crls_to_process.extend(issuer_crls)
+    for issuer_crls in extra_complete_lists_by_issuer.values():
+        crls_to_process.extend(issuer_crls)
+
+    for certificate_list_cont in crls_to_process:
+        await _process(certificate_list_cont, combined_deltas)
+
+    total_crls += len(crls_to_process)
 
     exc = _process_crl_completeness(
         checked_reasons, total_crls, errs, proc_state
@@ -1217,15 +1271,18 @@ async def _assess_crl_relevance(
         if interim_reasons is None:
             continue
 
+        delta = None
         if use_deltas:
-            delta = _maybe_get_delta_crl(
-                certificate_list=certificate_list,
-                crl_issuer=putative_issuer,
-                delta_lists_by_issuer=delta_lists_by_issuer,
-                errs=errs,
-            )
-        else:
-            delta = None
+            try:
+                delta = _maybe_get_delta_crl(
+                    certificate_list=certificate_list,
+                    crl_issuer=putative_issuer,
+                    delta_lists_by_issuer=delta_lists_by_issuer,
+                    errs=errs,
+                )
+            except CRLValidationIndeterminateError as e:
+                errs.append(e.msg, certificate_list)
+                continue
 
         prov = ProvisionalCRLTrust(path=cand_path, delta=delta)
         provisional_results.append(prov)
@@ -1271,8 +1328,12 @@ async def collect_relevant_crls_with_paths(
 
     proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
     errs = _CRLErrs()
+    candidate_crls = revinfo_manager.currently_available_crls()
     classify_job = _classify_relevant_crls(
-        revinfo_manager, cert, errs, control_time=control_time
+        candidate_crls,
+        revinfo_manager.poe_manager,
+        errs,
+        control_time=control_time,
     )
     complete_lists_by_issuer, delta_lists_by_issuer = await classify_job
 
