@@ -36,8 +36,11 @@ from pyhanko_certvalidator.fetchers import (
 from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.path import QualifiedPolicy, ValidationPath
 from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
     DisallowWeakAlgorithmsPolicy,
     NonRevokedStatusAssertion,
+    RevocationCheckingPolicy,
+    RevocationCheckingRule,
 )
 from pyhanko_certvalidator.registry import (
     CertificateRegistry,
@@ -680,6 +683,77 @@ def test_nist_pkits(test_case: PKITSTestCase):
                     )
 
 
+def nist_revocation_tests():
+    specs = read_pkits_test_params()
+    return [spec for spec in specs if spec.check_revocation]
+
+
+class ReturnPredeterminedCRLs(CRLFetcher):
+    def __init__(self, crls):
+        self.crls = crls
+
+    def fetched_crls_for_cert(
+        self, cert: x509.Certificate
+    ) -> Iterable[crl.CertificateList]:
+        raise KeyError()
+
+    def fetched_crls(self) -> Iterable[crl.CertificateList]:
+        return ()
+
+    async def fetch(self, cert: x509.Certificate, *, use_deltas=None):
+        return self.crls
+
+
+@freeze_time('2022-05-01')
+@pytest.mark.parametrize(
+    'test_case', nist_revocation_tests(), ids=lambda case: str(case.test_info)
+)
+def test_nist_pkits_with_simulated_crl_downloads(test_case: PKITSTestCase):
+
+    fetchers = Fetchers(
+        ocsp_fetcher=MockOCSPFetcher(),
+        crl_fetcher=ReturnPredeterminedCRLs(test_case.crls),
+        cert_fetcher=MockCertFetcher(),
+    )
+
+    # TODO rework failure messages and realign fixtures
+    #  so we can do message validations here.
+    #  Also consider having multiple variant runs with
+    #  slightly different revo policies
+    policy = RevocationCheckingPolicy(
+        RevocationCheckingRule.CRL_REQUIRED,
+        RevocationCheckingRule.CRL_REQUIRED,
+    )
+    context = ValidationContext(
+        trust_roots=test_case.roots,
+        other_certs=test_case.other_certs,
+        allow_fetching=True,
+        fetchers=fetchers,
+        revinfo_policy=CertRevTrustPolicy(
+            revocation_checking_policy=policy,
+        ),
+        # adjust default algo policy to pass NIST tests
+        algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
+            weak_hash_algos={'md2', 'md5'}, dsa_key_size_threshold=1024
+        ),
+    )
+
+    if test_case.path is None:
+        paths = context.path_builder.build_paths(test_case.cert)
+        assert 1 == len(paths)
+        path: ValidationPath = paths[0]
+    else:
+        path = test_case.path
+
+    err = test_case.expected_error
+    params = test_case.pkix_params
+    if err is not None:
+        with pytest.raises(err.err_class):
+            validate_path(context, path, parameters=params)
+    else:
+        validate_path(context, path, parameters=params)
+
+
 @dataclass(frozen=True)
 class PKITSUserNoticeTestCase:
     test_info: CannedTestInfo
@@ -874,6 +948,13 @@ def test_do_not_fetch_crl_if_cache_sufficient():
     ]
     moment = datetime(2020, 10, 2, tzinfo=timezone.utc)
     fetchers = MockFetcherBackend().get_fetchers()
+
+    crl_fetcher = MockCRLFetcher()
+    fetchers = Fetchers(
+        ocsp_fetcher=MockOCSPFetcher(),
+        crl_fetcher=crl_fetcher,
+        cert_fetcher=MockCertFetcher(),
+    )
     context = ValidationContext(
         trust_roots=ca_certs,
         other_certs=other_certs,
@@ -884,7 +965,7 @@ def test_do_not_fetch_crl_if_cache_sufficient():
         revocation_mode='require',
     )
 
-    assert fetchers.crl_fetcher.calls == 0
+    assert crl_fetcher.calls == 0
 
     paths = context.path_builder.build_paths(cert)
     assert 1 == len(paths)
@@ -963,3 +1044,36 @@ def test_fail_validation_if_required_delta_crl_not_available():
     path: ValidationPath = paths[0]
     with pytest.raises(InsufficientRevinfoError, match=".*Delta CRL.*"):
         validate_path(context, path)
+
+
+def test_context_retrieve_all_crls():
+
+    cert = load_nist_cert('InvaliddeltaCRLTest4EE.crt')
+    ca_certs = [load_nist_cert('TrustAnchorRootCertificate.crt')]
+    other_certs = [load_nist_cert('deltaCRLCA1Cert.crt')]
+    crl1 = load_nist_crl('deltaCRLCA1CRL.crl')
+    crl2 = load_nist_crl('TrustAnchorRootCRL.crl')
+    crl3 = load_nist_crl('deltaCRLCA1deltaCRL.crl')
+    crls = [crl1, crl2]
+
+    context = ValidationContext(
+        trust_roots=ca_certs,
+        other_certs=other_certs,
+        crls=crls,
+        allow_fetching=True,
+        fetchers=Fetchers(
+            ocsp_fetcher=MockOCSPFetcher(),
+            crl_fetcher=ReturnPredeterminedCRLs([crl3]),
+            cert_fetcher=MockCertFetcher(),
+        ),
+        revocation_mode="require",
+        weak_hash_algos={'md2', 'md5'},
+    )
+
+    with pytest.warns(DeprecationWarning):
+        retrieved_crls = context.retrieve_crls(cert)
+    assert {c.dump() for c in retrieved_crls} == {
+        crl1.dump(),
+        crl2.dump(),
+        crl3.dump(),
+    }

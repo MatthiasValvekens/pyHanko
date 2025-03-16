@@ -83,7 +83,7 @@ async def _find_candidate_crl_issuer_certs(
         )
     if not candidates and cert_registry.fetcher is not None:
         candidates = []
-        valid_names = {crl_authority_name, delegated_issuer}
+        valid_names = (crl_authority_name, delegated_issuer)
         # Try to download certificates from URLs in the AIA extension,
         # if there is one
         async for cert in cert_registry.fetcher.fetch_crl_issuers(

@@ -1338,11 +1338,16 @@ async def _check_revocation(
             err_str = '; '.join(str(f) for f in failures)
         else:
             err_str = 'an applicable OCSP response could not be found'
-        raise InsufficientRevinfoError.from_state(
+        msg = (
             f"The path could not be validated because the mandatory OCSP "
-            f"check(s) for {proc_state.describe_cert()} failed: {err_str}",
-            proc_state,
+            f"check(s) for {proc_state.describe_cert()} failed: {err_str}"
         )
+        if ocsp_suspect_stale_since:
+            raise StaleRevinfoError.format(
+                msg, ocsp_suspect_stale_since, proc_state
+            )
+        else:
+            raise InsufficientRevinfoError.from_state(msg, proc_state)
     status_good = (
         ocsp_status_good
         and rev_rule != RevocationCheckingRule.CRL_AND_OCSP_REQUIRED
@@ -1385,11 +1390,19 @@ async def _check_revocation(
             err_str = '; '.join(str(f) for f in failures)
         else:
             err_str = 'an applicable CRL could not be found'
-        raise InsufficientRevinfoError.from_state(
+        msg = (
             f"The path could not be validated because the mandatory CRL "
-            f"check(s) for {proc_state.describe_cert()} failed: {err_str}",
-            proc_state,
+            f"check(s) for {proc_state.describe_cert()} failed: {err_str}"
         )
+        if crl_suspect_stale_since:
+            raise StaleRevinfoError.format(
+                msg, crl_suspect_stale_since, proc_state
+            )
+        else:
+            raise InsufficientRevinfoError.from_state(
+                msg,
+                proc_state,
+            )
 
     # If we still didn't find a match, the certificate has CRL/OCSP entries
     # but we couldn't query any of them. Let's check if this is disqualifying.
