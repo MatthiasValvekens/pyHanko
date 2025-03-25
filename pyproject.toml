@@ -82,7 +82,7 @@ testing-basic = [
     "certomancer>=0.12.3,<0.13",
     "pytest-cov>=4.0,<6.1",
     "pytest-asyncio==0.24.0;python_version<\"3.9\"",
-    "pytest-asyncio==0.25.3;python_version>=\"3.9\"",
+    "pytest-asyncio==0.26.0;python_version>=\"3.9\"",
     "backports.zoneinfo[tzdata];python_version<\"3.9\"",
 ]
 testing = [
