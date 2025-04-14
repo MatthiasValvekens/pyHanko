@@ -91,13 +91,14 @@ class MetadataUpdateRule(WhitelistRule):
                 "/Metadata should be a reference to a stream object"
             )
 
-        from xml.sax import make_parser
-        from xml.sax.handler import ContentHandler
+        from defusedxml.ElementTree import XMLParser as DefusedXMLParser
+        from defusedxml.ElementTree import parse as defused_parse
 
-        parser = make_parser()
-        parser.setContentHandler(ContentHandler())
         try:
-            parser.parse(BytesIO(metadata_stream.data))
+            defused_parse(
+                BytesIO(metadata_stream.data),
+                DefusedXMLParser(encoding='utf-8'),
+            )
         except Exception as e:
             raise SuspiciousModification(
                 "/Metadata XML syntax could not be validated", e

@@ -140,7 +140,7 @@ def parse_xref_table(stream) -> Iterator[XRefEntry]:
             # 21-byte entries (or more) due to the use of \r\n
             # (CRLF) EOL's. Detect that case, and adjust the line
             # until it does not begin with a \r (CR) or \n (LF).
-            while line[0] in b"\x0D\x0A":
+            while line[0] in b"\x0d\x0a":
                 stream.seek(-20 + 1, os.SEEK_CUR)
                 line = stream.read(20)
 

@@ -43,6 +43,7 @@ dependencies = [
     "requests>=2.31.0",
     "pyyaml>=6.0",
     "cryptography>=43.0.3",
+    "defusedxml~=0.7.1",
 ]
 dynamic = ["version"]
 
@@ -59,13 +60,11 @@ Changes = "https://pyhanko.readthedocs.io/en/latest/changelog.html"
 "Issue Tracker" = "https://github.com/MatthiasValvekens/pyHanko/issues"
 
 [project.optional-dependencies]
-extra-pubkey-algs = ["oscrypto>=1.2.1"]
-xmp = ["defusedxml~=0.7.1"]
 opentype = [
     "fonttools>=4.33.3",
     # uharfbuzz sometimes includes breaking changes, so
     # we set an explicit range
-    "uharfbuzz>=0.25.0,<0.44.0",
+    "uharfbuzz>=0.25.0,<0.50.0",
 ]
 image-support = [
     # Only tested systematically on 8.x,
@@ -80,26 +79,27 @@ testing-basic = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
-    "pytest-asyncio==0.24.0",
     "certomancer>=0.12.3,<0.13",
-    "pytest-cov>=4.0,<6.1",
+    "pytest-cov>=4.0,<6.2",
+    "pytest-asyncio==0.24.0;python_version<\"3.9\"",
+    "pytest-asyncio==0.26.0;python_version>=\"3.9\"",
     "backports.zoneinfo[tzdata];python_version<\"3.9\"",
 ]
 testing = [
-    "pyHanko[testing-basic,pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
+    "pyHanko[testing-basic,pkcs11,opentype,image-support,async-http]",
     "pyHanko[etsi]",
-    "pytest-aiohttp~=1.0.4",
+    "pytest-aiohttp>=1.0.4,<1.2.0",
     "certomancer-csc-dummy==0.3.0",
 ]
 live-test = [
-    "pyHanko[testing-basic,xmp,async-http,extra-pubkey-algs]",
-    "pytest-aiohttp~=1.0.4",
+    "pyHanko[testing-basic,async-http]",
+    "pytest-aiohttp>=1.0.4,<1.2.0",
     "certomancer-csc-dummy==0.3.0",
     "certomancer[web-api]>=0.12.3,<0.13",
-    "pytest-cov>=4.0,<6.1",
+    "pytest-cov>=4.0,<6.2",
 ]
 mypy = [
-    "pyHanko[pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs,etsi]",
+    "pyHanko[pkcs11,opentype,image-support,async-http,etsi]",
     "types-requests",
     "types-python-dateutil",
     "types-PyYAML",
@@ -134,7 +134,6 @@ files = "pyhanko"
 module = [
     "asn1crypto.*",
     "pkcs11.*",
-    "oscrypto.*",
     "uritools.*",
     "barcode.*",
     "PIL.*",

@@ -1,6 +1,5 @@
 ![pyHanko](docs/images/pyhanko-logo.svg)
 
-![status](https://github.com/MatthiasValvekens/pyHanko/workflows/pytest/badge.svg)
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pyHanko)
 ![pypi](https://img.shields.io/pypi/v/pyHanko.svg)
 
@@ -101,7 +100,8 @@ Note that not all of these are necessarily exposed through the CLI.
     - Signature seed value constraint validation
     - AdES validation (incubating)
  - Encryption
-    - All encryption methods in PDF 2.0 are supported.
+    - All encryption methods in PDF 2.0 are supported, except for
+      some very outdated message encryption methods in the public-key security handler.
     - Authenticated encryption via ISO/TS 32003 and 32004.
     - In addition, we support a number of extra file encryption
       modes of operation for the public-key security handler that are not

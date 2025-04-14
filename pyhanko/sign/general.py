@@ -447,7 +447,6 @@ def optimal_pss_params(
         raise SigningError(f"Expected RSA key, but got key of type {type(key)}")
     md = get_pyca_cryptography_hash(digest_algorithm)
     # the PSS salt calculation function is not in the .pyi file, apparently.
-    # noinspection PyUnresolvedReferences
     optimal_salt_len = padding.calculate_max_pss_salt_length(key, md)
     return algos.RSASSAPSSParams(
         {

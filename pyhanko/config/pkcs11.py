@@ -4,7 +4,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Iterable, List, Optional, Set, Union
 
-from asn1crypto import x509
+from asn1crypto import algos, x509
 
 from pyhanko.config import api
 from pyhanko.config.errors import ConfigurationError
@@ -192,6 +192,16 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
 
     .. note::
         This is currently only supported for ECDSA signatures.
+    """
+
+    signature_mechanism: Optional[algos.SignedDigestAlgorithm] = None
+    """
+    Manually specify the signature mechanism in ASN.1 fully.
+
+    .. note::
+        The prototypical use case for this is a PKCS#11 interface
+        that allows signing with RSASSA-PSS, but doesn't accept
+        pyHanko's default choice of parameters.
     """
 
     @classmethod

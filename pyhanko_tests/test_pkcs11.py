@@ -100,6 +100,47 @@ def test_simple_sign_with_rsassa_pss():
 
 
 @freeze_time('2020-11-01')
+def test_simple_sign_with_rsassa_pss_custom_parameters():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+
+    pss_params = algos.RSASSAPSSParams(
+        {
+            'hash_algorithm': algos.DigestAlgorithm({'algorithm': 'sha256'}),
+            'mask_gen_algorithm': algos.MaskGenAlgorithm(
+                {
+                    'algorithm': 'mgf1',
+                    'parameters': algos.DigestAlgorithm(
+                        {'algorithm': 'sha256'}
+                    ),
+                }
+            ),
+            'salt_length': 32,
+        }
+    )
+    with _simple_sess(token='testrsa') as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess,
+            SIGNER_LABEL,
+            other_certs_to_pull=default_other_certs,
+            prefer_pss=True,
+            signature_mechanism=algos.SignedDigestAlgorithm(
+                {'algorithm': 'rsassa_pss', 'parameters': pss_params},
+            ),
+        )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    algo = emb.signer_info['signature_algorithm']['algorithm'].native
+    params = emb.signer_info['signature_algorithm']['parameters']
+    assert algo == 'rsassa_pss'
+    assert params.dump() == pss_params.dump()
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+
+@freeze_time('2020-11-01')
 def test_simple_sign_legacy_open_session_by_token_label():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
