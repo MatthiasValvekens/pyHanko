@@ -73,7 +73,7 @@ def compare_output(writer: BasePdfFileWriter, expected_output_path):
             ],
             capture_output=True,
         )
-        if result.stderr != b'0':
+        if result.stderr != b'0' and result.stderr != b'0 (0)':
             dest_dir = _ensure_path("failed_layout_tests", expected_output_path)
             shutil.copy(output_path, os.path.join(dest_dir, "output.pdf"))
             from_workdir = ('actual.png', 'diff.png', 'expected.png')

@@ -9,6 +9,7 @@ from pyhanko.pdf_utils import generic, layout, writer
 from pyhanko.pdf_utils.content import ImportedPdfPage, RawContent
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
 from pyhanko.pdf_utils.images import PdfImage
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import (
     AxisAlignment,
     LayoutError,
@@ -18,6 +19,7 @@ from pyhanko.pdf_utils.layout import (
 from pyhanko.pdf_utils.text import TextBoxStyle
 from pyhanko.stamp import (
     STAMP_ART_CONTENT,
+    CoordinateSystem,
     QRPosition,
     QRStamp,
     QRStampStyle,
@@ -409,3 +411,30 @@ def test_zero_width_error():
 
     # ...this shouldn't throw a division by zero error
     stamp.apply(0, x=10, y=500)
+
+
+def test_simple_text_stamp_on_page_with_leaky_graphics_state():
+    with open(f"{PDF_DATA_DIR}/leaky-graphics-state-doc.pdf", 'rb') as fin:
+        pdf_out = IncrementalPdfFileWriter(fin, strict=False)
+        stamp = TextStamp(
+            writer=pdf_out, style=TextStampStyle(stamp_text="Hi, it's me")
+        )
+        stamp.apply(0, 70, 50)
+        compare_output(
+            pdf_out,
+            f'{EXPECTED_OUTPUT_DIR}/leaky-graphics-state-stamp-result.pdf',
+        )
+
+
+def test_simple_text_stamp_on_page_with_leaky_graphics_state_without_coord_correction():
+    with open(f"{PDF_DATA_DIR}/leaky-graphics-state-doc.pdf", 'rb') as fin:
+        pdf_out = IncrementalPdfFileWriter(fin, strict=False)
+        stamp = TextStamp(
+            writer=pdf_out,
+            style=TextStampStyle(stamp_text="Hi, it's me"),
+        )
+        stamp.apply(0, 70, 50, coords=CoordinateSystem.AMBIENT)
+        compare_output(
+            pdf_out,
+            f'{EXPECTED_OUTPUT_DIR}/leaky-graphics-state-stamp-no-corr-result.pdf',
+        )

@@ -36,6 +36,7 @@ __all__ = [
     "QRStampStyle",
     "StaticStampStyle",
     "QRPosition",
+    "CoordinateSystem",
     "BaseStamp",
     "TextStamp",
     "QRStamp",
@@ -408,6 +409,31 @@ class QRStampStyle(TextStampStyle):
         )
 
 
+class CoordinateSystem(enum.Enum):
+    """
+    Positioning convention for stamps.
+    """
+
+    PAGE_DEFAULT = 1
+    """
+    Always treat the stamp's position in the page's default coordinate system,
+    by defensively forcing a restore to the original graphics state.
+
+    .. note::
+        This is the default behaviour since ``0.27.0``.
+    """
+
+    AMBIENT = 2
+    """
+    Apply the stamp in the ambient frame of reference set by the existing
+    page content.
+    This may yield unpredictable results depending on the input document.
+
+    .. note::
+        This was the default behaviour prior to ``0.27.0``.
+    """
+
+
 class BaseStamp(content.PdfContent):
     def __init__(
         self,
@@ -504,7 +530,14 @@ class BaseStamp(content.PdfContent):
             self._stamp_ref = stamp_ref = wr.add_object(form_xobj)
         return stamp_ref
 
-    def apply(self, dest_page: int, x: int, y: int):
+    def apply(
+        self,
+        dest_page: int,
+        x: int,
+        y: int,
+        *,
+        coords: CoordinateSystem = CoordinateSystem.PAGE_DEFAULT,
+    ):
         """
         Apply a stamp to a particular page in the PDF writer attached to this
         :class:`.BaseStamp` instance.
@@ -516,6 +549,8 @@ class BaseStamp(content.PdfContent):
             Horizontal position of the stamp's lower left corner on the page.
         :param y:
             Vertical position of the stamp's lower left corner on the page.
+        :param coords:
+            The coordinate convention to use.
         :return:
             A reference to the affected page object, together with
             a ``(width, height)`` tuple describing the dimensions of the stamp.
@@ -537,6 +572,21 @@ class BaseStamp(content.PdfContent):
         )
         wr = self.writer
         assert wr is not None
+        if coords == CoordinateSystem.PAGE_DEFAULT:
+            # wrap the existing content in q / Q
+            wr.add_stream_to_page(
+                dest_page,
+                wr.add_object(
+                    generic.StreamObject(stream_data=b"q"),
+                ),
+                prepend=True,
+            )
+            wr.add_stream_to_page(
+                dest_page,
+                wr.add_object(
+                    generic.StreamObject(stream_data=b"Q"),
+                ),
+            )
         page_ref = wr.add_stream_to_page(
             dest_page, wr.add_object(stamp_wrapper_stream), resources
         )
@@ -826,8 +876,15 @@ class QRStamp(TextStamp):
         tp['url'] = self.url
         return tp
 
-    def apply(self, dest_page, x, y):
-        page_ref, (w, h) = super().apply(dest_page, x, y)
+    def apply(
+        self,
+        dest_page,
+        x,
+        y,
+        *,
+        coords: CoordinateSystem = CoordinateSystem.PAGE_DEFAULT,
+    ):
+        page_ref, (w, h) = super().apply(dest_page, x, y, coords=coords)
         link_rect = (x, y, x + w, y + h)
         link_annot = generic.DictionaryObject(
             {
@@ -845,6 +902,7 @@ class QRStamp(TextStamp):
             }
         )
         wr = self.writer
+        assert wr is not None
         wr.register_annotation(page_ref, wr.add_object(link_annot))
         return page_ref, (w, h)
 
