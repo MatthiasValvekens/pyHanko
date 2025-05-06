@@ -63,6 +63,7 @@ def init_xobject_dictionary(
     box_width,
     box_height,
     resources: Optional[generic.DictionaryObject] = None,
+    matrix: Optional[generic.DictionaryObject] = None,
 ) -> generic.StreamObject:
     """
     Helper function to initialise form XObject dictionaries.
@@ -78,21 +79,26 @@ def init_xobject_dictionary(
         The height of the XObject's bounding box.
     :param resources:
         A resource dictionary to include with the form object.
+    :param matrix:
+        A resource dictionary to include matrix object within rotated page.
     :return:
         A :class:`~.generic.StreamObject` representation of the form XObject.
     """
     resources = resources or generic.DictionaryObject()
+    dict_data = {
+        pdf_name('/BBox'): generic.ArrayObject(
+            list(map(generic.FloatObject, (0.0, box_height, box_width, 0.0)))
+        ),
+        pdf_name('/Resources'): resources,
+        pdf_name('/Type'): pdf_name('/XObject'),
+        pdf_name('/Subtype'): pdf_name('/Form'),
+    }
+    if matrix is not None:
+        dict_data[pdf_name('/Matrix')] = generic.ArrayObject(
+            list(map(generic.FloatObject, matrix))
+        )
     return generic.StreamObject(
-        {
-            pdf_name('/BBox'): generic.ArrayObject(
-                list(
-                    map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
-                )
-            ),
-            pdf_name('/Resources'): resources,
-            pdf_name('/Type'): pdf_name('/XObject'),
-            pdf_name('/Subtype'): pdf_name('/Form'),
-        },
+        dict_data,
         stream_data=command_stream,
     )
 
@@ -934,7 +940,7 @@ class BasePdfFileWriter(PdfHandler):
                 # mark the page to be updated as well
                 self.mark_update(page_obj_ref)
             else:
-                raise PdfError('Unexpected type for page /Contents')
+                raise PdfError("Unexpected type for page /Contents")
         elif isinstance(contents_ref, generic.ArrayObject):
             # make /Contents an indirect array, and append our stream
             contents = contents_ref
@@ -945,7 +951,7 @@ class BasePdfFileWriter(PdfHandler):
             page_obj[pdf_name('/Contents')] = self.add_object(contents)
             self.mark_update(page_obj_ref)
         else:
-            raise PdfError('Unexpected type for page /Contents')
+            raise PdfError("Unexpected type for page /Contents")
 
         if resources is None:
             return
@@ -1061,7 +1067,7 @@ class PdfFileWriter(BasePdfFileWriter):
         # root object
         root = generic.DictionaryObject(
             {
-                pdf_name("/Type"): pdf_name("/Catalog"),
+                pdf_name('/Type'): pdf_name('/Catalog'),
             }
         )
 
@@ -1075,9 +1081,9 @@ class PdfFileWriter(BasePdfFileWriter):
         if init_page_tree:
             pages = generic.DictionaryObject(
                 {
-                    pdf_name("/Type"): pdf_name("/Pages"),
-                    pdf_name("/Count"): generic.NumberObject(0),
-                    pdf_name("/Kids"): generic.ArrayObject(),
+                    pdf_name('/Type'): pdf_name('/Pages'),
+                    pdf_name('/Count'): generic.NumberObject(0),
+                    pdf_name('/Kids'): generic.ArrayObject(),
                 }
             )
 
