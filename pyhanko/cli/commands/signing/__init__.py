@@ -252,6 +252,16 @@ def addsig(
     ctx_obj.ux.visible_signature_desired = bool(style_name or new_field_spec)
 
 
+def _unavailable(signer_plugin: SigningCommandPlugin):
+    def _unavailable_callback():
+        raise click.ClickException(
+            signer_plugin.unavailable_message
+            or "This subcommand is not available"
+        )
+
+    return _unavailable_callback
+
+
 def register(plugins: List[SigningCommandPlugin]):
     # we reset the command list before (re)populating it, in order to
     # make the tests more consistent
@@ -261,17 +271,11 @@ def register(plugins: List[SigningCommandPlugin]):
             addsig.add_command(command_from_plugin(signer_plugin))
         else:
 
-            def _unavailable():
-                raise click.ClickException(
-                    signer_plugin.unavailable_message
-                    or "This subcommand is not available"
-                )
-
             addsig.add_command(
                 click.Command(
                     name=signer_plugin.subcommand_name,
                     help=signer_plugin.help_summary + " [unavailable]",
-                    callback=_unavailable,
+                    callback=_unavailable(signer_plugin),
                 )
             )
 

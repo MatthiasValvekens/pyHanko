@@ -4,7 +4,7 @@ import pytest
 
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.simple import PKCS12Plugin
-from pyhanko.cli.plugin_api import register_signing_plugin
+from pyhanko.cli.plugin_api import SigningCommandPlugin, register_signing_plugin
 from pyhanko_tests.cli_tests.conftest import _write_config
 
 if sys.version_info < (3, 8):
@@ -28,6 +28,7 @@ class ManuallyRegisteredTestPlugin(PKCS12Plugin):
 class UnavailablePlugin(PKCS12Plugin):
     subcommand_name = 'unavailable-plugin'
     help_summary = 'unavailable plugin'
+    unavailable_message = 'plugin always unavailable'
 
     def is_available(self) -> bool:
         return False
@@ -147,4 +148,4 @@ def test_trigger_unavailable_plugin(cli_runner):
         ],
     )
     assert result.exit_code == 1
-    assert 'This subcommand is not available' in result.output
+    assert 'plugin always unavailable' in result.output
