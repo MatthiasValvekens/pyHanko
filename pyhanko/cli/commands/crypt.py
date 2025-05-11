@@ -70,7 +70,6 @@ decrypt_force_flag = click.option(
     '--force',
     help='ignore access restrictions (use at your own risk)',
     required=False,
-    type=bool,
     is_flag=True,
     default=False,
 )
