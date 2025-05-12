@@ -278,7 +278,7 @@ pki-architectures:
         issuer: interm
         validity:
           valid-from: "2020-01-01T00:00:00+0000"
-          valid-to: "2022-01-01T00:00:00+0000"
+          valid-to: "2032-01-01T00:00:00+0000"
         extensions:
           - id: key_usage
             critical: true

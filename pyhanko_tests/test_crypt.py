@@ -48,6 +48,7 @@ from pyhanko_tests.samples import (
     PDF_DATA_DIR,
     PUBKEY_SELFSIGNED_DECRYPTER,
     PUBKEY_TEST_DECRYPTER,
+    PUBKEY_TEST_DECRYPTER_OLD,
     TESTING_CA_DIR,
     VECTOR_IMAGE_PDF,
 )
@@ -382,7 +383,7 @@ def test_rsa_decryption_wrong_key_type():
     with open(f'{PDF_DATA_DIR}/minimal-pubkey-rc4-envelope.pdf', 'rb') as inf:
         r = PdfFileReader(inf)
         decrypter = SimpleEnvelopeKeyDecrypter(
-            cert=PUBKEY_TEST_DECRYPTER.cert, private_key=key
+            cert=PUBKEY_TEST_DECRYPTER_OLD.cert, private_key=key
         )
         with pytest.raises(pubkey.InappropriateCredentialError):
             r.decrypt_pubkey(decrypter)
@@ -1406,7 +1407,7 @@ def test_pubkey_rc4_envelope():
     fname = os.path.join(PDF_DATA_DIR, "minimal-pubkey-rc4-envelope.pdf")
     with open(fname, 'rb') as inf:
         r = PdfFileReader(inf)
-        result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+        result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER_OLD)
         assert result.status == AuthStatus.USER
         assert b'Hello' in r.root['/Pages']['/Kids'][0]['/Contents'].data
 
@@ -1418,7 +1419,7 @@ def test_unknown_envelope_enc_type():
     with open(fname, 'rb') as inf:
         r = PdfFileReader(inf)
         with pytest.raises(misc.PdfError, match="Cipher.*not allowed"):
-            r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+            r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER_OLD)
 
 
 BASIC_R6_ENC_DICT = generic.DictionaryObject(
@@ -1816,3 +1817,17 @@ def test_std_permission_transformations(perm, expected_sint, expected_bytes):
 )
 def test_pubkey_permission_transformations(perm, expected_bytes):
     assert perm.as_bytes() == expected_bytes
+
+
+def test_pubkey_3des_decryption():
+    with open(f"{PDF_DATA_DIR}/pubkey-3des-test.pdf", "rb") as inf:
+        r = PdfFileReader(inf)
+        result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+        _validate_pubkey_decryption(r, result)
+
+
+def test_pubkey_rc2_decryption():
+    with open(f"{PDF_DATA_DIR}/pubkey-rc2-test.pdf", "rb") as inf:
+        r = PdfFileReader(inf)
+        result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+        _validate_pubkey_decryption(r, result)

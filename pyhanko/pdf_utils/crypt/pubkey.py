@@ -44,7 +44,13 @@ from cryptography.hazmat.primitives.kdf.x963kdf import X963KDF
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 from .. import generic, misc
-from ._util import aes_cbc_decrypt, aes_cbc_encrypt, rc4_encrypt
+from ._util import (
+    aes_cbc_decrypt,
+    aes_cbc_encrypt,
+    rc2_decrypt,
+    rc4_encrypt,
+    tripledes_decrypt,
+)
 from .api import (
     AuthResult,
     AuthStatus,
@@ -1107,15 +1113,21 @@ def read_seed_from_recipient_cms(
     except (ValueError, KeyError):
         cipher_name = algo['algorithm'].native
 
-    if cipher_name in ('des', 'tripledes', 'rc2'):
+    if cipher_name == 'des':
         raise NotImplementedError(
-            "Support for DES, 3DES and RC2 has been dropped in pyHanko 0.26.0"
+            "Support for DES has been dropped in pyHanko 0.26.0"
         )
-
-    if cipher_name == 'aes':
-        decryption_fun = aes_cbc_decrypt
+    elif cipher_name == 'aes':
         iv = algo.encryption_iv
-        content = decryption_fun(envelope_key, encrypted_envelope_content, iv)
+        content = aes_cbc_decrypt(envelope_key, encrypted_envelope_content, iv)
+    elif cipher_name == 'tripledes':
+        iv = algo.encryption_iv
+        content = tripledes_decrypt(
+            envelope_key, encrypted_envelope_content, iv
+        )
+    elif cipher_name == 'rc2':
+        iv = algo.encryption_iv
+        content = rc2_decrypt(envelope_key, encrypted_envelope_content, iv)
     elif cipher_name == 'rc4':
         content = rc4_encrypt(envelope_key, encrypted_envelope_content)
     else:

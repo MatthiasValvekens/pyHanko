@@ -1,22 +1,24 @@
 import secrets
-import struct
 
-from cryptography.hazmat.decrepit.ciphers.algorithms import ARC4
+from cryptography.hazmat.decrepit.ciphers.algorithms import ARC4, RC2, TripleDES
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 
-def aes_cbc_decrypt(key, data, iv, use_padding=True):
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-    decryptor = cipher.decryptor()
-    plaintext = decryptor.update(data) + decryptor.finalize()
-
+def _maybe_unpad(plaintext, *, use_padding):
     # we tolerate empty messages that don't have padding
     if use_padding and len(plaintext) > 0:
         unpadder = padding.PKCS7(128).unpadder()
         return unpadder.update(plaintext) + unpadder.finalize()
     else:
         return plaintext
+
+
+def aes_cbc_decrypt(key, data, iv, use_padding=True):
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    plaintext = decryptor.update(data) + decryptor.finalize()
+    return _maybe_unpad(plaintext, use_padding=use_padding)
 
 
 def aes_cbc_encrypt(key, data, iv, use_padding=True):
@@ -28,6 +30,20 @@ def aes_cbc_encrypt(key, data, iv, use_padding=True):
         padder = padding.PKCS7(128).padder()
         data = padder.update(data) + padder.finalize()
     return iv, encryptor.update(data) + encryptor.finalize()
+
+
+def tripledes_decrypt(key, data, iv):
+    cipher = Cipher(TripleDES(key), mode=modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    plaintext = decryptor.update(data) + decryptor.finalize()
+    return _maybe_unpad(plaintext, use_padding=True)
+
+
+def rc2_decrypt(key, data, iv):
+    cipher = Cipher(RC2(key), mode=modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    plaintext = decryptor.update(data) + decryptor.finalize()
+    return _maybe_unpad(plaintext, use_padding=True)
 
 
 def rc4_encrypt(key, data):

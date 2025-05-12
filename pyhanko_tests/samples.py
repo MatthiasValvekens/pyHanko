@@ -100,6 +100,13 @@ PUBKEY_TEST_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
     b'secret',
 )
 
+# Previous cert embedded in some fixed test files
+PUBKEY_TEST_DECRYPTER_OLD = SimpleEnvelopeKeyDecrypter.load(
+    f"{CRYPTO_DATA_DIR}/keys-rsa/signer.key.pem",
+    f"{CRYPTO_DATA_DIR}/testing-ca/interm/decrypter1-old.cert.pem",
+    b'secret',
+)
+
 # no keyEncipherment bit on this one
 PUBKEY_SELFSIGNED_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
     "pyhanko_tests/data/crypto/selfsigned.key.pem",
