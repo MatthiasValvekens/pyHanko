@@ -3,6 +3,40 @@ Release history
 ***************
 
 
+.. _release-0.27.0:
+
+0.27.0
+======
+
+*Release date:* 2025-05-12
+
+
+Dependency changes
+------------------
+
+ * Relax ``uharfbuzz`` upper bound to ``<0.51.0``.
+ * Constrain ``click`` to ``<8.2.0`` while we address breaking changes.
+ * Bump test dependencies.
+
+
+New features and enhancements
+-----------------------------
+
+Layout
+^^^^^^
+
+ * Allow choosing whether to apply stamps in the page's default coordinate system, or
+   in the frame of reference that is active at the end of the page's content stream.
+   The former is now the default.
+
+
+Bugs fixed
+----------
+
+ * Fix handling of "plugin unavailable" error.
+ * Clear ``/NeedAppearances`` when putting in a signature.
+
+
 .. _release-0.26.0:
 
 0.26.0
