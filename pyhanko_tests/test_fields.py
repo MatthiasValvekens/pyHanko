@@ -632,3 +632,25 @@ def test_visible_field_flags(settings, flags):
     annot = r.root['/Pages']['/Kids'][0]['/Annots'][0]
 
     assert annot['/F'] == flags
+
+
+@freeze_time('2020-11-01')
+def test_sign_field_with_needappearances():
+    buf = BytesIO(MINIMAL_ONE_FIELD)
+
+    w = IncrementalPdfFileWriter(buf)
+    w.root['/AcroForm']['/NeedAppearances'] = generic.BooleanObject(True)
+    w.update_container(w.root['/AcroForm'])
+    w.write_in_place()
+
+    w = IncrementalPdfFileWriter(buf)
+    signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_CA,
+        existing_fields_only=True,
+        in_place=True,
+    )
+
+    r = PdfFileReader(buf)
+    assert '/NeedAppearances' not in r.root['/AcroForm']

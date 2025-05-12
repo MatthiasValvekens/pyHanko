@@ -1431,7 +1431,8 @@ def _insert_or_get_field_at(
 
 def ensure_sig_flags(writer: BasePdfFileWriter, lock_sig_flags: bool = True):
     """
-    Ensure the SigFlags setting is present in the AcroForm dictionary.
+    Ensure the SigFlags setting is present in the AcroForm dictionary,
+    and the /NeedAppearances setting is cleared if necessary.
 
     :param writer:
         A PDF writer.
@@ -1446,7 +1447,10 @@ def ensure_sig_flags(writer: BasePdfFileWriter, lock_sig_flags: bool = True):
     if lock_sig_flags:
         orig_sig_flags = form.get('/SigFlags', None)
         form['/SigFlags'] = generic.NumberObject(3)
-        if orig_sig_flags != 3:
+        has_need_appearances = '/NeedAppearances' in form
+        if has_need_appearances:
+            del form['/NeedAppearances']
+        if orig_sig_flags != 3 or has_need_appearances:
             writer.update_container(form)
     else:
         form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(1))
