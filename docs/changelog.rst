@@ -3,6 +3,23 @@ Release history
 ***************
 
 
+.. _release-0.27.1:
+
+0.27.1
+======
+
+*Release date:* 2025-05-14
+
+
+New features and enhancements
+-----------------------------
+
+ * Reinstated support for decrypting files using public-key encryption
+   where 3DES or RC2 are used as the envelope encryption algorithm.
+   The new integration uses ``pyca/cryptography``'s ``decrepit`` subpackage
+   instead of ``oscrypto``.
+
+
 .. _release-0.27.0:
 
 0.27.0
