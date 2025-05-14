@@ -13,13 +13,14 @@ runs:
       # we remove setup-python's problem matchers because
       # they aren't really an asset given the way pyHanko is tested
       run: echo "::remove-matcher owner=python::"
+    - name: Install uv
+      shell: bash
+      run: pip install --upgrade uv && uv venv
+      env:
+        DEPGRP: ${{ inputs.dependency-group }}
     - name: Install Python dependencies
       shell: bash
-      run: |
-        python -m pip install --upgrade pip
-        WHEEL=(dist/*.whl)
-        REQ="${WHEEL[0]}[$DEPGRP]"
-        python -m pip install $REQ
+      run: uv pip install --upgrade setuptools && uv pip --directory pkgs/pyhanko install --group testing-basic --group $DEPGRP
       env:
         DEPGRP: ${{ inputs.dependency-group }}
     - name: Install system dependencies
@@ -34,4 +35,4 @@ runs:
       run: |
         mkdir softhsm_tokens
         echo "directories.tokendir = $(pwd)/softhsm_tokens" > $SOFTHSM2_CONF
-        ./pyhanko_tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
+        ./pkgs/pyhanko/tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
