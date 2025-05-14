@@ -13,9 +13,9 @@ jobs:
       - uses: actions/setup-python@v5
       - run: pip install --upgrade pip isort black
       - name: Check import order
-        run: isort --profile black --line-length 80 --check pyhanko pyhanko_tests
+        run: isort --profile black --line-length 80 --check pkgs
       - name: Run Black
-        run: black -S --line-length 80 --check pyhanko pyhanko_tests
+        run: black -S --line-length 80 --check pkgs
   mypy:
     runs-on: ubuntu-latest
     steps:
