@@ -9,7 +9,8 @@ build-backend = "setuptools.build_meta"
 name = "pyhanko-certvalidator"
 dynamic = ['version']
 authors = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 description = "Validates X.509 certificates and paths; forked from wbond/certvalidator"
 keywords = [
     "crypto",
@@ -22,7 +23,6 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
