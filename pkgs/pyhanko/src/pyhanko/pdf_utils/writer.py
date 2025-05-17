@@ -10,7 +10,6 @@ import typing
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union, cast
 
 from asn1crypto import x509
-
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler,

@@ -4,12 +4,6 @@ import pytest
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel
 from freezegun import freeze_time
-from pyhanko_certvalidator.context import CertValidationPolicySpec
-from pyhanko_certvalidator.registry import (
-    SimpleCertificateStore,
-    SimpleTrustManager,
-)
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers
@@ -22,6 +16,12 @@ from pyhanko.sign.validation import ades
 from pyhanko.sign.validation.policy_decl import (
     PdfSignatureValidationSpec,
     SignatureValidationSpec,
+)
+
+from pyhanko_certvalidator.context import CertValidationPolicySpec
+from pyhanko_certvalidator.registry import (
+    SimpleCertificateStore,
+    SimpleTrustManager,
 )
 
 from .samples import CERTOMANCER, MINIMAL_ONE_FIELD, SAMPLE_GROUP_ATTR

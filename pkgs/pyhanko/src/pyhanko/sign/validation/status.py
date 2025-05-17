@@ -17,6 +17,7 @@ from typing import (
 )
 
 from asn1crypto import cms, core, crl, keys, x509
+
 from pyhanko_certvalidator.errors import (
     PathBuildingError,
     PathValidationError,

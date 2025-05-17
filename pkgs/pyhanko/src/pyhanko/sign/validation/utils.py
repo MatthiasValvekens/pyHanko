@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
 from cryptography.hazmat.primitives.asymmetric.ed448 import Ed448PublicKey
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsageConstraint,
     AlgorithmUsagePolicy,

@@ -3,15 +3,6 @@ import os
 from io import BytesIO
 
 import pytest
-from tests.samples import (
-    MINIMAL,
-    MINIMAL_AES256,
-    MINIMAL_TWO_FIELDS_TAGGED,
-    MINIMAL_XREF,
-    PDF_DATA_DIR,
-)
-from tests.test_utils import NONEXISTENT_XREF_PATH
-
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -23,6 +14,14 @@ from pyhanko.pdf_utils.xref import (
     parse_xref_stream,
     read_object_header,
 )
+from tests.samples import (
+    MINIMAL,
+    MINIMAL_AES256,
+    MINIMAL_TWO_FIELDS_TAGGED,
+    MINIMAL_XREF,
+    PDF_DATA_DIR,
+)
+from tests.test_utils import NONEXISTENT_XREF_PATH
 
 
 @pytest.mark.parametrize(

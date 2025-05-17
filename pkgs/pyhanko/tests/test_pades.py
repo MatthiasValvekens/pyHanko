@@ -8,47 +8,6 @@ from asn1crypto import cms, core, tsp
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
-)
-from pyhanko_certvalidator.policy_decl import (
-    CertRevTrustPolicy,
-    RevocationCheckingPolicy,
-    RevocationCheckingRule,
-)
-from pyhanko_certvalidator.registry import SimpleCertificateStore
-from tests.samples import (
-    CERTOMANCER,
-    MINIMAL,
-    MINIMAL_ONE_FIELD,
-    MINIMAL_TWO_FIELDS,
-    PDF_DATA_DIR,
-    SAMPLE_GROUP_ATTR,
-    TESTING_CA,
-    UNRELATED_TSA,
-)
-from tests.signing_commons import (
-    DUMMY_HTTP_TS,
-    DUMMY_HTTP_TS_VARIANT,
-    DUMMY_POLICY_ID,
-    DUMMY_TS,
-    DUMMY_TS2,
-    FIXED_OCSP,
-    FROM_CA,
-    FROM_ECC_CA,
-    INTERM_CERT,
-    ROOT_CERT,
-    SIMPLE_ECC_V_CONTEXT,
-    SIMPLE_V_CONTEXT,
-    TRUST_ROOTS,
-    async_val_trusted,
-    dummy_ocsp_vc,
-    live_ac_vcs,
-    live_testing_vc,
-    val_trusted,
-)
-
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -95,6 +54,47 @@ from pyhanko.sign.validation.errors import (
     SignatureValidationError,
     ValidationInfoReadingError,
 )
+from tests.samples import (
+    CERTOMANCER,
+    MINIMAL,
+    MINIMAL_ONE_FIELD,
+    MINIMAL_TWO_FIELDS,
+    PDF_DATA_DIR,
+    SAMPLE_GROUP_ATTR,
+    TESTING_CA,
+    UNRELATED_TSA,
+)
+from tests.signing_commons import (
+    DUMMY_HTTP_TS,
+    DUMMY_HTTP_TS_VARIANT,
+    DUMMY_POLICY_ID,
+    DUMMY_TS,
+    DUMMY_TS2,
+    FIXED_OCSP,
+    FROM_CA,
+    FROM_ECC_CA,
+    INTERM_CERT,
+    ROOT_CERT,
+    SIMPLE_ECC_V_CONTEXT,
+    SIMPLE_V_CONTEXT,
+    TRUST_ROOTS,
+    async_val_trusted,
+    dummy_ocsp_vc,
+    live_ac_vcs,
+    live_testing_vc,
+    val_trusted,
+)
+
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.fetchers.requests_fetchers import (
+    RequestsFetcherBackend,
+)
+from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
+    RevocationCheckingPolicy,
+    RevocationCheckingRule,
+)
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from .samples import MINIMAL_SLIGHTLY_BROKEN
 

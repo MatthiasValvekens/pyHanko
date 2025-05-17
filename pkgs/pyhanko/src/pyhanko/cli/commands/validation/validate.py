@@ -3,10 +3,8 @@ import getpass
 from datetime import datetime
 
 import click
-from asn1crypto import cms, pem
-from pyhanko_certvalidator import ValidationContext
-
 import pyhanko.sign
+from asn1crypto import cms, pem
 from pyhanko.cli._trust import (
     _get_key_usage_settings,
     _prepare_vc,
@@ -22,6 +20,8 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import validation
 from pyhanko.sign.validation import RevocationInfoValidationType
 from pyhanko.sign.validation.errors import SignatureValidationError
+
+from pyhanko_certvalidator import ValidationContext
 
 __all__ = ['validate_signatures']
 

@@ -3,7 +3,6 @@ import logging
 from typing import Iterable, Optional
 
 import click
-
 from pyhanko import __version__
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli.config import CLIRootConfig, parse_cli_config

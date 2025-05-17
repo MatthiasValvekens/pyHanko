@@ -19,7 +19,8 @@ Changes = "https://pyhanko.readthedocs.io/en/latest/changelog.html"
 "Issue Tracker" = "https://github.com/MatthiasValvekens/pyHanko/issues"
 
 [tool.mypy]
-files = "pkgs/pyhanko/src"
+files = "pkgs/pyhanko/src,pkgs/pyhanko-certvalidator/src"
+exclude = ".*tests.*"
 
 [[tool.mypy.overrides]]
 module = [
@@ -32,6 +33,7 @@ module = [
     "fontTools.*",
     "qrcode.*",
     "defusedxml.*",
+    "oscrypto.*",
 ]
 ignore_missing_imports = true
 
@@ -41,6 +43,7 @@ default-groups = "all"
 
 [dependency-groups]
 mypy = [
+    "mypy",
     "types-requests",
     "types-python-dateutil",
     "types-PyYAML",
@@ -54,3 +57,4 @@ members = ["pkgs/*"]
 
 [tool.uv.sources]
 pyhanko = { workspace = true }
+pyhanko-certvalidator = { workspace = true }

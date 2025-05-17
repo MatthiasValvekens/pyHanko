@@ -20,9 +20,6 @@ import pytest
 from asn1crypto import core
 from certomancer.integrations.illusionist import Illusionist
 from freezegun import freeze_time
-from pyhanko_certvalidator import ValidationContext
-from requests_mock import Mocker
-
 from pyhanko.pdf_utils import generic, writer
 from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler,
@@ -49,6 +46,9 @@ from pyhanko.sign.validation import (
     validate_pdf_ltv_signature,
 )
 from pyhanko.sign.validation.errors import DisallowedAlgorithmError
+from requests_mock import Mocker
+
+from pyhanko_certvalidator import ValidationContext
 
 from .samples import *
 from .signing_commons import (

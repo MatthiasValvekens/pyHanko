@@ -5,15 +5,6 @@ import pytest
 from cryptography import x509 as pyca_x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
-from tests.cli_tests.conftest import INPUT_PATH, _const
-from tests.samples import (
-    MINIMAL,
-    MINIMAL_AES256,
-    MINIMAL_PUBKEY_AES256,
-    PUBKEY_SELFSIGNED_DECRYPTER,
-    PUBKEY_TEST_DECRYPTER,
-)
-
 from pyhanko.cli import cli_root
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.crypt import (
@@ -24,6 +15,14 @@ from pyhanko.pdf_utils.crypt import (
 from pyhanko.pdf_utils.crypt.permissions import PubKeyPermissions
 from pyhanko.pdf_utils.crypt.pubkey import RecipientEncryptionPolicy
 from pyhanko.pdf_utils.reader import PdfFileReader
+from tests.cli_tests.conftest import INPUT_PATH, _const
+from tests.samples import (
+    MINIMAL,
+    MINIMAL_AES256,
+    MINIMAL_PUBKEY_AES256,
+    PUBKEY_SELFSIGNED_DECRYPTER,
+    PUBKEY_TEST_DECRYPTER,
+)
 
 
 def _test_password(fname, password, expected_status=AuthStatus.OWNER):

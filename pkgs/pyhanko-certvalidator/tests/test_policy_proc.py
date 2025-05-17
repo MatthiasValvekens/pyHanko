@@ -1,6 +1,7 @@
 import pytest
 from asn1crypto import x509
 from freezegun import freeze_time
+from tests.common import load_nist_cert
 
 from pyhanko_certvalidator.authority import (
     CertTrustAnchor,
@@ -17,7 +18,6 @@ from pyhanko_certvalidator.name_trees import (
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import PKIXValidationParams
 from pyhanko_certvalidator.validate import async_validate_path
-from tests.common import load_nist_cert
 
 
 def test_extract_policy():

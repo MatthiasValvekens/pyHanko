@@ -1,7 +1,6 @@
 from typing import Optional
 
 import click
-
 from pyhanko.cli._root import cli_root
 from pyhanko.cli.config import CLIConfig
 from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE, pyhanko_exception_manager

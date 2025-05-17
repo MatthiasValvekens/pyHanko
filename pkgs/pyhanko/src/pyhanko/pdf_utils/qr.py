@@ -3,10 +3,9 @@ import math
 from typing import List, Optional
 
 import qrcode.util
-from qrcode.image.base import BaseImage
-
 from pyhanko.pdf_utils.content import PdfContent
 from pyhanko.pdf_utils.misc import rd
+from qrcode.image.base import BaseImage
 
 
 class PdfStreamQRImage(BaseImage):

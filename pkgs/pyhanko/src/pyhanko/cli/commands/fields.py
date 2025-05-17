@@ -1,5 +1,4 @@
 import click
-
 from pyhanko.cli.commands.signing import signing
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import parse_field_location_spec

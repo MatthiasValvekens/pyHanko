@@ -21,6 +21,19 @@ from typing import (
 from asn1crypto import algos, cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
+from pyhanko.sign.general import (
+    CMSExtractionError,
+    CMSStructuralError,
+    MultivaluedAttributeError,
+    NonexistentAttributeError,
+    SignedDataCerts,
+    check_ess_certid,
+    extract_certificate_info,
+    extract_signer_info,
+    find_unique_cms_attribute,
+    get_pyca_cryptography_hash,
+)
+
 from pyhanko_certvalidator import (
     CancelableAsyncIterator,
     ValidationContext,
@@ -40,19 +53,6 @@ from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import PKIXValidationParams
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
-
-from pyhanko.sign.general import (
-    CMSExtractionError,
-    CMSStructuralError,
-    MultivaluedAttributeError,
-    NonexistentAttributeError,
-    SignedDataCerts,
-    check_ess_certid,
-    extract_certificate_info,
-    extract_signer_info,
-    find_unique_cms_attribute,
-    get_pyca_cryptography_hash,
-)
 
 from ...pdf_utils import misc
 from ...pdf_utils.misc import lift_iterable_async

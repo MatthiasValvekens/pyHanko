@@ -4,17 +4,13 @@ import os
 from datetime import datetime
 from io import BytesIO
 
+import pyhanko.pdf_utils.content
+import pyhanko.sign.fields
 import pytest
 from asn1crypto.algos import SignedDigestAlgorithm
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
-from pyhanko_certvalidator import CertificateValidator, ValidationContext
-from pyhanko_certvalidator.errors import PathValidationError
-from pyhanko_certvalidator.registry import SimpleCertificateStore
-
-import pyhanko.pdf_utils.content
-import pyhanko.sign.fields
 from pyhanko import stamp
 from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
 from pyhanko.pdf_utils import embed, generic, layout
@@ -52,6 +48,10 @@ from pyhanko.sign.validation import (
 )
 from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.stamp import QRStampStyle
+
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.errors import PathValidationError
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from .samples import *
 from .signing_commons import (

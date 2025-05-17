@@ -4,7 +4,6 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
-
 from pyhanko.pdf_utils import generic, layout, writer
 from pyhanko.pdf_utils.content import ImportedPdfPage, RawContent
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory

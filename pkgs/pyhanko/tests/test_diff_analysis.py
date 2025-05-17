@@ -5,22 +5,6 @@ from itertools import product
 
 import pytest
 from freezegun.api import freeze_time
-from tests.samples import *
-from tests.samples import MINIMAL, PDF_DATA_DIR
-from tests.signing_commons import (
-    DUMMY_TS,
-    FROM_CA,
-    FROM_ECC_CA,
-    NOTRUST_V_CONTEXT,
-    SELF_SIGN,
-    SIMPLE_V_CONTEXT,
-    live_testing_vc,
-    val_trusted,
-    val_trusted_but_modified,
-    val_untrusted,
-)
-from tests.test_pades import PADES
-
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name
@@ -56,6 +40,21 @@ from pyhanko.sign.validation import (
     validate_pdf_signature,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
+from tests.samples import *
+from tests.samples import MINIMAL, PDF_DATA_DIR
+from tests.signing_commons import (
+    DUMMY_TS,
+    FROM_CA,
+    FROM_ECC_CA,
+    NOTRUST_V_CONTEXT,
+    SELF_SIGN,
+    SIMPLE_V_CONTEXT,
+    live_testing_vc,
+    val_trusted,
+    val_trusted_but_modified,
+    val_untrusted,
+)
+from tests.test_pades import PADES
 
 
 @freeze_time('2020-11-01')

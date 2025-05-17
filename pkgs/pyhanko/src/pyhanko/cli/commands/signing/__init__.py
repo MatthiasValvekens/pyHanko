@@ -1,8 +1,6 @@
 from typing import List, Optional
 
 import click
-from pyhanko_certvalidator import ValidationContext
-
 from pyhanko import __version__
 from pyhanko.cli._root import cli_root
 from pyhanko.cli._trust import (
@@ -17,6 +15,8 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import DEFAULT_SIGNER_KEY_USAGE, fields, signers
 from pyhanko.sign.signers.pdf_byterange import BuildProps
 from pyhanko.sign.timestamps import HTTPTimeStamper
+
+from pyhanko_certvalidator import ValidationContext
 
 from ..._ctx import CLIContext
 from ...plugin_api import SigningCommandPlugin

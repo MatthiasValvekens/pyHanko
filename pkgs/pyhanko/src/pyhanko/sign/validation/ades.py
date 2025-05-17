@@ -39,35 +39,6 @@ from asn1crypto import pdf as asn1_pdf
 from asn1crypto import tsp, x509
 from asn1crypto.crl import CertificateList
 from asn1crypto.ocsp import OCSPResponse
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.authority import CertTrustAnchor, TrustAnchor
-from pyhanko_certvalidator.context import (
-    CertValidationPolicySpec,
-    ValidationDataHandlers,
-)
-from pyhanko_certvalidator.errors import PathError
-from pyhanko_certvalidator.ltv.ades_past import past_validate
-from pyhanko_certvalidator.ltv.poe import (
-    KnownPOE,
-    POEManager,
-    POEType,
-    ValidationObject,
-    ValidationObjectType,
-    digest_for_poe,
-)
-from pyhanko_certvalidator.ltv.time_slide import ades_gather_prima_facie_revinfo
-from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
-from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.policy_decl import (
-    AlgorithmUsagePolicy,
-    NonRevokedStatusAssertion,
-    RevocationCheckingRule,
-)
-from pyhanko_certvalidator.registry import PathBuilder, TrustManager
-from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
-from pyhanko_certvalidator.revinfo.validate_crl import CRLOfInterest
-from pyhanko_certvalidator.revinfo.validate_ocsp import OCSPResponseOfInterest
-
 from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.sign.ades.report import (
     AdESFailure,
@@ -102,6 +73,35 @@ from pyhanko.sign.validation.status import (
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
 )
+
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.authority import CertTrustAnchor, TrustAnchor
+from pyhanko_certvalidator.context import (
+    CertValidationPolicySpec,
+    ValidationDataHandlers,
+)
+from pyhanko_certvalidator.errors import PathError
+from pyhanko_certvalidator.ltv.ades_past import past_validate
+from pyhanko_certvalidator.ltv.poe import (
+    KnownPOE,
+    POEManager,
+    POEType,
+    ValidationObject,
+    ValidationObjectType,
+    digest_for_poe,
+)
+from pyhanko_certvalidator.ltv.time_slide import ades_gather_prima_facie_revinfo
+from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
+from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsagePolicy,
+    NonRevokedStatusAssertion,
+    RevocationCheckingRule,
+)
+from pyhanko_certvalidator.registry import PathBuilder, TrustManager
+from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
+from pyhanko_certvalidator.revinfo.validate_crl import CRLOfInterest
+from pyhanko_certvalidator.revinfo.validate_ocsp import OCSPResponseOfInterest
 
 from ..diff_analysis import DiffPolicy
 from .dss import enumerate_ocsp_certs

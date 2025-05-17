@@ -16,7 +16,6 @@ from xml.etree import ElementTree
 import tzlocal
 from defusedxml.ElementTree import XMLParser as DefusedXMLParser
 from defusedxml.ElementTree import parse as defused_parse
-
 from pyhanko.pdf_utils import generic, misc
 
 from ..crypt.api import SecurityHandler

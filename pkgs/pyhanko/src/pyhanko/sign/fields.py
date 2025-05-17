@@ -9,10 +9,6 @@ from typing import List, Optional, Set, Tuple, Union
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
-from pyhanko_certvalidator.authority import AuthorityWithCert
-from pyhanko_certvalidator.errors import InvalidCertificateError
-from pyhanko_certvalidator.path import ValidationPath
-
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
@@ -28,6 +24,10 @@ from pyhanko.pdf_utils.misc import (
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.general import SigningError, UnacceptableSignerError
+
+from pyhanko_certvalidator.authority import AuthorityWithCert
+from pyhanko_certvalidator.errors import InvalidCertificateError
+from pyhanko_certvalidator.path import ValidationPath
 
 __all__ = [
     'SigFieldSpec',

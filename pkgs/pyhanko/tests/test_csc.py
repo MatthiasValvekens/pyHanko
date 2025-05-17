@@ -9,12 +9,11 @@ from asn1crypto import algos
 from certomancer.registry import CertLabel
 from csc_dummy.csc_dummy_server import CSCWithCertomancer, DummyServiceParams
 from freezegun import freeze_time
-from tests.csc_utils.csc_dummy_client import CSCDummyClientAuthManager
-from tests.samples import CERTOMANCER, TESTING_CA
-
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import csc_signer
 from pyhanko.sign.validation.utils import validate_raw
+from tests.csc_utils.csc_dummy_client import CSCDummyClientAuthManager
+from tests.samples import CERTOMANCER, TESTING_CA
 
 SIGNER_B64 = """
 MIIEMDCCAxigAwIBAgICEAEwDQYJKoZIhvcNAQELBQAwWTELMAkGA1UEBhMCQkUxFDASBgNVBAoM

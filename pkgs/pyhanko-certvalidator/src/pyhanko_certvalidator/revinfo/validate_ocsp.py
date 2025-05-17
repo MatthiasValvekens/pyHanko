@@ -7,7 +7,6 @@ from asn1crypto import cms, crl, x509
 from asn1crypto.crl import CRLReason
 from asn1crypto.keys import PublicKeyInfo
 from cryptography.exceptions import InvalidSignature
-
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.authority import (
     Authority,

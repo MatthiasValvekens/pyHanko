@@ -16,11 +16,6 @@ from asn1crypto import algos, cms, crl, keys, ocsp
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto.core import VOID
 from cryptography.hazmat.primitives import hashes
-from pyhanko_certvalidator import CertificateValidator, ValidationContext
-from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
-from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
-
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt import pdfmac
 from pyhanko.pdf_utils.generic import pdf_name
@@ -50,6 +45,11 @@ from pyhanko.sign.general import (
 )
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.stamp import BaseStampStyle
+
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
+from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from . import constants
 from .cms_embedder import (

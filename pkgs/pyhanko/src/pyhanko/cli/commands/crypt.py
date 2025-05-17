@@ -1,7 +1,6 @@
 import getpass
 
 import click
-
 from pyhanko.cli._root import cli_root
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import _warn_empty_passphrase, readable_file

@@ -17,7 +17,6 @@ from typing import List, Optional, Tuple
 
 import qrcode
 import tzlocal
-
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils import content, generic, layout
@@ -108,7 +107,6 @@ def _get_background_content(bg_spec) -> content.PdfContent:
         return content.ImportedPdfPage(bg_spec)
     else:
         from PIL import Image
-
         from pyhanko.pdf_utils.images import PdfImage
 
         img = Image.open(bg_spec)

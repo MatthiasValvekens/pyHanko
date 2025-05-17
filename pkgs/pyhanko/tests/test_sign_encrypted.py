@@ -2,6 +2,16 @@ from io import BytesIO
 
 import pytest
 from freezegun import freeze_time
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.writer import copy_into_new_writer
+from pyhanko.sign import signers
+from pyhanko.sign.diff_analysis import ModificationLevel
+from pyhanko.sign.signers.pdf_signer import (
+    DSSContentSettings,
+    SigDSSPlacementPreference,
+)
+from pyhanko.sign.validation import validate_pdf_signature
 from tests.samples import (
     MINIMAL_AES256,
     MINIMAL_ONE_FIELD_AES256,
@@ -20,17 +30,6 @@ from tests.signing_commons import (
     val_trusted,
 )
 from tests.test_pades import PADES
-
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.pdf_utils.writer import copy_into_new_writer
-from pyhanko.sign import signers
-from pyhanko.sign.diff_analysis import ModificationLevel
-from pyhanko.sign.signers.pdf_signer import (
-    DSSContentSettings,
-    SigDSSPlacementPreference,
-)
-from pyhanko.sign.validation import validate_pdf_signature
 
 sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
 sign_crypt_aes256_files = (MINIMAL_AES256, MINIMAL_ONE_FIELD_AES256)

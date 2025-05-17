@@ -93,13 +93,13 @@ from typing import Any, Dict, FrozenSet, List, Optional
 import tzlocal
 from asn1crypto import algos, x509
 from cryptography.hazmat.primitives import hashes
+from pyhanko.sign import Signer
+from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
+
 from pyhanko_certvalidator.registry import (
     CertificateStore,
     SimpleCertificateStore,
 )
-
-from pyhanko.sign import Signer
-from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 
 try:
     import aiohttp

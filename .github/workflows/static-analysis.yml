@@ -11,16 +11,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - run: pip install --upgrade pip isort black
       - name: Check import order
-        run: isort --profile black --line-length 80 --check pkgs
+        run: isort --profile black --line-length 80 --check --src pkgs/*/src pkgs/*/tests
       - name: Run Black
         run: black -S --line-length 80 --check pkgs
   mypy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jpetrucciani/mypy-check@0.991
+      - uses: actions/setup-python@v5
         with:
-          path: pyhanko
-          requirements: "-e .[mypy] --config-settings editable_mode=strict"
+          python-version: "3.13"
+      - run: pip install --upgrade uv
+      - run: uv sync --all-packages --group mypy
+      - run: uv run mypy

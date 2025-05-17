@@ -6,20 +6,6 @@ from typing import Optional
 import pytest
 from asn1crypto import cms, x509
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
-from tests.samples import (
-    CERTOMANCER,
-    MINIMAL,
-    MINIMAL_AES256,
-    MINIMAL_ONE_FIELD,
-    MINIMAL_ONE_FIELD_AES256,
-    PDF_DATA_DIR,
-    PUBKEY_SELFSIGNED_DECRYPTER,
-    PUBKEY_TEST_DECRYPTER,
-    PUBKEY_TEST_DECRYPTER_OLD,
-    TESTING_CA_DIR,
-    VECTOR_IMAGE_PDF,
-)
-
 from pyhanko.keys import load_cert_from_pemder
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.crypt import (
@@ -52,6 +38,19 @@ from pyhanko.pdf_utils.crypt.standard import StandardAESGCMCryptFilter
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
+from tests.samples import (
+    CERTOMANCER,
+    MINIMAL,
+    MINIMAL_AES256,
+    MINIMAL_ONE_FIELD,
+    MINIMAL_ONE_FIELD_AES256,
+    PDF_DATA_DIR,
+    PUBKEY_SELFSIGNED_DECRYPTER,
+    PUBKEY_TEST_DECRYPTER,
+    PUBKEY_TEST_DECRYPTER_OLD,
+    TESTING_CA_DIR,
+    VECTOR_IMAGE_PDF,
+)
 
 STD_PERMS = (
     ~StandardPermissions.ALLOW_MODIFICATION_GENERIC

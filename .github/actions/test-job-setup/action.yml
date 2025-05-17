@@ -1,10 +1,5 @@
 name: "Test job setup"
-description: "Install dependencies and run init logic for pyHanko tests"
-inputs:
-  dependency-group:
-    description: pyHanko dependency group to install
-    required: true
-    default: "testing"
+description: "Init logic for pyHanko tests"
 runs:
   using: "composite"
   steps:
@@ -13,26 +8,6 @@ runs:
       # we remove setup-python's problem matchers because
       # they aren't really an asset given the way pyHanko is tested
       run: echo "::remove-matcher owner=python::"
-    - name: Install uv
+    - name: Install build deps
       shell: bash
       run: pip install --upgrade uv && uv venv
-      env:
-        DEPGRP: ${{ inputs.dependency-group }}
-    - name: Install Python dependencies
-      shell: bash
-      run: uv pip install --upgrade setuptools && uv pip --directory pkgs/pyhanko install --group testing-basic --group $DEPGRP
-      env:
-        DEPGRP: ${{ inputs.dependency-group }}
-    - name: Install system dependencies
-      if: ${{ inputs.dependency-group == 'testing' }}
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install poppler-utils imagemagick softhsm2
-    - name: Initialise SoftHSM tokens
-      if: ${{ inputs.dependency-group == 'testing' }}
-      shell: bash
-      run: |
-        mkdir softhsm_tokens
-        echo "directories.tokendir = $(pwd)/softhsm_tokens" > $SOFTHSM2_CONF
-        ./pkgs/pyhanko/tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh

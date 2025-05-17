@@ -6,8 +6,6 @@ from io import BytesIO
 import pytest
 import tzlocal
 from freezegun import freeze_time
-from tests.samples import MINIMAL, PDF_DATA_DIR, VECTOR_IMAGE_PDF
-
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import EncryptedObjAccess
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -15,6 +13,7 @@ from pyhanko.pdf_utils.metadata import model, xmp_xml
 from pyhanko.pdf_utils.misc import StringWithLanguage
 from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
+from tests.samples import MINIMAL, PDF_DATA_DIR, VECTOR_IMAGE_PDF
 
 try:
     import zoneinfo

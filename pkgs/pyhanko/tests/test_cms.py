@@ -18,47 +18,6 @@ from asn1crypto.algos import (
 from certomancer import PKIArchitecture
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.policy_decl import (
-    AlgorithmUsageConstraint,
-    DisallowWeakAlgorithmsPolicy,
-)
-from pyhanko_certvalidator.registry import SimpleCertificateStore
-from tests.samples import (
-    CERTOMANCER,
-    CRYPTO_DATA_DIR,
-    MINIMAL,
-    PDF_DATA_DIR,
-    SAMPLE_GROUP_ATTR,
-    TESTING_CA,
-    TESTING_CA_DSA,
-    TESTING_CA_ECDSA,
-    TESTING_CA_ED448,
-    TESTING_CA_ED25519,
-    TESTING_CA_ERRORS,
-)
-from tests.signing_commons import (
-    DSA_INTERM_CERT,
-    DSA_ROOT_CERT,
-    DUMMY_TS,
-    ECC_INTERM_CERT,
-    ECC_ROOT_CERT,
-    FIXED_OCSP,
-    FROM_CA,
-    FROM_DSA_CA,
-    FROM_ECC_CA,
-    INTERM_CERT,
-    ROOT_CERT,
-    SIMPLE_DSA_V_CONTEXT,
-    SIMPLE_ECC_V_CONTEXT,
-    SIMPLE_V_CONTEXT,
-    async_val_trusted,
-    live_ac_vcs,
-    live_testing_vc,
-    val_trusted,
-    val_untrusted,
-)
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import attributes, fields, signers, timestamps
@@ -101,6 +60,47 @@ from pyhanko.sign.validation.errors import (
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 from pyhanko.sign.validation.status import ClaimedAttributes
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
+from tests.samples import (
+    CERTOMANCER,
+    CRYPTO_DATA_DIR,
+    MINIMAL,
+    PDF_DATA_DIR,
+    SAMPLE_GROUP_ATTR,
+    TESTING_CA,
+    TESTING_CA_DSA,
+    TESTING_CA_ECDSA,
+    TESTING_CA_ED448,
+    TESTING_CA_ED25519,
+    TESTING_CA_ERRORS,
+)
+from tests.signing_commons import (
+    DSA_INTERM_CERT,
+    DSA_ROOT_CERT,
+    DUMMY_TS,
+    ECC_INTERM_CERT,
+    ECC_ROOT_CERT,
+    FIXED_OCSP,
+    FROM_CA,
+    FROM_DSA_CA,
+    FROM_ECC_CA,
+    INTERM_CERT,
+    ROOT_CERT,
+    SIMPLE_DSA_V_CONTEXT,
+    SIMPLE_ECC_V_CONTEXT,
+    SIMPLE_V_CONTEXT,
+    async_val_trusted,
+    live_ac_vcs,
+    live_testing_vc,
+    val_trusted,
+    val_untrusted,
+)
+
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsageConstraint,
+    DisallowWeakAlgorithmsPolicy,
+)
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 
 def test_generic_data_sign_legacy():
@@ -1592,6 +1592,7 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
         ),
     )
     from certomancer.integrations.illusionist import Illusionist
+
     from pyhanko_certvalidator.fetchers.requests_fetchers import (
         RequestsFetcherBackend,
     )

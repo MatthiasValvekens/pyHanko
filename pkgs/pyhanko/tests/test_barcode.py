@@ -1,17 +1,16 @@
 from io import BytesIO
 
 from freezegun import freeze_time
-from tests.layout_test_utils import (
-    compare_output,
-    with_layout_comparison,
-)
-from tests.samples import MINIMAL
-
 from pyhanko import stamp
 from pyhanko.pdf_utils import barcodes, generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
+from tests.layout_test_utils import (
+    compare_output,
+    with_layout_comparison,
+)
+from tests.samples import MINIMAL
 
 EXPECTED_OUTPUT_DIR = 'tests/data/pdf/layout-tests'
 

@@ -8,7 +8,10 @@ from asn1crypto.cms import ContentInfo
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from cryptography.hazmat.primitives import serialization
-from pyhanko_certvalidator import ValidationContext
+from pyhanko.cli import cli_root
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.sign.validation import async_validate_detached_cms
 from tests.cli_tests.conftest import (
     DUMMY_PASSPHRASE,
     INPUT_PATH,
@@ -26,10 +29,7 @@ from tests.samples import (
     TESTING_CA,
 )
 
-from pyhanko.cli import cli_root
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign.validation import async_validate_detached_cms
+from pyhanko_certvalidator import ValidationContext
 
 
 @pytest.fixture

@@ -2,7 +2,6 @@ import logging
 from typing import Optional, Tuple
 
 import click
-
 from pyhanko.sign import fields
 
 logger = logging.getLogger("cli")

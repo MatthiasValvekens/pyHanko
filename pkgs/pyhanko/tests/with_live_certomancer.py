@@ -8,13 +8,6 @@ import pytest
 from asn1crypto import x509
 from click.testing import CliRunner
 from cryptography.hazmat.primitives.serialization import pkcs12
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
-    AIOHttpFetcherBackend,
-)
-from pyhanko_certvalidator.registry import SimpleCertificateStore
-from tests.samples import MINIMAL_ONE_FIELD
-
 from pyhanko.cli import cli_root
 from pyhanko.keys import (
     _translate_pyca_cryptography_cert_to_asn1,
@@ -31,6 +24,13 @@ from pyhanko.sign.validation import (
     RevocationInfoValidationType,
     async_validate_pdf_ltv_signature,
 )
+from tests.samples import MINIMAL_ONE_FIELD
+
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
+    AIOHttpFetcherBackend,
+)
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 logger = logging.getLogger(__name__)
 

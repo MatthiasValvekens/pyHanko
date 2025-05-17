@@ -3,12 +3,10 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Iterable, Optional, Union
 
+import pyhanko.config.pkcs11
 import pytest
 import yaml
 from asn1crypto import x509
-from tests.samples import CRYPTO_DATA_DIR, TESTING_CA_DIR
-
-import pyhanko.config.pkcs11
 from pyhanko import stamp
 from pyhanko.cli import config
 from pyhanko.cli.commands.signing.pkcs11_cli import ModuleConfigWrapper
@@ -29,6 +27,7 @@ from pyhanko.sign.signers.pdf_cms import (
     signer_from_pemder_config,
 )
 from pyhanko.stamp import QRStampStyle, TextStampStyle
+from tests.samples import CRYPTO_DATA_DIR, TESTING_CA_DIR
 
 
 def _parse_cli_config(config_string):
@@ -63,10 +62,9 @@ def test_read_vc_kwargs(trust_replace):
 
 
 def test_read_qr_config():
-    from tests.test_text import NOTO_SERIF_JP
-
     from pyhanko.pdf_utils.font import SimpleFontEngineFactory
     from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
+    from tests.test_text import NOTO_SERIF_JP
 
     config_string = f"""
     stamp-styles:

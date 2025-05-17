@@ -3,7 +3,6 @@ import getpass
 from typing import ContextManager, List, Optional
 
 import click
-
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli._trust import grab_certs
 from pyhanko.cli.config import CLIConfig

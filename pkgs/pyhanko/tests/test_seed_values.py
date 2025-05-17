@@ -5,21 +5,6 @@ from asn1crypto import algos
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto import x509
 from freezegun.api import freeze_time
-from pyhanko_certvalidator import CertificateValidator
-from tests.samples import MINIMAL
-from tests.signing_commons import (
-    DUMMY_HTTP_TS,
-    DUMMY_TS,
-    FROM_CA,
-    INTERM_CERT,
-    ROOT_CERT,
-    SELF_SIGN,
-    TRUST_ROOTS,
-    dummy_ocsp_vc,
-    live_testing_vc,
-)
-from tests.test_pades import PADES, ts_response_callback
-
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -35,6 +20,21 @@ from pyhanko.sign.validation import (
     async_validate_pdf_ltv_signature,
     async_validate_pdf_signature,
 )
+from tests.samples import MINIMAL
+from tests.signing_commons import (
+    DUMMY_HTTP_TS,
+    DUMMY_TS,
+    FROM_CA,
+    INTERM_CERT,
+    ROOT_CERT,
+    SELF_SIGN,
+    TRUST_ROOTS,
+    dummy_ocsp_vc,
+    live_testing_vc,
+)
+from tests.test_pades import PADES, ts_response_callback
+
+from pyhanko_certvalidator import CertificateValidator
 
 
 def test_sv_deserialisation():

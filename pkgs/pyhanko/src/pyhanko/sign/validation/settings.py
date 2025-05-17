@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from typing import Optional, Set
 
 from asn1crypto import x509
-from pyhanko_certvalidator.errors import InvalidCertificateError
-
 from pyhanko.config.api import (
     ConfigurableMixin,
     process_bit_string_flags,
     process_oids,
 )
+
+from pyhanko_certvalidator.errors import InvalidCertificateError
 
 
 def _match_usages(required: set, present: set, need_all: bool):

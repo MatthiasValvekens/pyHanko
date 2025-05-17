@@ -10,7 +10,11 @@ from asn1crypto import pem
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
-from pyhanko_certvalidator.registry import SimpleCertificateStore
+from pyhanko.cli import cli_root
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
+from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
+from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
 from tests.cli_tests.conftest import (
     FREEZE_DT,
     INPUT_PATH,
@@ -25,11 +29,7 @@ from tests.samples import (
     TESTING_CA,
 )
 
-from pyhanko.cli import cli_root
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.writer import BasePdfFileWriter
-from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
-from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 
 def _write_input_to_validate(

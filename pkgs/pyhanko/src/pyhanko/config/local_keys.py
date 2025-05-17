@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from asn1crypto import x509
-
 from pyhanko.config import api
 from pyhanko.keys import load_certs_from_pemder
 

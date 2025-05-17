@@ -5,6 +5,10 @@ from datetime import datetime
 from typing import Generator, List, Optional
 
 from asn1crypto import x509
+from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
+from pyhanko.sign.validation import KeyUsageConstraints
+from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
+
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
@@ -27,10 +31,6 @@ from pyhanko_certvalidator.ltv.poe import (
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.policy_decl import NonRevokedStatusAssertion
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
-
-from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
-from pyhanko.sign.validation import KeyUsageConstraints
-from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
 
 __all__ = [
     'SignatureValidationSpec',

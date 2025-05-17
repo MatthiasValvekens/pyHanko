@@ -3,7 +3,6 @@ from io import BytesIO
 
 import pytest
 from PIL import Image
-
 from pyhanko.pdf_utils import generic, images
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter

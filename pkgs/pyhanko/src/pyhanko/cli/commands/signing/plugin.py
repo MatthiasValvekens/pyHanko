@@ -5,7 +5,6 @@ from typing import List, Optional
 import click
 import tzlocal
 from asn1crypto import pem
-
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli.commands.signing.utils import get_text_params, open_for_signing
 from pyhanko.cli.plugin_api import SigningCommandPlugin

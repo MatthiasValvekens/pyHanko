@@ -3,7 +3,6 @@ import sys
 from contextlib import contextmanager
 
 import click
-
 from pyhanko.cli.utils import logger
 from pyhanko.config.logging import LogConfig, StdLogOutput
 from pyhanko.pdf_utils import misc

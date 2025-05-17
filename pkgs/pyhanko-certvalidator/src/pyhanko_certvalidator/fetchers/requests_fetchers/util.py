@@ -1,7 +1,6 @@
 from typing import Awaitable
 
 import requests
-
 from pyhanko_certvalidator._asyncio_compat import to_thread
 
 from ..api import DEFAULT_USER_AGENT

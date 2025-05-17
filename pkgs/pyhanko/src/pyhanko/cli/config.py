@@ -3,14 +3,14 @@ from datetime import timedelta
 from typing import Dict, List, Optional, Type, Union
 
 import yaml
-from pyhanko_certvalidator import ValidationContext
-
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import LogConfig, parse_logging_config
 from pyhanko.config.trust import DEFAULT_TIME_TOLERANCE, parse_trust_config
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.stamp import BaseStampStyle, QRStampStyle, TextStampStyle
+
+from pyhanko_certvalidator import ValidationContext
 
 
 @dataclass

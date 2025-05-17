@@ -1,7 +1,6 @@
 import yaml
 from asn1crypto import cms
 from certomancer.registry import ArchLabel, CertomancerConfig
-
 from pyhanko.pdf_utils.crypt import SimpleEnvelopeKeyDecrypter
 
 

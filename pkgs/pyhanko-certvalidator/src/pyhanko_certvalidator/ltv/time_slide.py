@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from typing import Iterable, List, Optional, Set, Tuple
 
 from asn1crypto import algos, keys, x509
-
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.errors import (
     DisallowedAlgorithmError,
@@ -301,12 +300,16 @@ async def _time_slide(
                 once_revoked |= revoked_date is not None
 
                 crl_container = crl_of_interest.crl
-                if (
-                    most_recent_crl is None
-                    or most_recent_crl.issuance_date
-                    < crl_container.issuance_date
-                ):
+                if most_recent_crl is None:
                     most_recent_crl = crl_container
+                else:
+                    if (
+                        most_recent_crl.issuance_date
+                        and crl_container.issuance_date
+                        and most_recent_crl.issuance_date
+                        < crl_container.issuance_date
+                    ):
+                        most_recent_crl = crl_container
                 control_time = _update_control_time(
                     revoked_date,
                     control_time,
@@ -350,9 +353,9 @@ async def _time_slide(
             once_revoked |= revoked_date is not None
             ocsp_iss_cert = ocsp_of_interest.prov_path.leaf
             assert isinstance(ocsp_iss_cert, x509.Certificate)
-            if (
-                most_recent_ocsp is None
-                or most_recent_ocsp.issuance_date < issued
+            if most_recent_ocsp is None or (
+                most_recent_ocsp.issuance_date
+                and most_recent_ocsp.issuance_date < issued
             ):
                 most_recent_ocsp = ocsp_container
             control_time = _update_control_time(

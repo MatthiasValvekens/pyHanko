@@ -63,7 +63,26 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
       - uses: ./.github/actions/test-job-setup
-      - name: Test with pytest
+      - uses: ./.github/actions/uv-test-deps
+        with:
+          dependency-group: testing-base
+          package: pyhanko-certvalidator
+      - name: Test pyhanko-certvalidator with pytest
+        run: uv run --directory pkgs/pyhanko-certvalidator pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
+      - uses: ./.github/actions/uv-test-deps
+        with:
+          dependency-group: testing
+          package: pyhanko
+      - name: Install external tools for pyHanko test suite
+        run: |
+          sudo apt-get update
+          sudo apt-get install poppler-utils imagemagick softhsm2
+      - name: Initialise SoftHSM tokens
+        run: |
+          mkdir softhsm_tokens
+          echo "directories.tokendir = $(pwd)/softhsm_tokens" > $SOFTHSM2_CONF
+          ./pkgs/pyhanko/tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
+      - name: Test pyHanko with pytest
         run: uv run --directory pkgs/pyhanko pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
@@ -71,7 +90,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ strategy.job-index }}
-          path: "pkgs/pyhanko/*-coverage.xml"
+          path: "pkgs/*/*-coverage.xml"
   live-integration-tests:
     runs-on: ubuntu-latest
     needs: build
@@ -87,8 +106,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
       - uses: ./.github/actions/test-job-setup
+      - uses: ./.github/actions/uv-test-deps
         with:
           dependency-group: live-test
+          package: pyhanko
       - name: Start Certomancer Animator daemon
         run: |
           uv run certomancer --service-url-prefix http://localhost:9000 \
@@ -120,8 +141,10 @@ jobs:
         with:
           python-version: ${{ env.MAIN_PYTHON_VERSION }}
       - uses: ./.github/actions/test-job-setup
+      - uses: ./.github/actions/uv-test-deps
         with:
-          dependency-group: testing-basic
+          dependency-group: testing-base
+          package: pyhanko
       - name: Run smoke tests that should pass without optional dependencies
         # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
         # the PKCS#11 parts

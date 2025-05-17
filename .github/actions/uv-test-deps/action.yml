@@ -1,0 +1,18 @@
+name: "Test job setup"
+description: "uv test run"
+inputs:
+  package:
+    description: package to run pipeline for
+    required: true
+  dependency-group:
+    description: dependency group to install
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Install Python dependencies
+      shell: bash
+      run: uv sync --package $PKG --group $DEPGRP
+      env:
+        DEPGRP: ${{ inputs.dependency-group }}
+        PKG: ${{ inputs.package }}
