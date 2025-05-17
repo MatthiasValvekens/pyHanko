@@ -1,0 +1,3980 @@
+[
+  {
+    "id": "40101",
+    "name": "valid_signatures_test1",
+    "cert": "ValidCertificatePathTest1EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40102",
+    "name": "invalid_ca_signature_test2",
+    "cert": "InvalidCASignatureTest2EE.crt",
+    "other_certs": [
+      "BadSignedCACert.crt"
+    ],
+    "crls": [
+      "BadSignedCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the signature of intermediate certificate 1 could not be verified"
+    }
+  },
+  {
+    "id": "40103",
+    "name": "invalid_ee_signature_test3",
+    "cert": "InvalidEESignatureTest3EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the signature of the end-entity certificate could not be verified"
+    }
+  },
+  {
+    "id": "40104",
+    "name": "valid_dsa_signatures_test4",
+    "cert": "ValidDSASignaturesTest4EE.crt",
+    "other_certs": [
+      "DSACACert.crt"
+    ],
+    "crls": [
+      "DSACACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40105",
+    "name": "valid_dsa_parameter_inheritance_test5",
+    "cert": "ValidDSAParameterInheritanceTest5EE.crt",
+    "other_certs": [
+      "DSACACert.crt",
+      "DSAParametersInheritedCACert.crt"
+    ],
+    "crls": [
+      "DSAParametersInheritedCACRL.crl",
+      "DSACACRL.crl"
+    ],
+    "path_len": 4,
+    "revocation": false
+  },
+  {
+    "id": "40106",
+    "name": "invalid_dsa_signature_test6",
+    "cert": "InvalidDSASignatureTest6EE.crt",
+    "other_certs": [
+      "DSACACert.crt"
+    ],
+    "crls": [
+      "DSACACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the signature of the end-entity certificate could not be verified"
+    }
+  },
+  {
+    "id": "40201",
+    "name": "invalid_ca_notbefore_date_test1",
+    "cert": "InvalidCAnotBeforeDateTest1EE.crt",
+    "other_certs": [
+      "BadnotBeforeDateCACert.crt"
+    ],
+    "crls": [
+      "BadnotBeforeDateCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 is not valid until 2047-01-01 12:01:00Z"
+    }
+  },
+  {
+    "id": "40202",
+    "name": "invalid_ee_notbefore_date_test2",
+    "cert": "InvalidEEnotBeforeDateTest2EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the end-entity certificate is not valid until 2047-01-01 12:01:00Z"
+    }
+  },
+  {
+    "id": "40203",
+    "name": "valid_pre2000_utc_notbefore_date_test3",
+    "cert": "Validpre2000UTCnotBeforeDateTest3EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40204",
+    "name": "valid_generalizedtime_notbefore_date_test4",
+    "cert": "ValidGeneralizedTimenotBeforeDateTest4EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40205",
+    "name": "invalid_ca_notafter_date_test5",
+    "cert": "InvalidCAnotAfterDateTest5EE.crt",
+    "other_certs": [
+      "BadnotAfterDateCACert.crt"
+    ],
+    "crls": [
+      "BadnotAfterDateCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 expired 2011-01-01 08:30:00Z"
+    }
+  },
+  {
+    "id": "40206",
+    "name": "invalid_ee_notafter_date_test6",
+    "cert": "InvalidEEnotAfterDateTest6EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the end-entity certificate expired 2011-01-01 08:30:00Z"
+    }
+  },
+  {
+    "id": "40207",
+    "name": "invalid_pre2000_utc_ee_notafter_date_test7",
+    "cert": "Invalidpre2000UTCEEnotAfterDateTest7EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the end-entity certificate expired 1999-01-01 12:01:00Z"
+    }
+  },
+  {
+    "id": "40208",
+    "name": "valid_generalizedtime_notbefore_date_test8",
+    "cert": "ValidGeneralizedTimenotAfterDateTest8EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40301",
+    "name": "invalid_name_chaining_ee_test1",
+    "cert": "InvalidNameChainingTest1EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "path_intermediates": [
+      "GoodCACert.crt"
+    ],
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the end-entity certificate issuer name could not be matched"
+    }
+  },
+  {
+    "id": "40302",
+    "name": "invalid_name_chaining_order_test2",
+    "cert": "InvalidNameChainingOrderTest2EE.crt",
+    "other_certs": [
+      "NameOrderingCACert.crt"
+    ],
+    "crls": [
+      "NameOrderCACRL.crl"
+    ],
+    "path_len": 3,
+    "path_intermediates": [
+      "NameOrderingCACert.crt"
+    ],
+    "revocation": false,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the end-entity certificate issuer name could not be matched"
+    }
+  },
+  {
+    "id": "40303",
+    "name": "valid_name_chaining_whitespace_test3",
+    "cert": "ValidNameChainingWhitespaceTest3EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40304",
+    "name": "valid_name_chaining_whitespace_test4",
+    "cert": "ValidNameChainingWhitespaceTest4EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40305",
+    "name": "valid_name_chaining_capitalization_test5",
+    "cert": "ValidNameChainingCapitalizationTest5EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40306",
+    "name": "valid_name_chaining_uids_test6",
+    "cert": "ValidNameUIDsTest6EE.crt",
+    "other_certs": [
+      "UIDCACert.crt"
+    ],
+    "crls": [
+      "UIDCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40307",
+    "name": "valid_rfc3280_mandatory_attribute_types_test7",
+    "cert": "ValidRFC3280MandatoryAttributeTypesTest7EE.crt",
+    "other_certs": [
+      "RFC3280MandatoryAttributeTypesCACert.crt"
+    ],
+    "crls": [
+      "RFC3280MandatoryAttributeTypesCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40308",
+    "name": "valid_rfc3280_optional_attribute_types_test8",
+    "cert": "ValidRFC3280OptionalAttributeTypesTest8EE.crt",
+    "other_certs": [
+      "RFC3280OptionalAttributeTypesCACert.crt"
+    ],
+    "crls": [
+      "RFC3280OptionalAttributeTypesCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40309",
+    "name": "valid_utf8string_encoded_names_test9",
+    "cert": "ValidUTF8StringEncodedNamesTest9EE.crt",
+    "other_certs": [
+      "UTF8StringEncodedNamesCACert.crt"
+    ],
+    "crls": [
+      "UTF8StringEncodedNamesCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40310",
+    "name": "valid_rollover_from_printablestring_to_utf8string_test10",
+    "cert": "ValidRolloverfromPrintableStringtoUTF8StringTest10EE.crt",
+    "other_certs": [
+      "RolloverfromPrintableStringtoUTF8StringCACert.crt"
+    ],
+    "crls": [
+      "RolloverfromPrintableStringtoUTF8StringCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40311",
+    "name": "valid_utf8string_case_insensitive_match_test11",
+    "cert": "ValidUTF8StringCaseInsensitiveMatchTest11EE.crt",
+    "other_certs": [
+      "UTF8StringCaseInsensitiveMatchCACert.crt"
+    ],
+    "crls": [
+      "UTF8StringCaseInsensitiveMatchCACRL.crl"
+    ],
+    "path_len": 3,
+    "revocation": false
+  },
+  {
+    "id": "40401",
+    "name": "missing_crl_test1",
+    "cert": "InvalidMissingCRLTest1EE.crt",
+    "other_certs": [
+      "NoCRLCACert.crt"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40402",
+    "name": "invalid_revoked_ca_test2",
+    "cert": "InvalidRevokedCATest2EE.crt",
+    "other_certs": [
+      "RevokedsubCACert.crt",
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl",
+      "RevokedsubCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates intermediate certificate 2 was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40403",
+    "name": "invalid_revoked_ee_test3",
+    "cert": "InvalidRevokedEETest3EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:01 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40404",
+    "name": "invalid_bad_crl_signature_test4",
+    "cert": "InvalidBadCRLSignatureTest4EE.crt",
+    "other_certs": [
+      "BadCRLSignatureCACert.crt"
+    ],
+    "crls": [
+      "BadCRLSignatureCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL signature could not be verified"
+    }
+  },
+  {
+    "id": "40405",
+    "name": "invalid_bad_crl_issuer_name_test5",
+    "cert": "InvalidBadCRLIssuerNameTest5EE.crt",
+    "other_certs": [
+      "BadCRLIssuerNameCACert.crt"
+    ],
+    "crls": [
+      "BadCRLIssuerNameCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40406",
+    "name": "invalid_wrong_crl_test6",
+    "cert": "InvalidWrongCRLTest6EE.crt",
+    "other_certs": [
+      "WrongCRLCACert.crt"
+    ],
+    "crls": [
+      "WrongCRLCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40407",
+    "name": "valid_two_crls_test7",
+    "cert": "ValidTwoCRLsTest7EE.crt",
+    "other_certs": [
+      "TwoCRLsCACert.crt"
+    ],
+    "crls": [
+      "TwoCRLsCAGoodCRL.crl",
+      "TwoCRLsCABadCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40408",
+    "name": "invalid_unknown_crl_entry_extension_test8",
+    "cert": "InvalidUnknownCRLEntryExtensionTest8EE.crt",
+    "other_certs": [
+      "UnknownCRLEntryExtensionCACert.crt"
+    ],
+    "crls": [
+      "UnknownCRLEntryExtensionCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: One or more unrecognized critical extensions are present in the CRL entry for the certificate"
+    }
+  },
+  {
+    "id": "40409",
+    "name": "invalid_unknown_crl_extension_test9",
+    "cert": "InvalidUnknownCRLExtensionTest9EE.crt",
+    "other_certs": [
+      "UnknownCRLExtensionCACert.crt"
+    ],
+    "crls": [
+      "UnknownCRLExtensionCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: One or more unrecognized critical extensions are present in the CRL"
+    }
+  },
+  {
+    "id": "40410",
+    "name": "invalid_unknown_crl_extension_test10",
+    "cert": "InvalidUnknownCRLExtensionTest10EE.crt",
+    "other_certs": [
+      "UnknownCRLExtensionCACert.crt"
+    ],
+    "crls": [
+      "UnknownCRLExtensionCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: One or more unrecognized critical extensions are present in the CRL"
+    }
+  },
+  {
+    "id": "40411",
+    "name": "invalid_old_crl_nextupdate_test11",
+    "cert": "InvalidOldCRLnextUpdateTest11EE.crt",
+    "other_certs": [
+      "OldCRLnextUpdateCACert.crt"
+    ],
+    "crls": [
+      "OldCRLnextUpdateCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "StaleRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL is not recent enough"
+    }
+  },
+  {
+    "id": "40412",
+    "name": "invalid_pre2000_crl_nextupdate_test12",
+    "cert": "Invalidpre2000CRLnextUpdateTest12EE.crt",
+    "other_certs": [
+      "pre2000CRLnextUpdateCACert.crt"
+    ],
+    "crls": [
+      "pre2000CRLnextUpdateCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "StaleRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL is not recent enough"
+    }
+  },
+  {
+    "id": "40413",
+    "name": "valid_generalizedtime_crl_nextupdate_test13",
+    "cert": "ValidGeneralizedTimeCRLnextUpdateTest13EE.crt",
+    "other_certs": [
+      "GeneralizedTimeCRLnextUpdateCACert.crt"
+    ],
+    "crls": [
+      "GeneralizedTimeCRLnextUpdateCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40414",
+    "name": "valid_negative_serial_number_test14",
+    "cert": "ValidNegativeSerialNumberTest14EE.crt",
+    "other_certs": [
+      "NegativeSerialNumberCACert.crt"
+    ],
+    "crls": [
+      "NegativeSerialNumberCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40415",
+    "name": "invalid_negative_serial_number_test15",
+    "cert": "InvalidNegativeSerialNumberTest15EE.crt",
+    "other_certs": [
+      "NegativeSerialNumberCACert.crt"
+    ],
+    "crls": [
+      "NegativeSerialNumberCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40416",
+    "name": "valid_long_serial_number_test16",
+    "cert": "ValidLongSerialNumberTest16EE.crt",
+    "other_certs": [
+      "LongSerialNumberCACert.crt"
+    ],
+    "crls": [
+      "LongSerialNumberCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40417",
+    "name": "valid_long_serial_number_test17",
+    "cert": "ValidLongSerialNumberTest17EE.crt",
+    "other_certs": [
+      "LongSerialNumberCACert.crt"
+    ],
+    "crls": [
+      "LongSerialNumberCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40418",
+    "name": "invalid_long_serial_number_test18",
+    "cert": "InvalidLongSerialNumberTest18EE.crt",
+    "other_certs": [
+      "LongSerialNumberCACert.crt"
+    ],
+    "crls": [
+      "LongSerialNumberCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40419",
+    "name": "valid_separate_certificate_and_crl_keys_test19",
+    "cert": "ValidSeparateCertificateandCRLKeysTest19EE.crt",
+    "other_certs": [
+      "SeparateCertificateandCRLKeysCertificateSigningCACert.crt",
+      "SeparateCertificateandCRLKeysCRLSigningCert.crt"
+    ],
+    "crls": [
+      "SeparateCertificateandCRLKeysCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40420",
+    "name": "invalid_separate_certificate_and_crl_keys_test20",
+    "cert": "InvalidSeparateCertificateandCRLKeysTest20EE.crt",
+    "other_certs": [
+      "SeparateCertificateandCRLKeysCertificateSigningCACert.crt",
+      "SeparateCertificateandCRLKeysCRLSigningCert.crt"
+    ],
+    "crls": [
+      "SeparateCertificateandCRLKeysCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40421",
+    "name": "invalid_separate_certificate_and_crl_keys_test21",
+    "cert": "InvalidSeparateCertificateandCRLKeysTest21EE.crt",
+    "other_certs": [
+      "SeparateCertificateandCRLKeysCA2CertificateSigningCACert.crt",
+      "SeparateCertificateandCRLKeysCA2CRLSigningCert.crt"
+    ],
+    "crls": [
+      "SeparateCertificateandCRLKeysCA2CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: The CRL issuer certificate path could not be validated. CRL indicates the end-entity certificate CRL issuer was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40501",
+    "name": "valid_basic_self_issued_old_with_new_test1",
+    "cert": "ValidBasicSelfIssuedOldWithNewTest1EE.crt",
+    "other_certs": [
+      "BasicSelfIssuedNewKeyOldWithNewCACert.crt",
+      "BasicSelfIssuedNewKeyCACert.crt"
+    ],
+    "crls": [
+      "BasicSelfIssuedNewKeyCACRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "40502",
+    "name": "invalid_basic_self_issued_old_with_new_test2",
+    "cert": "InvalidBasicSelfIssuedOldWithNewTest2EE.crt",
+    "other_certs": [
+      "BasicSelfIssuedNewKeyOldWithNewCACert.crt",
+      "BasicSelfIssuedNewKeyCACert.crt"
+    ],
+    "crls": [
+      "BasicSelfIssuedNewKeyCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40503",
+    "name": "valid_basic_self_issued_new_with_old_test3",
+    "cert": "ValidBasicSelfIssuedNewWithOldTest3EE.crt",
+    "other_certs": [
+      "BasicSelfIssuedOldKeyCACert.crt",
+      "BasicSelfIssuedOldKeyNewWithOldCACert.crt"
+    ],
+    "crls": [
+      "BasicSelfIssuedOldKeySelfIssuedCertCRL.crl",
+      "BasicSelfIssuedOldKeyCACRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "40504",
+    "name": "valid_basic_self_issued_new_with_old_test4",
+    "cert": "ValidBasicSelfIssuedNewWithOldTest4EE.crt",
+    "other_certs": [
+      "BasicSelfIssuedOldKeyCACert.crt",
+      "BasicSelfIssuedOldKeyNewWithOldCACert.crt"
+    ],
+    "crls": [
+      "BasicSelfIssuedOldKeySelfIssuedCertCRL.crl",
+      "BasicSelfIssuedOldKeyCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40505",
+    "name": "invalid_basic_self_issued_new_with_old_test5",
+    "cert": "InvalidBasicSelfIssuedNewWithOldTest5EE.crt",
+    "other_certs": [
+      "BasicSelfIssuedOldKeyCACert.crt",
+      "BasicSelfIssuedOldKeyNewWithOldCACert.crt"
+    ],
+    "crls": [
+      "BasicSelfIssuedOldKeySelfIssuedCertCRL.crl",
+      "BasicSelfIssuedOldKeyCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40506",
+    "name": "valid_basic_self_issued_crl_signing_key_test6",
+    "cert": "ValidBasicSelfIssuedCRLSigningKeyTest6EE.crt",
+    "other_certs": [
+      "BasicSelfIssuedCRLSigningKeyCACert.crt",
+      "BasicSelfIssuedCRLSigningKeyCRLCert.crt"
+    ],
+    "crls": [
+      "BasicSelfIssuedCRLSigningKeyCRLCertCRL.crl",
+      "BasicSelfIssuedCRLSigningKeyCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40507",
+    "name": "invalid_basic_self_issued_crl_signing_key_test7",
+    "cert": "InvalidBasicSelfIssuedCRLSigningKeyTest7EE.crt",
+    "other_certs": [
+      "BasicSelfIssuedCRLSigningKeyCACert.crt",
+      "BasicSelfIssuedCRLSigningKeyCRLCert.crt"
+    ],
+    "crls": [
+      "BasicSelfIssuedCRLSigningKeyCRLCertCRL.crl",
+      "BasicSelfIssuedCRLSigningKeyCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "40508",
+    "name": "invalid_basic_self_issued_crl_signing_key_test8",
+    "cert": "InvalidBasicSelfIssuedCRLSigningKeyTest8EE.crt",
+    "other_certs": [
+      "BasicSelfIssuedCRLSigningKeyCACert.crt",
+      "BasicSelfIssuedCRLSigningKeyCRLCert.crt"
+    ],
+    "crls": [
+      "BasicSelfIssuedCRLSigningKeyCRLCertCRL.crl",
+      "BasicSelfIssuedCRLSigningKeyCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 2 is not a CA"
+    }
+  },
+  {
+    "id": "40601",
+    "name": "invalid_missing_basicconstraints_test1",
+    "cert": "InvalidMissingbasicConstraintsTest1EE.crt",
+    "other_certs": [
+      "MissingbasicConstraintsCACert.crt"
+    ],
+    "crls": [
+      "MissingbasicConstraintsCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 is not a CA"
+    }
+  },
+  {
+    "id": "40602",
+    "name": "invalid_ca_false_test2",
+    "cert": "InvalidcAFalseTest2EE.crt",
+    "other_certs": [
+      "basicConstraintsCriticalcAFalseCACert.crt"
+    ],
+    "crls": [
+      "basicConstraintsCriticalcAFalseCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 is not a CA"
+    }
+  },
+  {
+    "id": "40603",
+    "name": "invalid_ca_false_test3",
+    "cert": "InvalidcAFalseTest3EE.crt",
+    "other_certs": [
+      "basicConstraintsNotCriticalcAFalseCACert.crt"
+    ],
+    "crls": [
+      "basicConstraintsNotCriticalcAFalseCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 is not a CA"
+    }
+  },
+  {
+    "id": "40604",
+    "name": "valid_basicconstraints_not_critical_test4",
+    "cert": "ValidbasicConstraintsNotCriticalTest4EE.crt",
+    "other_certs": [
+      "basicConstraintsNotCriticalCACert.crt"
+    ],
+    "crls": [
+      "basicConstraintsNotCriticalCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40605",
+    "name": "invalid_pathlenconstraint_test5",
+    "cert": "InvalidpathLenConstraintTest5EE.crt",
+    "other_certs": [
+      "pathLenConstraint0CACert.crt",
+      "pathLenConstraint0subCACert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint0CACRL.crl",
+      "pathLenConstraint0subCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because it exceeds the maximum path length"
+    }
+  },
+  {
+    "id": "40606",
+    "name": "invalid_pathlenconstraint_test6",
+    "cert": "InvalidpathLenConstraintTest6EE.crt",
+    "other_certs": [
+      "pathLenConstraint0CACert.crt",
+      "pathLenConstraint0subCACert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint0CACRL.crl",
+      "pathLenConstraint0subCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because it exceeds the maximum path length"
+    }
+  },
+  {
+    "id": "40607",
+    "name": "valid_pathlenconstraint_test7",
+    "cert": "ValidpathLenConstraintTest7EE.crt",
+    "other_certs": [
+      "pathLenConstraint0CACert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint0CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40608",
+    "name": "valid_pathlenconstraint_test8",
+    "cert": "ValidpathLenConstraintTest8EE.crt",
+    "other_certs": [
+      "pathLenConstraint0CACert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint0CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40609",
+    "name": "invalid_pathlenconstraint_test9",
+    "cert": "InvalidpathLenConstraintTest9EE.crt",
+    "other_certs": [
+      "pathLenConstraint6CACert.crt",
+      "pathLenConstraint6subCA0Cert.crt",
+      "pathLenConstraint6subsubCA00Cert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint6CACRL.crl",
+      "pathLenConstraint6subCA0CRL.crl",
+      "pathLenConstraint6subsubCA00CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because it exceeds the maximum path length"
+    }
+  },
+  {
+    "id": "40610",
+    "name": "invalid_pathlenconstraint_test10",
+    "cert": "InvalidpathLenConstraintTest10EE.crt",
+    "other_certs": [
+      "pathLenConstraint6CACert.crt",
+      "pathLenConstraint6subCA0Cert.crt",
+      "pathLenConstraint6subsubCA00Cert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint6CACRL.crl",
+      "pathLenConstraint6subCA0CRL.crl",
+      "pathLenConstraint6subsubCA00CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because it exceeds the maximum path length"
+    }
+  },
+  {
+    "id": "40611",
+    "name": "invalid_pathlenconstraint_test11",
+    "cert": "InvalidpathLenConstraintTest11EE.crt",
+    "other_certs": [
+      "pathLenConstraint6CACert.crt",
+      "pathLenConstraint6subCA1Cert.crt",
+      "pathLenConstraint6subsubCA11Cert.crt",
+      "pathLenConstraint6subsubsubCA11XCert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint6CACRL.crl",
+      "pathLenConstraint6subCA1CRL.crl",
+      "pathLenConstraint6subsubCA11CRL.crl",
+      "pathLenConstraint6subsubsubCA11XCRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because it exceeds the maximum path length"
+    }
+  },
+  {
+    "id": "40612",
+    "name": "invalid_pathlenconstraint_test12",
+    "cert": "InvalidpathLenConstraintTest12EE.crt",
+    "other_certs": [
+      "pathLenConstraint6CACert.crt",
+      "pathLenConstraint6subCA1Cert.crt",
+      "pathLenConstraint6subsubCA11Cert.crt",
+      "pathLenConstraint6subsubsubCA11XCert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint6CACRL.crl",
+      "pathLenConstraint6subCA1CRL.crl",
+      "pathLenConstraint6subsubCA11CRL.crl",
+      "pathLenConstraint6subsubsubCA11XCRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because it exceeds the maximum path length"
+    }
+  },
+  {
+    "id": "40613",
+    "name": "valid_pathlenconstraint_test13",
+    "cert": "ValidpathLenConstraintTest13EE.crt",
+    "other_certs": [
+      "pathLenConstraint6CACert.crt",
+      "pathLenConstraint6subCA4Cert.crt",
+      "pathLenConstraint6subsubCA41Cert.crt",
+      "pathLenConstraint6subsubsubCA41XCert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint6CACRL.crl",
+      "pathLenConstraint6subCA4CRL.crl",
+      "pathLenConstraint6subsubCA41CRL.crl",
+      "pathLenConstraint6subsubsubCA41XCRL.crl"
+    ],
+    "path_len": 6
+  },
+  {
+    "id": "40614",
+    "name": "valid_pathlenconstraint_test14",
+    "cert": "ValidpathLenConstraintTest14EE.crt",
+    "other_certs": [
+      "pathLenConstraint6CACert.crt",
+      "pathLenConstraint6subCA4Cert.crt",
+      "pathLenConstraint6subsubCA41Cert.crt",
+      "pathLenConstraint6subsubsubCA41XCert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint6CACRL.crl",
+      "pathLenConstraint6subCA4CRL.crl",
+      "pathLenConstraint6subsubCA41CRL.crl",
+      "pathLenConstraint6subsubsubCA41XCRL.crl"
+    ],
+    "path_len": 6
+  },
+  {
+    "id": "40615",
+    "name": "valid_self_issued_pathlenconstraint_test15",
+    "cert": "ValidSelfIssuedpathLenConstraintTest15EE.crt",
+    "other_certs": [
+      "pathLenConstraint0CACert.crt",
+      "pathLenConstraint0SelfIssuedCACert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint0CACRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "40616",
+    "name": "invalid_self_issued_pathlenconstraint_test16",
+    "cert": "InvalidSelfIssuedpathLenConstraintTest16EE.crt",
+    "other_certs": [
+      "pathLenConstraint0CACert.crt",
+      "pathLenConstraint0SelfIssuedCACert.crt",
+      "pathLenConstraint0subCA2Cert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint0CACRL.crl",
+      "pathLenConstraint0subCA2CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because it exceeds the maximum path length"
+    }
+  },
+  {
+    "id": "40617",
+    "name": "valid_self_issued_pathlenconstraint_test17",
+    "cert": "ValidSelfIssuedpathLenConstraintTest17EE.crt",
+    "other_certs": [
+      "pathLenConstraint1CACert.crt",
+      "pathLenConstraint1SelfIssuedCACert.crt",
+      "pathLenConstraint1subCACert.crt",
+      "pathLenConstraint1SelfIssuedsubCACert.crt"
+    ],
+    "crls": [
+      "pathLenConstraint1CACRL.crl",
+      "pathLenConstraint1subCACRL.crl"
+    ],
+    "path_len": 6
+  },
+  {
+    "id": "40701",
+    "name": "invalid_keyusage_critical_keycertsign_false_test1",
+    "cert": "InvalidkeyUsageCriticalkeyCertSignFalseTest1EE.crt",
+    "other_certs": [
+      "keyUsageCriticalkeyCertSignFalseCACert.crt"
+    ],
+    "crls": [
+      "keyUsageCriticalkeyCertSignFalseCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 is not allowed to sign certificates"
+    }
+  },
+  {
+    "id": "40702",
+    "name": "invalid_keyusage_not_critical_keycertsign_false_test2",
+    "cert": "InvalidkeyUsageNotCriticalkeyCertSignFalseTest2EE.crt",
+    "other_certs": [
+      "keyUsageNotCriticalkeyCertSignFalseCACert.crt"
+    ],
+    "crls": [
+      "keyUsageNotCriticalkeyCertSignFalseCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 is not allowed to sign certificates"
+    }
+  },
+  {
+    "id": "40703",
+    "name": "valid_keyusage_not_critical_test3",
+    "cert": "ValidkeyUsageNotCriticalTest3EE.crt",
+    "other_certs": [
+      "keyUsageNotCriticalCACert.crt"
+    ],
+    "crls": [
+      "keyUsageNotCriticalCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40704",
+    "name": "invalid_keyusage_critical_crlsign_false_test4",
+    "cert": "InvalidkeyUsageCriticalcRLSignFalseTest4EE.crt",
+    "other_certs": [
+      "keyUsageCriticalcRLSignFalseCACert.crt"
+    ],
+    "crls": [
+      "keyUsageCriticalcRLSignFalseCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: The CRL issuer that was identified is not authorized to sign CRLs"
+    }
+  },
+  {
+    "id": "40705",
+    "name": "invalid_keyusage_not_critical_crlsign_false_test5",
+    "cert": "InvalidkeyUsageNotCriticalcRLSignFalseTest5EE.crt",
+    "other_certs": [
+      "keyUsageNotCriticalcRLSignFalseCACert.crt"
+    ],
+    "crls": [
+      "keyUsageNotCriticalcRLSignFalseCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: The CRL issuer that was identified is not authorized to sign CRLs"
+    }
+  },
+  {
+    "id": "40801",
+    "name": "all_certs_same_policy_test1_norestr",
+    "cert": "ValidCertificatePathTest1EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40801",
+    "name": "all_certs_same_policy_test1_explicit_policy",
+    "cert": "ValidCertificatePathTest1EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "initial_explicit_policy": true
+    }
+  },
+  {
+    "id": "40801",
+    "name": "all_certs_same_policy_test1_with_constraints1",
+    "cert": "ValidCertificatePathTest1EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ],
+      "initial_explicit_policy": true
+    }
+  },
+  {
+    "id": "40801",
+    "name": "all_certs_same_policy_test1_with_constraint_mismatch",
+    "cert": "ValidCertificatePathTest1EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ],
+      "initial_explicit_policy": true
+    }
+  },
+  {
+    "id": "40801",
+    "name": "all_certs_same_policy_test1_with_constraint_mismatch_ignored",
+    "cert": "ValidCertificatePathTest1EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40801",
+    "name": "all_certs_same_policy_test1_with_constraints2",
+    "cert": "ValidCertificatePathTest1EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1",
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40802",
+    "name": "all_certificates_no_policies_test2",
+    "cert": "AllCertificatesNoPoliciesTest2EE.crt",
+    "other_certs": [
+      "NoPoliciesCACert.crt"
+    ],
+    "crls": [
+      "NoPoliciesCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40802",
+    "name": "all_certificates_no_policies_test2_force_explicit",
+    "cert": "AllCertificatesNoPoliciesTest2EE.crt",
+    "other_certs": [
+      "NoPoliciesCACert.crt"
+    ],
+    "crls": [
+      "NoPoliciesCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for intermediate certificate \\d"
+    },
+    "params": {
+      "initial_explicit_policy": true
+    }
+  },
+  {
+    "id": "40803",
+    "name": "different_policies_test3",
+    "cert": "DifferentPoliciesTest3EE.crt",
+    "other_certs": [
+      "GoodCACert.crt",
+      "PoliciesP2subCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl",
+      "PoliciesP2subCACRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "40803",
+    "name": "different_policies_test3_force_explicit",
+    "cert": "DifferentPoliciesTest3EE.crt",
+    "other_certs": [
+      "GoodCACert.crt",
+      "PoliciesP2subCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl",
+      "PoliciesP2subCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for intermediate certificate \\d"
+    },
+    "params": {
+      "initial_explicit_policy": true
+    }
+  },
+  {
+    "id": "40803",
+    "name": "different_policies_test3_force_explicit_with_user_set",
+    "cert": "DifferentPoliciesTest3EE.crt",
+    "other_certs": [
+      "GoodCACert.crt",
+      "PoliciesP2subCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl",
+      "PoliciesP2subCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for intermediate certificate \\d"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1",
+        "2.16.840.1.101.3.2.1.48.2"
+      ],
+      "initial_explicit_policy": true
+    }
+  },
+  {
+    "id": "40804",
+    "name": "different_policies_test4",
+    "cert": "DifferentPoliciesTest4EE.crt",
+    "other_certs": [
+      "GoodCACert.crt",
+      "GoodsubCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl",
+      "GoodsubCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40805",
+    "name": "different_policies_test5",
+    "cert": "DifferentPoliciesTest5EE.crt",
+    "other_certs": [
+      "GoodCACert.crt",
+      "PoliciesP2subCA2Cert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl",
+      "PoliciesP2subCA2CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40806",
+    "name": "overlapping_policies_test6",
+    "cert": "OverlappingPoliciesTest6EE.crt",
+    "other_certs": [
+      "PoliciesP1234CACert.crt",
+      "PoliciesP1234subCAP123Cert.crt",
+      "PoliciesP1234subsubCAP123P12Cert.crt"
+    ],
+    "crls": [
+      "PoliciesP1234CACRL.crl",
+      "PoliciesP1234subCAP123CRL.crl",
+      "PoliciesP1234subsubCAP123P12CRL.crl"
+    ],
+    "path_len": 5
+  },
+  {
+    "id": "40806",
+    "name": "overlapping_policies_test6_with_testpol1",
+    "cert": "OverlappingPoliciesTest6EE.crt",
+    "other_certs": [
+      "PoliciesP1234CACert.crt",
+      "PoliciesP1234subCAP123Cert.crt",
+      "PoliciesP1234subsubCAP123P12Cert.crt"
+    ],
+    "crls": [
+      "PoliciesP1234CACRL.crl",
+      "PoliciesP1234subCAP123CRL.crl",
+      "PoliciesP1234subsubCAP123P12CRL.crl"
+    ],
+    "path_len": 5,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "40806",
+    "name": "overlapping_policies_test6_with_testpol2",
+    "cert": "OverlappingPoliciesTest6EE.crt",
+    "other_certs": [
+      "PoliciesP1234CACert.crt",
+      "PoliciesP1234subCAP123Cert.crt",
+      "PoliciesP1234subsubCAP123P12Cert.crt"
+    ],
+    "crls": [
+      "PoliciesP1234CACRL.crl",
+      "PoliciesP1234subCAP123CRL.crl",
+      "PoliciesP1234subsubCAP123P12CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40806",
+    "name": "overlapping_policies_test6_with_testpol2_explicit",
+    "cert": "OverlappingPoliciesTest6EE.crt",
+    "other_certs": [
+      "PoliciesP1234CACert.crt",
+      "PoliciesP1234subCAP123Cert.crt",
+      "PoliciesP1234subsubCAP123P12Cert.crt"
+    ],
+    "crls": [
+      "PoliciesP1234CACRL.crl",
+      "PoliciesP1234subCAP123CRL.crl",
+      "PoliciesP1234subsubCAP123P12CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ],
+      "initial_explicit_policy": true
+    }
+  },
+  {
+    "id": "40807",
+    "name": "different_policies_test7",
+    "cert": "DifferentPoliciesTest7EE.crt",
+    "other_certs": [
+      "PoliciesP123CACert.crt",
+      "PoliciesP123subCAP12Cert.crt",
+      "PoliciesP123subsubCAP12P1Cert.crt"
+    ],
+    "crls": [
+      "PoliciesP123CACRL.crl",
+      "PoliciesP123subCAP12CRL.crl",
+      "PoliciesP123subsubCAP12P1CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40808",
+    "name": "different_policies_test8",
+    "cert": "DifferentPoliciesTest8EE.crt",
+    "other_certs": [
+      "PoliciesP12CACert.crt",
+      "PoliciesP12subCAP1Cert.crt",
+      "PoliciesP12subsubCAP1P2Cert.crt"
+    ],
+    "crls": [
+      "PoliciesP12CACRL.crl",
+      "PoliciesP12subCAP1CRL.crl",
+      "PoliciesP12subsubCAP1P2CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for intermediate certificate 3"
+    }
+  },
+  {
+    "id": "40809",
+    "name": "different_policies_test9",
+    "cert": "DifferentPoliciesTest9EE.crt",
+    "other_certs": [
+      "PoliciesP123CACert.crt",
+      "PoliciesP123subCAP12Cert.crt",
+      "PoliciesP123subsubCAP12P2Cert.crt",
+      "PoliciesP123subsubsubCAP12P2P1Cert.crt"
+    ],
+    "crls": [
+      "PoliciesP123CACRL.crl",
+      "PoliciesP123subCAP12CRL.crl",
+      "PoliciesP123subsubCAP2P2CRL.crl",
+      "PoliciesP123subsubsubCAP12P2P1CRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for intermediate certificate 4"
+    }
+  },
+  {
+    "id": "40810",
+    "name": "all_certificates_same_policies_test10",
+    "cert": "AllCertificatesSamePoliciesTest10EE.crt",
+    "other_certs": [
+      "PoliciesP12CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP12CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40810",
+    "name": "all_certificates_same_policies_test10_with_testpol1",
+    "cert": "AllCertificatesSamePoliciesTest10EE.crt",
+    "other_certs": [
+      "PoliciesP12CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP12CACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "40810",
+    "name": "all_certificates_same_policies_test10_with_testpol2",
+    "cert": "AllCertificatesSamePoliciesTest10EE.crt",
+    "other_certs": [
+      "PoliciesP12CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP12CACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40811",
+    "name": "all_certificates_any_policy_test11",
+    "cert": "AllCertificatesanyPolicyTest11EE.crt",
+    "other_certs": [
+      "anyPolicyCACert.crt"
+    ],
+    "crls": [
+      "anyPolicyCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40811",
+    "name": "all_certificates_any_policy_test11_constrained",
+    "cert": "AllCertificatesanyPolicyTest11EE.crt",
+    "other_certs": [
+      "anyPolicyCACert.crt"
+    ],
+    "crls": [
+      "anyPolicyCACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "40812",
+    "name": "different_policies_test12",
+    "cert": "DifferentPoliciesTest12EE.crt",
+    "other_certs": [
+      "PoliciesP3CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP3CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40813",
+    "name": "all_certificates_same_policies_test13",
+    "cert": "AllCertificatesSamePoliciesTest13EE.crt",
+    "other_certs": [
+      "PoliciesP123CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP123CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40813",
+    "name": "all_certificates_same_policies_test13_with_testpol1",
+    "cert": "AllCertificatesSamePoliciesTest13EE.crt",
+    "other_certs": [
+      "PoliciesP123CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP123CACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "40813",
+    "name": "all_certificates_same_policies_test13_with_testpol2",
+    "cert": "AllCertificatesSamePoliciesTest13EE.crt",
+    "other_certs": [
+      "PoliciesP123CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP123CACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40813",
+    "name": "all_certificates_same_policies_test13_with_testpol3",
+    "cert": "AllCertificatesSamePoliciesTest13EE.crt",
+    "other_certs": [
+      "PoliciesP123CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP123CACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.3"
+      ]
+    }
+  },
+  {
+    "id": "40813",
+    "name": "all_certificates_same_policies_test13_with_testpol1_2",
+    "cert": "AllCertificatesSamePoliciesTest13EE.crt",
+    "other_certs": [
+      "PoliciesP123CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP123CACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1",
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40814",
+    "name": "any_policy_test14",
+    "cert": "AnyPolicyTest14EE.crt",
+    "other_certs": [
+      "anyPolicyCACert.crt"
+    ],
+    "crls": [
+      "anyPolicyCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "40814",
+    "name": "any_policy_test14_with_testpol1",
+    "cert": "AnyPolicyTest14EE.crt",
+    "other_certs": [
+      "anyPolicyCACert.crt"
+    ],
+    "crls": [
+      "anyPolicyCACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "40814",
+    "name": "any_policy_test14_with_testpol1_2",
+    "cert": "AnyPolicyTest14EE.crt",
+    "other_certs": [
+      "anyPolicyCACert.crt"
+    ],
+    "crls": [
+      "anyPolicyCACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1",
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40814",
+    "name": "any_policy_test14_with_testpol2",
+    "cert": "AnyPolicyTest14EE.crt",
+    "other_certs": [
+      "anyPolicyCACert.crt"
+    ],
+    "crls": [
+      "anyPolicyCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40901",
+    "name": "valid_require_explicit_policy_test1",
+    "cert": "ValidrequireExplicitPolicyTest1EE.crt",
+    "other_certs": [
+      "requireExplicitPolicy10CACert.crt",
+      "requireExplicitPolicy10subCACert.crt",
+      "requireExplicitPolicy10subsubCACert.crt",
+      "requireExplicitPolicy10subsubsubCACert.crt"
+    ],
+    "crls": [
+      "requireExplicitPolicy10CACRL.crl",
+      "requireExplicitPolicy10subCACRL.crl",
+      "requireExplicitPolicy10subsubCACRL.crl",
+      "requireExplicitPolicy10subsubsubCACRL.crl"
+    ],
+    "path_len": 6
+  },
+  {
+    "id": "40902",
+    "name": "valid_require_explicit_policy_test2",
+    "cert": "ValidrequireExplicitPolicyTest2EE.crt",
+    "other_certs": [
+      "requireExplicitPolicy5CACert.crt",
+      "requireExplicitPolicy5subCACert.crt",
+      "requireExplicitPolicy5subsubCACert.crt",
+      "requireExplicitPolicy5subsubsubCACert.crt"
+    ],
+    "crls": [
+      "requireExplicitPolicy5CACRL.crl",
+      "requireExplicitPolicy5subCACRL.crl",
+      "requireExplicitPolicy5subsubCACRL.crl",
+      "requireExplicitPolicy5subsubsubCACRL.crl"
+    ],
+    "path_len": 6
+  },
+  {
+    "id": "40903",
+    "name": "invalid_require_explicit_policy_test3",
+    "cert": "InvalidrequireExplicitPolicyTest3EE.crt",
+    "other_certs": [
+      "requireExplicitPolicy4CACert.crt",
+      "requireExplicitPolicy4subCACert.crt",
+      "requireExplicitPolicy4subsubCACert.crt",
+      "requireExplicitPolicy4subsubsubCACert.crt"
+    ],
+    "crls": [
+      "requireExplicitPolicy4CACRL.crl",
+      "requireExplicitPolicy4subCACRL.crl",
+      "requireExplicitPolicy4subsubCACRL.crl",
+      "requireExplicitPolicy4subsubsubCACRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40904",
+    "name": "valid_require_explicit_policy_test4",
+    "cert": "ValidrequireExplicitPolicyTest4EE.crt",
+    "other_certs": [
+      "requireExplicitPolicy0CACert.crt",
+      "requireExplicitPolicy0subCACert.crt",
+      "requireExplicitPolicy0subsubCACert.crt",
+      "requireExplicitPolicy0subsubsubCACert.crt"
+    ],
+    "crls": [
+      "requireExplicitPolicy0CACRL.crl",
+      "requireExplicitPolicy0subCACRL.crl",
+      "requireExplicitPolicy0subsubCACRL.crl",
+      "requireExplicitPolicy0subsubsubCACRL.crl"
+    ],
+    "path_len": 6
+  },
+  {
+    "id": "40905",
+    "name": "invalid_require_explicit_policy_test5",
+    "cert": "InvalidrequireExplicitPolicyTest5EE.crt",
+    "other_certs": [
+      "requireExplicitPolicy7CACert.crt",
+      "requireExplicitPolicy7subCARE2Cert.crt",
+      "requireExplicitPolicy7subsubCARE2RE4Cert.crt",
+      "requireExplicitPolicy7subsubsubCARE2RE4Cert.crt"
+    ],
+    "crls": [
+      "requireExplicitPolicy7CACRL.crl",
+      "requireExplicitPolicy7subCARE2CRL.crl",
+      "requireExplicitPolicy7subsubCARE2RE4CRL.crl",
+      "requireExplicitPolicy7subsubsubCARE2RE4CRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40906",
+    "name": "valid_self_issued_require_explicit_policy_test6",
+    "cert": "ValidSelfIssuedrequireExplicitPolicyTest6EE.crt",
+    "other_certs": [
+      "requireExplicitPolicy2CACert.crt",
+      "requireExplicitPolicy2SelfIssuedCACert.crt"
+    ],
+    "crls": [
+      "requireExplicitPolicy2CACRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "40907",
+    "name": "invalid_self_issued_require_explicit_policy_test7",
+    "cert": "InvalidSelfIssuedrequireExplicitPolicyTest7EE.crt",
+    "other_certs": [
+      "requireExplicitPolicy2CACert.crt",
+      "requireExplicitPolicy2SelfIssuedCACert.crt",
+      "requireExplicitPolicy2subCACert.crt"
+    ],
+    "crls": [
+      "requireExplicitPolicy2CACRL.crl",
+      "requireExplicitPolicy2subCACRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "40908",
+    "name": "invalid_self_issued_require_explicit_policy_test8",
+    "cert": "InvalidSelfIssuedrequireExplicitPolicyTest8EE.crt",
+    "other_certs": [
+      "requireExplicitPolicy2CACert.crt",
+      "requireExplicitPolicy2SelfIssuedCACert.crt",
+      "requireExplicitPolicy2subCACert.crt",
+      "requireExplicitPolicy2SelfIssuedsubCACert.crt"
+    ],
+    "crls": [
+      "requireExplicitPolicy2CACRL.crl",
+      "requireExplicitPolicy2subCACRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41001",
+    "name": "valid_policy_mapping_test2_with_testpol1",
+    "cert": "ValidPolicyMappingTest1EE.crt",
+    "other_certs": [
+      "Mapping1to2CACert.crt"
+    ],
+    "crls": [
+      "Mapping1to2CACRL.crl"
+    ],
+    "path_len": 3,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "41001",
+    "name": "valid_policy_mapping_test2_with_testpol2",
+    "cert": "ValidPolicyMappingTest1EE.crt",
+    "other_certs": [
+      "Mapping1to2CACert.crt"
+    ],
+    "crls": [
+      "Mapping1to2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "41001",
+    "name": "valid_policy_mapping_test2_inhibit_mapping",
+    "cert": "ValidPolicyMappingTest1EE.crt",
+    "other_certs": [
+      "Mapping1to2CACert.crt"
+    ],
+    "crls": [
+      "Mapping1to2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "initial_policy_mapping_inhibit": true
+    }
+  },
+  {
+    "id": "41001",
+    "name": "valid_policy_mapping_test2_inhibit_mapping_testpol1",
+    "cert": "ValidPolicyMappingTest1EE.crt",
+    "other_certs": [
+      "Mapping1to2CACert.crt"
+    ],
+    "crls": [
+      "Mapping1to2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ],
+      "initial_policy_mapping_inhibit": true
+    }
+  },
+  {
+    "id": "41002",
+    "name": "invalid_policy_mapping_test2",
+    "cert": "InvalidPolicyMappingTest2EE.crt",
+    "other_certs": [
+      "Mapping1to2CACert.crt"
+    ],
+    "crls": [
+      "Mapping1to2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41002",
+    "name": "invalid_policy_mapping_test2_inhibit_mapping",
+    "cert": "InvalidPolicyMappingTest2EE.crt",
+    "other_certs": [
+      "Mapping1to2CACert.crt"
+    ],
+    "crls": [
+      "Mapping1to2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "initial_policy_mapping_inhibit": true
+    }
+  },
+  {
+    "id": "41003",
+    "name": "valid_policy_mapping_test3_with_testpol1",
+    "cert": "ValidPolicyMappingTest3EE.crt",
+    "other_certs": [
+      "P12Mapping1to3CACert.crt",
+      "P12Mapping1to3subCACert.crt",
+      "P12Mapping1to3subsubCACert.crt"
+    ],
+    "crls": [
+      "P12Mapping1to3CACRL.crl",
+      "P12Mapping1to3subCACRL.crl",
+      "P12Mapping1to3subsubCACRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "41003",
+    "name": "valid_policy_mapping_test3_with_testpol2",
+    "cert": "ValidPolicyMappingTest3EE.crt",
+    "other_certs": [
+      "P12Mapping1to3CACert.crt",
+      "P12Mapping1to3subCACert.crt",
+      "P12Mapping1to3subsubCACert.crt"
+    ],
+    "crls": [
+      "P12Mapping1to3CACRL.crl",
+      "P12Mapping1to3subCACRL.crl",
+      "P12Mapping1to3subsubCACRL.crl"
+    ],
+    "path_len": 5,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "41004",
+    "name": "invalid_policy_mapping_test4",
+    "cert": "InvalidPolicyMappingTest4EE.crt",
+    "other_certs": [
+      "P12Mapping1to3CACert.crt",
+      "P12Mapping1to3subCACert.crt",
+      "P12Mapping1to3subsubCACert.crt"
+    ],
+    "crls": [
+      "P12Mapping1to3CACRL.crl",
+      "P12Mapping1to3subCACRL.crl",
+      "P12Mapping1to3subsubCACRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41005",
+    "name": "valid_policy_mapping_test5_with_testpol1",
+    "cert": "ValidPolicyMappingTest5EE.crt",
+    "other_certs": [
+      "P1Mapping1to234CACert.crt",
+      "P1Mapping1to234subCACert.crt"
+    ],
+    "crls": [
+      "P1Mapping1to234CACRL.crl",
+      "P1Mapping1to234subCACRL.crl"
+    ],
+    "path_len": 4,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "41005",
+    "name": "valid_policy_mapping_test5_with_testpol6",
+    "cert": "ValidPolicyMappingTest5EE.crt",
+    "other_certs": [
+      "P1Mapping1to234CACert.crt",
+      "P1Mapping1to234subCACert.crt"
+    ],
+    "crls": [
+      "P1Mapping1to234CACRL.crl",
+      "P1Mapping1to234subCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.6"
+      ]
+    }
+  },
+  {
+    "id": "41006",
+    "name": "valid_policy_mapping_test6_with_testpol1",
+    "cert": "ValidPolicyMappingTest6EE.crt",
+    "other_certs": [
+      "P1Mapping1to234CACert.crt",
+      "P1Mapping1to234subCACert.crt"
+    ],
+    "crls": [
+      "P1Mapping1to234CACRL.crl",
+      "P1Mapping1to234subCACRL.crl"
+    ],
+    "path_len": 4,
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "41006",
+    "name": "valid_policy_mapping_test6_with_testpol6",
+    "cert": "ValidPolicyMappingTest6EE.crt",
+    "other_certs": [
+      "P1Mapping1to234CACert.crt",
+      "P1Mapping1to234subCACert.crt"
+    ],
+    "crls": [
+      "P1Mapping1to234CACRL.crl",
+      "P1Mapping1to234subCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    },
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.6"
+      ]
+    }
+  },
+  {
+    "id": "41007",
+    "name": "invalid_mapping_from_any_policy_test7",
+    "cert": "InvalidMappingFromanyPolicyTest7EE.crt",
+    "other_certs": [
+      "MappingFromanyPolicyCACert.crt"
+    ],
+    "crls": [
+      "MappingFromanyPolicyCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 contains a policy mapping for the \"any policy\""
+    }
+  },
+  {
+    "id": "41008",
+    "name": "invalid_mapping_to_any_policy_test8",
+    "cert": "InvalidMappingToanyPolicyTest8EE.crt",
+    "other_certs": [
+      "MappingToanyPolicyCACert.crt"
+    ],
+    "crls": [
+      "MappingToanyPolicyCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because intermediate certificate 1 contains a policy mapping for the \"any policy\""
+    }
+  },
+  {
+    "id": "41009",
+    "name": "valid_policy_mapping_test9",
+    "cert": "ValidPolicyMappingTest9EE.crt",
+    "other_certs": [
+      "PanyPolicyMapping1to2CACert.crt"
+    ],
+    "crls": [
+      "PanyPolicyMapping1to2CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41010",
+    "name": "invalid_policy_mapping_test10",
+    "cert": "InvalidPolicyMappingTest10EE.crt",
+    "other_certs": [
+      "GoodCACert.crt",
+      "GoodsubCAPanyPolicyMapping1to2CACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl",
+      "GoodsubCAPanyPolicyMapping1to2CACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41011",
+    "name": "valid_policy_mapping_test11",
+    "cert": "ValidPolicyMappingTest11EE.crt",
+    "other_certs": [
+      "GoodCACert.crt",
+      "GoodsubCAPanyPolicyMapping1to2CACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl",
+      "GoodsubCAPanyPolicyMapping1to2CACRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "41013",
+    "name": "valid_policy_mapping_test13",
+    "cert": "ValidPolicyMappingTest13EE.crt",
+    "other_certs": [
+      "P1anyPolicyMapping1to2CACert.crt"
+    ],
+    "crls": [
+      "P1anyPolicyMapping1to2CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41014",
+    "name": "valid_policy_mapping_test14",
+    "cert": "ValidPolicyMappingTest14EE.crt",
+    "other_certs": [
+      "P1anyPolicyMapping1to2CACert.crt"
+    ],
+    "crls": [
+      "P1anyPolicyMapping1to2CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41101",
+    "name": "invalid_inhibit_policy_mapping_test1",
+    "cert": "InvalidinhibitPolicyMappingTest1EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping0CACert.crt",
+      "inhibitPolicyMapping0subCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping0CACRL.crl",
+      "inhibitPolicyMapping0subCACRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41102",
+    "name": "valid_inhibit_policy_mapping_test2",
+    "cert": "ValidinhibitPolicyMappingTest2EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P12CACert.crt",
+      "inhibitPolicyMapping1P12subCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P12CACRL.crl",
+      "inhibitPolicyMapping1P12subCACRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "41103",
+    "name": "invalid_inhibit_policy_mapping_test3",
+    "cert": "InvalidinhibitPolicyMappingTest3EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P12CACert.crt",
+      "inhibitPolicyMapping1P12subCACert.crt",
+      "inhibitPolicyMapping1P12subsubCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P12CACRL.crl",
+      "inhibitPolicyMapping1P12subCACRL.crl",
+      "inhibitPolicyMapping1P12subsubCACRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41104",
+    "name": "valid_inhibit_policy_mapping_test4",
+    "cert": "ValidinhibitPolicyMappingTest4EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P12CACert.crt",
+      "inhibitPolicyMapping1P12subCACert.crt",
+      "inhibitPolicyMapping1P12subsubCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P12CACRL.crl",
+      "inhibitPolicyMapping1P12subCACRL.crl",
+      "inhibitPolicyMapping1P12subsubCACRL.crl"
+    ],
+    "path_len": 5
+  },
+  {
+    "id": "41105",
+    "name": "invalid_inhibit_policy_mapping_test5",
+    "cert": "InvalidinhibitPolicyMappingTest5EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping5CACert.crt",
+      "inhibitPolicyMapping5subCACert.crt",
+      "inhibitPolicyMapping5subsubCACert.crt",
+      "inhibitPolicyMapping5subsubsubCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping5CACRL.crl",
+      "inhibitPolicyMapping5subCACRL.crl",
+      "inhibitPolicyMapping5subsubCACRL.crl",
+      "inhibitPolicyMapping5subsubsubCACRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41106",
+    "name": "invalid_inhibit_policy_mapping_test6",
+    "cert": "InvalidinhibitPolicyMappingTest6EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P12CACert.crt",
+      "inhibitPolicyMapping1P12subCAIPM5Cert.crt",
+      "inhibitPolicyMapping1P12subsubCAIPM5Cert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P12CACRL.crl",
+      "inhibitPolicyMapping1P12subCAIPM5CRL.crl",
+      "inhibitPolicyMapping1P12subsubCAIPM5CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41107",
+    "name": "valid_self_issued_inhibit_policy_mapping_test7",
+    "cert": "ValidSelfIssuedinhibitPolicyMappingTest7EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P1CACert.crt",
+      "inhibitPolicyMapping1P1SelfIssuedCACert.crt",
+      "inhibitPolicyMapping1P1subCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P1CACRL.crl",
+      "inhibitPolicyMapping1P1subCACRL.crl"
+    ],
+    "path_len": 5
+  },
+  {
+    "id": "41108",
+    "name": "invalid_self_issued_inhibit_policy_mapping_test8",
+    "cert": "InvalidSelfIssuedinhibitPolicyMappingTest8EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P1CACert.crt",
+      "inhibitPolicyMapping1P1SelfIssuedCACert.crt",
+      "inhibitPolicyMapping1P1subCACert.crt",
+      "inhibitPolicyMapping1P1subsubCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P1CACRL.crl",
+      "inhibitPolicyMapping1P1subCACRL.crl",
+      "inhibitPolicyMapping1P1subsubCACRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41109",
+    "name": "invalid_self_issued_inhibit_policy_mapping_test9",
+    "cert": "InvalidSelfIssuedinhibitPolicyMappingTest9EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P1CACert.crt",
+      "inhibitPolicyMapping1P1SelfIssuedCACert.crt",
+      "inhibitPolicyMapping1P1subCACert.crt",
+      "inhibitPolicyMapping1P1subsubCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P1CACRL.crl",
+      "inhibitPolicyMapping1P1subCACRL.crl",
+      "inhibitPolicyMapping1P1subsubCACRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41110",
+    "name": "invalid_self_issued_inhibit_policy_mapping_test10",
+    "cert": "InvalidSelfIssuedinhibitPolicyMappingTest10EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P1CACert.crt",
+      "inhibitPolicyMapping1P1SelfIssuedCACert.crt",
+      "inhibitPolicyMapping1P1subCACert.crt",
+      "inhibitPolicyMapping1P1SelfIssuedsubCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P1CACRL.crl",
+      "inhibitPolicyMapping1P1subCACRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41111",
+    "name": "invalid_self_issued_inhibit_policy_mapping_test11",
+    "cert": "InvalidSelfIssuedinhibitPolicyMappingTest11EE.crt",
+    "other_certs": [
+      "inhibitPolicyMapping1P1CACert.crt",
+      "inhibitPolicyMapping1P1SelfIssuedCACert.crt",
+      "inhibitPolicyMapping1P1subCACert.crt",
+      "inhibitPolicyMapping1P1SelfIssuedsubCACert.crt"
+    ],
+    "crls": [
+      "inhibitPolicyMapping1P1CACRL.crl",
+      "inhibitPolicyMapping1P1subCACRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41201",
+    "name": "invalid_inhibit_any_policy_test1",
+    "cert": "InvalidinhibitAnyPolicyTest1EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy0CACert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy0CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41202",
+    "name": "valid_inhibit_any_policy_test2",
+    "cert": "ValidinhibitAnyPolicyTest2EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy0CACert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy0CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41203",
+    "name": "inhibit_any_policy_test3",
+    "cert": "inhibitAnyPolicyTest3EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy1CACert.crt",
+      "inhibitAnyPolicy1subCA1Cert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy1CACRL.crl",
+      "inhibitAnyPolicy1subCA1CRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "41203",
+    "name": "inhibit_any_policy_test3_initial_inhibit",
+    "cert": "inhibitAnyPolicyTest3EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy1CACert.crt",
+      "inhibitAnyPolicy1subCA1Cert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy1CACRL.crl",
+      "inhibitAnyPolicy1subCA1CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for intermediate certificate \\d"
+    },
+    "params": {
+      "initial_any_policy_inhibit": true
+    }
+  },
+  {
+    "id": "41204",
+    "name": "invalid_inhibit_any_policy_test4",
+    "cert": "InvalidinhibitAnyPolicyTest4EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy1CACert.crt",
+      "inhibitAnyPolicy1subCA1Cert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy1CACRL.crl",
+      "inhibitAnyPolicy1subCA1CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41205",
+    "name": "invalid_inhibit_any_policy_test5",
+    "cert": "InvalidinhibitAnyPolicyTest5EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy5CACert.crt",
+      "inhibitAnyPolicy5subCACert.crt",
+      "inhibitAnyPolicy5subsubCACert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy5CACRL.crl",
+      "inhibitAnyPolicy5subCACRL.crl",
+      "inhibitAnyPolicy5subsubCACRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41206",
+    "name": "invalid_inhibit_any_policy_test6",
+    "cert": "InvalidinhibitAnyPolicyTest6EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy1CACert.crt",
+      "inhibitAnyPolicy1subCAIAP5Cert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy1CACRL.crl",
+      "inhibitAnyPolicy1subCAIAP5CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41207",
+    "name": "valid_self_issued_inhibit_any_policy_test7",
+    "cert": "ValidSelfIssuedinhibitAnyPolicyTest7EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy1CACert.crt",
+      "inhibitAnyPolicy1SelfIssuedCACert.crt",
+      "inhibitAnyPolicy1subCA2Cert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy1CACRL.crl",
+      "inhibitAnyPolicy1subCA2CRL.crl"
+    ],
+    "path_len": 5
+  },
+  {
+    "id": "41208",
+    "name": "invalid_self_issued_inhibit_any_policy_test8",
+    "cert": "InvalidSelfIssuedinhibitAnyPolicyTest8EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy1CACert.crt",
+      "inhibitAnyPolicy1SelfIssuedCACert.crt",
+      "inhibitAnyPolicy1subCA2Cert.crt",
+      "inhibitAnyPolicy1subsubCA2Cert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy1CACRL.crl",
+      "inhibitAnyPolicy1subCA2CRL.crl",
+      "inhibitAnyPolicy1subsubCA2CRL.crl"
+    ],
+    "path_len": 6,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for intermediate certificate 4"
+    }
+  },
+  {
+    "id": "41209",
+    "name": "valid_self_issued_inhibit_any_policy_test9",
+    "cert": "ValidSelfIssuedinhibitAnyPolicyTest9EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy1CACert.crt",
+      "inhibitAnyPolicy1SelfIssuedCACert.crt",
+      "inhibitAnyPolicy1subCA2Cert.crt",
+      "inhibitAnyPolicy1SelfIssuedsubCA2Cert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy1CACRL.crl",
+      "inhibitAnyPolicy1subCA2CRL.crl"
+    ],
+    "path_len": 6
+  },
+  {
+    "id": "41210",
+    "name": "invalid_self_issued_inhibit_any_policy_test10",
+    "cert": "InvalidSelfIssuedinhibitAnyPolicyTest10EE.crt",
+    "other_certs": [
+      "inhibitAnyPolicy1CACert.crt",
+      "inhibitAnyPolicy1SelfIssuedCACert.crt",
+      "inhibitAnyPolicy1subCA2Cert.crt"
+    ],
+    "crls": [
+      "inhibitAnyPolicy1CACRL.crl",
+      "inhibitAnyPolicy1subCA2CRL.crl"
+    ],
+    "path_len": 5,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because there is no valid set of policies for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41301",
+    "name": "valid_dn_nameconstraints_test1",
+    "cert": "ValidDNnameConstraintsTest1EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41302",
+    "name": "invalid_dn_nameconstraints_test2",
+    "cert": "InvalidDNnameConstraintsTest2EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41303",
+    "name": "invalid_dn_nameconstraints_test3",
+    "cert": "InvalidDNnameConstraintsTest3EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41303",
+    "name": "invalid_dn_nameconstraints_test3",
+    "cert": "InvalidDNnameConstraintsTest3EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41304",
+    "name": "valid_dn_nameconstraints_test4",
+    "cert": "ValidDNnameConstraintsTest4EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41305",
+    "name": "valid_dn_nameconstraints_test5",
+    "cert": "ValidDNnameConstraintsTest5EE.crt",
+    "other_certs": [
+      "nameConstraintsDN2CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN2CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41306",
+    "name": "valid_dn_nameconstraints_test6",
+    "cert": "ValidDNnameConstraintsTest6EE.crt",
+    "other_certs": [
+      "nameConstraintsDN3CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN3CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41307",
+    "name": "invalid_dn_nameconstraints_test7",
+    "cert": "InvalidDNnameConstraintsTest7EE.crt",
+    "other_certs": [
+      "nameConstraintsDN3CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN3CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41308",
+    "name": "invalid_dn_nameconstraints_test8",
+    "cert": "InvalidDNnameConstraintsTest8EE.crt",
+    "other_certs": [
+      "nameConstraintsDN4CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN4CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41309",
+    "name": "invalid_dn_nameconstraints_test9",
+    "cert": "InvalidDNnameConstraintsTest9EE.crt",
+    "other_certs": [
+      "nameConstraintsDN4CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN4CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41310",
+    "name": "invalid_dn_nameconstraints_test10",
+    "cert": "InvalidDNnameConstraintsTest10EE.crt",
+    "other_certs": [
+      "nameConstraintsDN5CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN5CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41311",
+    "name": "valid_dn_nameconstraints_test11",
+    "cert": "ValidDNnameConstraintsTest11EE.crt",
+    "other_certs": [
+      "nameConstraintsDN5CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN5CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41312",
+    "name": "invalid_dn_nameconstraints_test12",
+    "cert": "InvalidDNnameConstraintsTest12EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt",
+      "nameConstraintsDN1subCA1Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl",
+      "nameConstraintsDN1subCA1CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41313",
+    "name": "invalid_dn_nameconstraints_test13",
+    "cert": "InvalidDNnameConstraintsTest13EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt",
+      "nameConstraintsDN1subCA2Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl",
+      "nameConstraintsDN1subCA2CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41314",
+    "name": "valid_dn_nameconstraints_test14",
+    "cert": "ValidDNnameConstraintsTest14EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt",
+      "nameConstraintsDN1subCA2Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl",
+      "nameConstraintsDN1subCA2CRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "41315",
+    "name": "invalid_dn_nameconstraints_test15",
+    "cert": "InvalidDNnameConstraintsTest15EE.crt",
+    "other_certs": [
+      "nameConstraintsDN3CACert.crt",
+      "nameConstraintsDN3subCA1Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN3CACRL.crl",
+      "nameConstraintsDN3subCA1CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41316",
+    "name": "invalid_dn_nameconstraints_test16",
+    "cert": "InvalidDNnameConstraintsTest16EE.crt",
+    "other_certs": [
+      "nameConstraintsDN3CACert.crt",
+      "nameConstraintsDN3subCA1Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN3CACRL.crl",
+      "nameConstraintsDN3subCA1CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41317",
+    "name": "invalid_dn_nameconstraints_test17",
+    "cert": "InvalidDNnameConstraintsTest17EE.crt",
+    "other_certs": [
+      "nameConstraintsDN3CACert.crt",
+      "nameConstraintsDN3subCA2Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN3CACRL.crl",
+      "nameConstraintsDN3subCA2CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41318",
+    "name": "valid_dn_nameconstraints_test18",
+    "cert": "ValidDNnameConstraintsTest18EE.crt",
+    "other_certs": [
+      "nameConstraintsDN3CACert.crt",
+      "nameConstraintsDN3subCA2Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN3CACRL.crl",
+      "nameConstraintsDN3subCA2CRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "41319",
+    "name": "valid_self_issued_dn_nameconstraints_test19",
+    "cert": "ValidDNnameConstraintsTest19EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt",
+      "nameConstraintsDN1SelfIssuedCACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "41320",
+    "name": "invalid_self_issued_dn_nameconstraints_test20",
+    "cert": "InvalidDNnameConstraintsTest20EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt",
+      "nameConstraintsDN1SelfIssuedCACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41321",
+    "name": "valid_rfc822_nameconstraints_test21",
+    "cert": "ValidRFC822nameConstraintsTest21EE.crt",
+    "other_certs": [
+      "nameConstraintsRFC822CA1Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsRFC822CA1CRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41322",
+    "name": "invalid_rfc822_nameconstraints_test22",
+    "cert": "InvalidRFC822nameConstraintsTest22EE.crt",
+    "other_certs": [
+      "nameConstraintsRFC822CA1Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsRFC822CA1CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41323",
+    "name": "valid_rfc822_nameconstraints_test23",
+    "cert": "ValidRFC822nameConstraintsTest23EE.crt",
+    "other_certs": [
+      "nameConstraintsRFC822CA2Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsRFC822CA2CRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41324",
+    "name": "invalid_rfc822_nameconstraints_test24",
+    "cert": "InvalidRFC822nameConstraintsTest24EE.crt",
+    "other_certs": [
+      "nameConstraintsRFC822CA2Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsRFC822CA2CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41325",
+    "name": "valid_rfc822_nameconstraints_test25",
+    "cert": "ValidRFC822nameConstraintsTest25EE.crt",
+    "other_certs": [
+      "nameConstraintsRFC822CA3Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsRFC822CA3CRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41326",
+    "name": "invalid_rfc822_nameconstraints_test26",
+    "cert": "InvalidRFC822nameConstraintsTest26EE.crt",
+    "other_certs": [
+      "nameConstraintsRFC822CA3Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsRFC822CA3CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41327",
+    "name": "valid_dn_and_rfc822_nameconstraints_test27",
+    "cert": "ValidDNandRFC822nameConstraintsTest27EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt",
+      "nameConstraintsDN1subCA3Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl",
+      "nameConstraintsDN1subCA3CRL.crl"
+    ],
+    "path_len": 4
+  },
+  {
+    "id": "41328",
+    "name": "invalid_dn_and_rfc822_nameconstraints_test28",
+    "cert": "InvalidDNandRFC822nameConstraintsTest28EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt",
+      "nameConstraintsDN1subCA3Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl",
+      "nameConstraintsDN1subCA3CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41329",
+    "name": "invalid_dn_and_rfc822_nameconstraints_test29",
+    "cert": "InvalidDNandRFC822nameConstraintsTest29EE.crt",
+    "other_certs": [
+      "nameConstraintsDN1CACert.crt",
+      "nameConstraintsDN1subCA3Cert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDN1CACRL.crl",
+      "nameConstraintsDN1subCA3CRL.crl"
+    ],
+    "path_len": 4,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41330",
+    "name": "valid_dns_nameconstraints_test30",
+    "cert": "ValidDNSnameConstraintsTest30EE.crt",
+    "other_certs": [
+      "nameConstraintsDNS1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDNS1CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41331",
+    "name": "invalid_dns_nameconstraints_test31",
+    "cert": "InvalidDNSnameConstraintsTest31EE.crt",
+    "other_certs": [
+      "nameConstraintsDNS1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDNS1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41332",
+    "name": "valid_dns_nameconstraints_test32",
+    "cert": "ValidDNSnameConstraintsTest32EE.crt",
+    "other_certs": [
+      "nameConstraintsDNS2CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDNS2CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41333",
+    "name": "invalid_dns_nameconstraints_test33",
+    "cert": "InvalidDNSnameConstraintsTest33EE.crt",
+    "other_certs": [
+      "nameConstraintsDNS2CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDNS2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41334",
+    "name": "valid_uri_nameconstraints_test34",
+    "cert": "ValidURInameConstraintsTest34EE.crt",
+    "other_certs": [
+      "nameConstraintsURI1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsURI1CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41335",
+    "name": "invalid_uri_nameconstraints_test35",
+    "cert": "InvalidURInameConstraintsTest35EE.crt",
+    "other_certs": [
+      "nameConstraintsURI1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsURI1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41336",
+    "name": "valid_uri_nameconstraints_test36",
+    "cert": "ValidURInameConstraintsTest36EE.crt",
+    "other_certs": [
+      "nameConstraintsURI2CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsURI2CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41337",
+    "name": "invalid_uri_nameconstraints_test37",
+    "cert": "InvalidURInameConstraintsTest37EE.crt",
+    "other_certs": [
+      "nameConstraintsURI2CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsURI2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because some names of the end-entity certificate are excluded from the namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41338",
+    "name": "invalid_dns_nameconstraints_test38",
+    "cert": "InvalidDNSnameConstraintsTest38EE.crt",
+    "other_certs": [
+      "nameConstraintsDNS1CACert.crt"
+    ],
+    "crls": [
+      "nameConstraintsDNS1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
+    }
+  },
+  {
+    "id": "41401",
+    "name": "valid_distributionpoint_test1",
+    "cert": "ValiddistributionPointTest1EE.crt",
+    "other_certs": [
+      "distributionPoint1CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint1CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41402",
+    "name": "invalid_distributionpoint_test2",
+    "cert": "InvaliddistributionPointTest2EE.crt",
+    "other_certs": [
+      "distributionPoint1CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41403",
+    "name": "invalid_distributionpoint_test3",
+    "cert": "InvaliddistributionPointTest3EE.crt",
+    "other_certs": [
+      "distributionPoint1CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint1CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41404",
+    "name": "valid_distributionpoint_test4",
+    "cert": "ValiddistributionPointTest4EE.crt",
+    "other_certs": [
+      "distributionPoint1CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint1CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41405",
+    "name": "valid_distributionpoint_test5",
+    "cert": "ValiddistributionPointTest5EE.crt",
+    "other_certs": [
+      "distributionPoint2CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint2CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41406",
+    "name": "invalid_distributionpoint_test6",
+    "cert": "InvaliddistributionPointTest6EE.crt",
+    "other_certs": [
+      "distributionPoint2CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41407",
+    "name": "valid_distributionpoint_test7",
+    "cert": "ValiddistributionPointTest7EE.crt",
+    "other_certs": [
+      "distributionPoint2CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint2CACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41408",
+    "name": "invalid_distributionpoint_test8",
+    "cert": "InvaliddistributionPointTest8EE.crt",
+    "other_certs": [
+      "distributionPoint2CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41409",
+    "name": "invalid_distributionpoint_test9",
+    "cert": "InvaliddistributionPointTest9EE.crt",
+    "other_certs": [
+      "distributionPoint2CACert.crt"
+    ],
+    "crls": [
+      "distributionPoint2CACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41410",
+    "name": "valid_no_issuingdistributionpoint_test10",
+    "cert": "ValidNoissuingDistributionPointTest10EE.crt",
+    "other_certs": [
+      "NoissuingDistributionPointCACert.crt"
+    ],
+    "crls": [
+      "NoissuingDistributionPointCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41411",
+    "name": "invalid_onlycontainsusercerts_crl_test11",
+    "cert": "InvalidonlyContainsUserCertsTest11EE.crt",
+    "other_certs": [
+      "onlyContainsUserCertsCACert.crt"
+    ],
+    "crls": [
+      "onlyContainsUserCertsCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL only contains end-entity certificates and certificate is a CA certificate"
+    }
+  },
+  {
+    "id": "41412",
+    "name": "invalid_onlycontainscacerts_crl_test12",
+    "cert": "InvalidonlyContainsCACertsTest12EE.crt",
+    "other_certs": [
+      "onlyContainsCACertsCACert.crt"
+    ],
+    "crls": [
+      "onlyContainsCACertsCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL only contains CA certificates and certificate is an end-entity certificate"
+    }
+  },
+  {
+    "id": "41413",
+    "name": "valid_onlycontainscacerts_crl_test13",
+    "cert": "ValidonlyContainsCACertsTest13EE.crt",
+    "other_certs": [
+      "onlyContainsCACertsCACert.crt"
+    ],
+    "crls": [
+      "onlyContainsCACertsCACRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41414",
+    "name": "invalid_onlycontainsattributecerts_crl_test14",
+    "cert": "InvalidonlyContainsAttributeCertsTest14EE.crt",
+    "other_certs": [
+      "onlyContainsAttributeCertsCACert.crt"
+    ],
+    "crls": [
+      "onlyContainsAttributeCertsCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL only contains attribute certificates"
+    }
+  },
+  {
+    "id": "41415",
+    "name": "invalid_onlysomereasons_test15",
+    "cert": "InvalidonlySomeReasonsTest15EE.crt",
+    "other_certs": [
+      "onlySomeReasonsCA1Cert.crt"
+    ],
+    "crls": [
+      "onlySomeReasonsCA1compromiseCRL.crl",
+      "onlySomeReasonsCA1otherreasonsCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41416",
+    "name": "invalid_onlysomereasons_test16",
+    "cert": "InvalidonlySomeReasonsTest16EE.crt",
+    "other_certs": [
+      "onlySomeReasonsCA1Cert.crt"
+    ],
+    "crls": [
+      "onlySomeReasonsCA1compromiseCRL.crl",
+      "onlySomeReasonsCA1otherreasonsCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a certificate hold"
+    }
+  },
+  {
+    "id": "41417",
+    "name": "invalid_onlysomereasons_test17",
+    "cert": "InvalidonlySomeReasonsTest17EE.crt",
+    "other_certs": [
+      "onlySomeReasonsCA2Cert.crt"
+    ],
+    "crls": [
+      "onlySomeReasonsCA2CRL1.crl",
+      "onlySomeReasonsCA2CRL2.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: The available CRLs do not cover all revocation reasons"
+    }
+  },
+  {
+    "id": "41418",
+    "name": "valid_onlysomereasons_test18",
+    "cert": "ValidonlySomeReasonsTest18EE.crt",
+    "other_certs": [
+      "onlySomeReasonsCA3Cert.crt"
+    ],
+    "crls": [
+      "onlySomeReasonsCA3compromiseCRL.crl",
+      "onlySomeReasonsCA3otherreasonsCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41419",
+    "name": "valid_onlysomereasons_test19",
+    "cert": "ValidonlySomeReasonsTest19EE.crt",
+    "other_certs": [
+      "onlySomeReasonsCA4Cert.crt"
+    ],
+    "crls": [
+      "onlySomeReasonsCA4compromiseCRL.crl",
+      "onlySomeReasonsCA4otherreasonsCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41420",
+    "name": "invalid_onlysomereasons_test20",
+    "cert": "InvalidonlySomeReasonsTest20EE.crt",
+    "other_certs": [
+      "onlySomeReasonsCA4Cert.crt"
+    ],
+    "crls": [
+      "onlySomeReasonsCA4compromiseCRL.crl",
+      "onlySomeReasonsCA4otherreasonsCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41421",
+    "name": "invalid_onlysomereasons_test21",
+    "cert": "InvalidonlySomeReasonsTest21EE.crt",
+    "other_certs": [
+      "onlySomeReasonsCA4Cert.crt"
+    ],
+    "crls": [
+      "onlySomeReasonsCA4compromiseCRL.crl",
+      "onlySomeReasonsCA4otherreasonsCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to an affiliation change"
+    }
+  },
+  {
+    "id": "41422",
+    "name": "valid_idp_with_indirectcrl_test22",
+    "cert": "ValidIDPwithindirectCRLTest22EE.crt",
+    "other_certs": [
+      "indirectCRLCA1Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA1CRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41423",
+    "name": "invalid_idp_with_indirectcrl_test23",
+    "cert": "InvalidIDPwithindirectCRLTest23EE.crt",
+    "other_certs": [
+      "indirectCRLCA1Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA1CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41424",
+    "name": "valid_idp_with_indirectcrl_test24",
+    "cert": "ValidIDPwithindirectCRLTest24EE.crt",
+    "other_certs": [
+      "indirectCRLCA1Cert.crt",
+      "indirectCRLCA2Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA1CRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41425",
+    "name": "valid_idp_with_indirectcrl_test25",
+    "cert": "ValidIDPwithindirectCRLTest25EE.crt",
+    "other_certs": [
+      "indirectCRLCA1Cert.crt",
+      "indirectCRLCA2Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA1CRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41426",
+    "name": "invalid_idp_with_indirectcrl_test26",
+    "cert": "InvalidIDPwithindirectCRLTest26EE.crt",
+    "other_certs": [
+      "indirectCRLCA1Cert.crt",
+      "indirectCRLCA2Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA1CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41427",
+    "name": "invalid_crlissuer_test27",
+    "cert": "InvalidcRLIssuerTest27EE.crt",
+    "other_certs": [
+      "GoodCACert.crt",
+      "indirectCRLCA2Cert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41428",
+    "name": "valid_crlissuer_test28",
+    "cert": "ValidcRLIssuerTest28EE.crt",
+    "other_certs": [
+      "indirectCRLCA3Cert.crt",
+      "indirectCRLCA3cRLIssuerCert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA3CRL.crl",
+      "indirectCRLCA3cRLIssuerCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41429",
+    "name": "valid_crlissuer_test29",
+    "cert": "ValidcRLIssuerTest29EE.crt",
+    "other_certs": [
+      "indirectCRLCA3Cert.crt",
+      "indirectCRLCA3cRLIssuerCert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA3CRL.crl",
+      "indirectCRLCA3cRLIssuerCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41430",
+    "name": "valid_crlissuer_test30",
+    "cert": "ValidcRLIssuerTest30EE.crt",
+    "other_certs": [
+      "indirectCRLCA4Cert.crt",
+      "indirectCRLCA4cRLIssuerCert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA4cRLIssuerCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41431",
+    "name": "invalid_crlissuer_test31",
+    "cert": "InvalidcRLIssuerTest31EE.crt",
+    "other_certs": [
+      "indirectCRLCA5Cert.crt",
+      "indirectCRLCA6Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA5CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41432",
+    "name": "invalid_crlissuer_test32",
+    "cert": "InvalidcRLIssuerTest32EE.crt",
+    "other_certs": [
+      "indirectCRLCA5Cert.crt",
+      "indirectCRLCA6Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA5CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41433",
+    "name": "valid_crlissuer_test33",
+    "cert": "ValidcRLIssuerTest33EE.crt",
+    "other_certs": [
+      "indirectCRLCA5Cert.crt",
+      "indirectCRLCA6Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA5CRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41434",
+    "name": "invalid_crlissuer_test34",
+    "cert": "InvalidcRLIssuerTest34EE.crt",
+    "other_certs": [
+      "indirectCRLCA5Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA5CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41435",
+    "name": "invalid_crlissuer_test35",
+    "cert": "InvalidcRLIssuerTest35EE.crt",
+    "other_certs": [
+      "indirectCRLCA5Cert.crt"
+    ],
+    "crls": [
+      "indirectCRLCA5CRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41501",
+    "name": "invalid_deltacrlindicator_no_base_set_test1",
+    "cert": "InvaliddeltaCRLIndicatorNoBaseTest1EE.crt",
+    "other_certs": [
+      "deltaCRLIndicatorNoBaseCACert.crt"
+    ],
+    "crls": [
+      "deltaCRLIndicatorNoBaseCACRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because no revocation information could be found for the end-entity certificate"
+    }
+  },
+  {
+    "id": "41502",
+    "name": "valid_deltacrl_test2",
+    "cert": "ValiddeltaCRLTest2EE.crt",
+    "other_certs": [
+      "deltaCRLCA1Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA1CRL.crl",
+      "deltaCRLCA1deltaCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41503",
+    "name": "invalid_deltacrl_test3",
+    "cert": "InvaliddeltaCRLTest3EE.crt",
+    "other_certs": [
+      "deltaCRLCA1Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA1CRL.crl",
+      "deltaCRLCA1deltaCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41504",
+    "name": "invalid_deltacrl_test4",
+    "cert": "InvaliddeltaCRLTest4EE.crt",
+    "other_certs": [
+      "deltaCRLCA1Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA1CRL.crl",
+      "deltaCRLCA1deltaCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-06-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41505",
+    "name": "valid_deltacrl_test5",
+    "cert": "ValiddeltaCRLTest5EE.crt",
+    "other_certs": [
+      "deltaCRLCA1Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA1CRL.crl",
+      "deltaCRLCA1deltaCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41506",
+    "name": "invalid_deltacrl_test6",
+    "cert": "InvaliddeltaCRLTest6EE.crt",
+    "other_certs": [
+      "deltaCRLCA1Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA1CRL.crl",
+      "deltaCRLCA1deltaCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41507",
+    "name": "valid_deltacrl_test7",
+    "cert": "ValiddeltaCRLTest7EE.crt",
+    "other_certs": [
+      "deltaCRLCA1Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA1CRL.crl",
+      "deltaCRLCA1deltaCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41508",
+    "name": "valid_deltacrl_test8",
+    "cert": "ValiddeltaCRLTest8EE.crt",
+    "other_certs": [
+      "deltaCRLCA2Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA2CRL.crl",
+      "deltaCRLCA2deltaCRL.crl"
+    ],
+    "path_len": 3
+  },
+  {
+    "id": "41509",
+    "name": "invalid_deltacrl_test9",
+    "cert": "InvaliddeltaCRLTest9EE.crt",
+    "other_certs": [
+      "deltaCRLCA2Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA2CRL.crl",
+      "deltaCRLCA2deltaCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "RevokedError",
+      "msg_regex": "CRL indicates the end-entity certificate was revoked at 08:30:00 on 2010-01-01, due to a compromised key"
+    }
+  },
+  {
+    "id": "41510",
+    "name": "invalid_deltacrl_test10",
+    "cert": "InvaliddeltaCRLTest10EE.crt",
+    "other_certs": [
+      "deltaCRLCA3Cert.crt"
+    ],
+    "crls": [
+      "deltaCRLCA3CRL.crl",
+      "deltaCRLCA3deltaCRL.crl"
+    ],
+    "path_len": 3,
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL is not recent enough"
+    }
+  },
+  {
+    "id": "41601",
+    "name": "valid_unknown_not_critical_certificate_extension_test1",
+    "cert": "ValidUnknownNotCriticalCertificateExtensionTest1EE.crt",
+    "path_len": 2
+  },
+  {
+    "id": "41602",
+    "name": "invalid_unknown_critical_certificate_extension_test2",
+    "cert": "InvalidUnknownCriticalCertificateExtensionTest2EE.crt",
+    "path_len": 2,
+    "error": {
+      "class": "PathValidationError",
+      "msg_regex": "The path could not be validated because the end-entity certificate contains the following unsupported critical extension: 2.16.840.1.101.2.1.12.2"
+    }
+  }
+]

@@ -1,0 +1,36 @@
+#!/bin/bash
+
+rm *.ors *.crl certs/*.crt
+
+
+alice_ocsp() {
+  certomancer seance time-slide-ca alice interm "alice-$1.ors" \
+    --at-time "$1T00:00:00+0000"
+}
+
+root_crl() {
+  certomancer necronomicon time-slide-ca root "root-$1.crl" \
+    --no-pem --at-time "$1T00:00:00+0000"
+}
+
+interm_crl() {
+  certomancer necronomicon time-slide-ca interm "interm-$1.crl" \
+    --no-pem --at-time "$1T00:00:00+0000"
+}
+
+certomancer mass-summon time-slide-ca certs --flat --no-pfx --no-pem
+
+echo "OCSPs for Alice..."
+alice_ocsp "2020-10-01"
+alice_ocsp "2020-11-29"
+alice_ocsp "2020-12-10"
+
+echo "Root CRLs..."
+root_crl "2020-10-01"
+root_crl "2020-11-29"
+root_crl "2020-12-10"
+
+echo "Intermediate CA CRLs..."
+interm_crl "2020-10-01"
+interm_crl "2020-11-29"
+interm_crl "2020-12-10"

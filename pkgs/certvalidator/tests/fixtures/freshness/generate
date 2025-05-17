@@ -1,0 +1,23 @@
+#!/bin/bash
+
+rm *.ors *.crl certs/*.crt
+
+alice_ocsp() {
+  certomancer seance freshness-ca alice interm "alice-$1.ors" \
+    --at-time "$1T00:00:00+0000"
+}
+
+root_crl() {
+  certomancer necronomicon freshness-ca root "root-$1.crl" \
+    --no-pem --at-time "$1T00:00:00+0000"
+}
+
+certomancer mass-summon freshness-ca certs --flat --no-pfx --no-pem
+
+alice_ocsp "2020-10-01"
+alice_ocsp "2020-11-29"
+alice_ocsp "2020-12-10"
+
+root_crl "2020-10-01"
+root_crl "2020-11-29"
+root_crl "2020-12-10"

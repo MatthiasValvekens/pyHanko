@@ -1,0 +1,290 @@
+external-url-prefix: "http://localhost:9000"
+keysets:
+  testing-aa:
+    path-prefix: keys
+    keys:
+      root:
+        path: root.key.pem
+      interm:
+        path: interm.key.pem
+      inbetween:
+        path: inbetween.key.pem
+      aa:
+        path: aa.key.pem
+      people-ca:
+        path: people-ca.key.pem
+      alice:
+        path: alice.key.pem
+      bob:
+        path: bob.key.pem
+
+pki-architectures:
+  basic-aa:
+    keyset: testing-aa
+    entity-defaults:
+      country-name: XX
+      organization-name: Testing Attribute Authority
+    entities:
+      root:
+        common-name: Root AA CA
+      inbetween:
+        common-name: Inbetween Intermediate AA CA
+      interm:
+        common-name: Intermediate AA CA
+      aa:
+        common-name: Leaf AA
+      people-ca:
+        common-name: People Root CA
+      alice:
+        organizational-unit-name: People
+        common-name: Alice
+      bob:
+        organizational-unit-name: People
+        common-name: Bob
+      validator:
+        common-name: Validator
+        organizational-unit-name: Validators
+      validator-group:
+        organizational-unit-name: Validators
+    certs:
+      root:
+        subject: root
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+      people-ca:
+        template: root
+        subject: people-ca
+        issuer: people-ca
+      alice:
+        subject: alice
+        issuer: people-ca
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature]
+      bob:
+        template: alice
+        subject: bob
+      interm-unrestricted:
+        subject: interm
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params: {crl-repo-names: [root]}
+      inbetween-aa:
+        template: interm-unrestricted
+        subject: inbetween
+        extensions:
+          - id: aa_controls
+            critical: true
+            value:
+              path-len-constraint: 0
+              permitted-attrs: ['role']
+      interm-pathlen-violation:
+        template: interm-unrestricted
+        subject: interm
+        issuer: inbetween
+        issuer-cert: inbetween-aa
+        extensions:
+          - id: aa_controls
+            critical: true
+            value:
+              permitted-attrs: ['role']
+      interm-role:
+        template: interm-unrestricted
+        subject: interm
+        extensions:
+          - id: aa_controls
+            critical: true
+            value:
+              path-len-constraint: 0
+              permitted-attrs: ['role']
+      role-aa:
+        subject: aa
+        issuer: interm
+        issuer-cert: interm-role
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, crl_sign]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params: {crl-repo-names: [interm]}
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ca-issuer-links:
+                  - repo: interm
+                    include-repo-authority: true
+          - id: aa_controls
+            critical: true
+            value:
+              permitted-attrs: ['role']
+              permit-unspecified: false
+      aa-unrestricted:
+        subject: aa
+        issuer: interm
+        issuer-cert: interm-unrestricted
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, crl_sign]
+    attr-certs:
+      alice-role-with-rev:
+        holder:
+          name: alice
+        issuer: aa
+        issuer-cert: role-aa
+        attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                name: {type: email, value: bigboss@example.com}
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params:
+                crl-repo-names: [role-aa]
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ocsp-responder-names: [role-aa]
+        revocation:
+          revoked-since: "2020-12-01T00:00:00+0000"
+          reason: key_compromise
+      alice-role-norev:
+        holder:
+          name: alice
+        issuer: aa
+        issuer-cert: role-aa
+        attributes:
+          - id: role
+            multivalued: true
+            smart-value:
+              schema: role-syntax
+              params:
+                - name: {type: email, value: alice@example.com}
+                - name: {type: email, value: alice2@example.com}
+          - id: group
+            smart-value:
+              schema: ietf-attribute
+              params:
+                - "Employees"
+                - "Team FooBar"
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: no_rev_avail
+      alice-norev-targeted:
+        holder:
+          name: alice
+        issuer: aa
+        issuer-cert: aa-unrestricted
+        attributes:
+          - id: role
+            multivalued: true
+            smart-value:
+              schema: role-syntax
+              params:
+                - name: {type: email, value: alice@example.com}
+                - name: {type: email, value: alice2@example.com}
+          - id: group
+            smart-value:
+              schema: ietf-attribute
+              params:
+                - "Employees"
+                - "Team FooBar"
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: no_rev_avail
+          - id: target_information
+            critical: true
+            smart-value:
+              schema: ac-targets
+              params:
+                - {type: directory_name, value: validator}
+                - {type: directory_name, is-group: true, value: validator-group}
+    services:
+      ocsp:
+        role-aa:
+          for-issuer: aa
+          issuer-cert: role-aa
+          responder-cert: role-aa
+          signing-key: aa
+          is-aa-responder: true
+      crl-repo:
+        root:
+          for-issuer: root
+          signing-key: root
+          simulated-update-schedule: "P90D"
+        interm:
+          for-issuer: interm
+          signing-key: interm
+          issuer-cert: interm-role
+          simulated-update-schedule: "P30D"
+        role-aa:
+          for-issuer: aa
+          signing-key: aa
+          issuer-cert: role-aa
+          simulated-update-schedule: "P30D"
+          crl-type: ac-only
+      cert-repo:
+        root:
+          for-issuer: root
+          publish-issued-certs: yes
+        interm:
+          for-issuer: interm
+          issuer-cert: interm-role
+          publish-issued-certs: no
