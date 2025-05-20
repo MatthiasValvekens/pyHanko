@@ -6,34 +6,23 @@ on:
       environment:
         type: environment
         description: "Environment in which to execute the release process"
-  push:
-    branches: [ "ci/*", "ci-*" ]
+      scope-override:
+        type: string
+        description: "Manually specify release scope as <pkg>/v<version>"
 jobs:
-  ci:
-    name: Run CI pipeline
-    uses: MatthiasValvekens/pyHanko/.github/workflows/build-pipeline.yml@master
-    permissions:
-      actions: write
-      contents: read
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   extract-params:
     name: Determine release parameters
     runs-on: ubuntu-latest
     permissions: {}
     outputs:
       publish-env: ${{ steps.setenv.outputs.envname }}
-      release-version: ${{ steps.getversion.outputs.version }}
+      version: ${{ steps.getrelease.outputs.version }}
+      package: ${{ steps.getrelease.outputs.package }}
+      wheel: ${{ steps.getrelease.outputs.wheel }}
     steps:
       - id: setenv
         run: |
-          if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
-              echo envname=release >> "$GITHUB_OUTPUT"
-          elif [[ $GITHUB_EVENT_NAME == 'push' ]]; then
-              # at times it may be convenient to temporarily turn on release-on-push
-              # for testing purposes, so leaving this line in helps make that smoother
-              echo envname=test-release >> "$GITHUB_OUTPUT"
-          elif [[ $GITHUB_EVENT_NAME == 'workflow_dispatch' ]]; then
+          if [[ $GITHUB_EVENT_NAME == 'workflow_dispatch' ]]; then
               echo "envname=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
           else
               echo "Cannot run release workflow for trigger event $GITHUB_EVENT_NAME"
@@ -41,23 +30,70 @@ jobs:
           fi
           cat "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-      - name: Get version information
-        id: getversion
+      - name: Get package and version information
+        id: getrelease
         run: |
           set -eo pipefail
-          grep __version__ < pyhanko/version.py \
-            | sed "s/__version__ = '\(.*\)'/version=\1/" >> "$GITHUB_OUTPUT"
+
+          if [[ -n "$SCOPE_OVERRIDE" ]]; then
+            SCOPE=$SCOPE_OVERRIDE
+          elif [[ "${GITHUB_REF:0:10}" == 'refs/tags/' ]]; then
+            SCOPE=${GITHUB_REF:10}
+          else
+            echo "$GITHUB_REF is not a tag, must specify 'scope-override'"
+            exit 1
+          fi
+
+          FULL_REGEX="\([a-z-]\+\)/v\(.\+\)"
+          VER_ONLY_REGEX="v\(.\+\)"
+
+          if echo $SCOPE | grep -q "$FULL_REGEX"; then
+            echo $SCOPE \
+              | sed "s|$FULL_REGEX|package=\1\nversion=\2|" \
+              >> "$GITHUB_OUTPUT"
+            echo $SCOPE \
+              | sed "s|$FULL_REGEX|wheel=\1|" \
+              | tr '-' '_' \
+              >> "$GITHUB_OUTPUT"
+          elif echo $SCOPE | grep -q "$VER_ONLY_REGEX"; then
+            # Default: package = pyhanko
+            echo "package=pyhanko" >> "$GITHUB_OUTPUT"
+            echo "wheel=pyhanko" >> "$GITHUB_OUTPUT"
+            echo $SCOPE \
+              | sed "s|$VER_ONLY_REGEX|version=\1|" \
+              >> "$GITHUB_OUTPUT"
+          else
+            echo "Scope $SCOPE does not follow <pkg>/v<version> pattern"
+            exit 1
+          fi
+
+        env:
+          SCOPE_OVERRIDE: ${{ inputs.scope-override }}
       - name: Generate release body
         run: |
-          sed "s/:VERSION/$VERSION/g" < .github/gh-release-template.md > release.md
+          sed "s/:VERSION/$VERSION/g" < .github/gh-release-template-$PACKAGE.md > release.md
           cat release.md
         env:
-          VERSION: ${{ steps.getversion.outputs.version }}
+          VERSION: ${{ steps.getrelease.outputs.version }}
+          PACKAGE: ${{ steps.getrelease.outputs.package }}
       - name: Upload release body
         uses: actions/upload-artifact@v4
         with:
           name: release-body
           path: release.md
+  ci:
+    needs: [extract-params]
+    name: Run CI pipeline
+    uses: MatthiasValvekens/pyHanko/.github/workflows/build-pipeline.yml@master
+    permissions:
+      actions: write
+      contents: read
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    with:
+      package: ${{ needs.extract-params.outputs.package }}
+      wheel: ${{ needs.extract-params.outputs.wheel }}
+      version: ${{ needs.extract-params.outputs.version }}
   provenance:
     name: Generate SLSA provenance data
     needs: [ci]
@@ -85,7 +121,7 @@ jobs:
     - name: Download dist artifacts
       uses: actions/download-artifact@v4
       with:
-        name: pyhanko-dist
+        name: pyhanko-release-dist
         path: dist/
     - name: Download provenance data
       uses: actions/download-artifact@v4
@@ -120,4 +156,4 @@ jobs:
         fail_on_unmatched_files: true
         discussion_category_name: Announcements
         prerelease: true
-        name: pyHanko ${{ needs.extract-params.outputs.release-version }} beta
+        name: ${{ needs.extract-params.outputs.package }} ${{ needs.extract-params.outputs.version }} beta

@@ -2,13 +2,23 @@ name: CI pipeline
 
 on:
   push:
-    branches: [ master, "release/*", "maintenance/*", "ci/*" ]
+    branches: [ master, "release/*", "ci/*" ]
   pull_request:
     branches: [ master ]
   workflow_call:
     secrets:
       CODECOV_TOKEN:
         required: true
+    inputs:
+      package:
+        type: string
+        description: "package being released (subdir of pkgs/)"
+      wheel:
+        type: string
+        description: "wheel being released"
+      version:
+        type: string
+        description: "version to release"
     outputs:
       hashes:
         description: "Hashes of the artifacts that were built"
@@ -37,17 +47,31 @@ jobs:
         with:
           python-version: ${{ env.MAIN_PYTHON_VERSION }} 
       - name: Install build tools
-        run: pip install --upgrade setuptools pip wheel uv
+        run: pip install --upgrade setuptools pip wheel uv tomlkit requests
+      - name: Apply package version for release
+        if: inputs.package != ''
+        run: |
+          python dev/apply_version.py ${{ inputs.package }} ${{ inputs.version }}
+          git diff
       - name: Build release artifacts
         run: uv build --all-packages
-      - name: Record release artifact hashes
-        id: artifact-hashes
-        run: cd dist && echo "hashes=$(sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
         with:
           name: pyhanko-dist
           path: dist/
+      - name: Record release artifact hashes
+        if: inputs.package != ''
+        id: artifact-hashes
+        run: cd dist && echo "hashes=$(sha256sum $PATTERN | base64 -w0)" >> "$GITHUB_OUTPUT"
+        env:
+          PATTERN: ${{ inputs.wheel }}-${{ inputs.version }}*
+      - name: Upload dist artifacts for release
+        if: inputs.package != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyhanko-release-dist
+          path: dist/${{ inputs.wheel }}-${{ inputs.version }}*
   pytest-coverage:
     runs-on: ubuntu-latest
     needs: build

@@ -7,7 +7,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyhanko-certvalidator"
-dynamic = ['version']
 authors = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
 license = "MIT"
 license-files = ["LICENSE"]
@@ -24,7 +23,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -40,6 +38,7 @@ dependencies = [
     "uritools>=3.0.1",
     "requests>=2.31.0",
 ]
+version = "0.0.0.dev1"
 
 
 [project.readme]
@@ -64,9 +63,6 @@ testing-base = [
 
 [tool.setuptools]
 include-package-data = false
-
-[tool.setuptools.dynamic]
-version = {attr = "pyhanko_certvalidator.version.__version__"}
 
 [tool.setuptools.package-data]
 pyhanko_certvalidator = ["py.typed"]

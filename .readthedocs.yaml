@@ -3,17 +3,16 @@ version: 2
 sphinx:
   configuration: docs/conf.py
 build:
-  os: ubuntu-22.04
+  os: ubuntu-latest
   tools:
-    python: "3.11"
+    python: "3.13"
 python:
   install:
     - method: pip
-      path: .
+      path: pkgs/pyhanko
       extra_requirements:
         - docs
         - extra-pubkey-algs
-        - xmp
         - opentype
         - image-support
         - pkcs11

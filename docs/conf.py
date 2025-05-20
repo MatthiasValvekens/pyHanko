@@ -11,29 +11,29 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
+import subprocess
 import sys
 
-sys.path.insert(0, os.path.abspath('..'))
+sys.path.insert(0, os.path.abspath('../pkgs/pyhanko/src'))
 
 import sphinx_rtd_theme
 
-
 def get_version():
     from os import path
-    project_root = path.abspath(path.dirname(path.dirname(__file__)))
-    version_file = path.join(project_root, 'pyhanko', 'version.py')
-    with open(version_file, encoding='utf-8') as f:
-        for line in f:
-            if line.startswith('__version__'):
-                delim = '"' if '"' in line else "'"
-                return line.split(delim)[1]
-        raise RuntimeError("Unable to find version string.")
 
+    current_tag_output = subprocess.check_output(['git', 'tag', '--points-at', 'HEAD'])
+    tags = [x for x in current_tag_output.decode('utf-8').splitlines() if x.startswith('v')]
+    if not tags:
+        version = "0.0.0.dev1"
+    else:
+        version = tags[0]
+
+    return version
 
 # -- Project information -----------------------------------------------------
 
 project = 'pyHanko'
-copyright = '2020-2023, Matthias Valvekens'
+copyright = '2020-2025, Matthias Valvekens'
 author = 'Matthias Valvekens'
 
 # The full version, including alpha/beta/rc tags
