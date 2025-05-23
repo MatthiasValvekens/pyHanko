@@ -24,13 +24,14 @@ from pyhanko.sign.validation import (
     RevocationInfoValidationType,
     async_validate_pdf_ltv_signature,
 )
-from tests.samples import MINIMAL_ONE_FIELD
 
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
     AIOHttpFetcherBackend,
 )
 from pyhanko_certvalidator.registry import SimpleCertificateStore
+
+from .samples import MINIMAL_ONE_FIELD
 
 logger = logging.getLogger(__name__)
 

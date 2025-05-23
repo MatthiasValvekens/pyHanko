@@ -19,15 +19,16 @@ from pyhanko.sign.validation import (
     validate_pdf_ltv_signature,
     validate_pdf_signature,
 )
-from tests.samples import (
+
+from pyhanko_certvalidator import ValidationContext
+
+from ..samples import (
     MINIMAL,
     TESTING_CA,
     TESTING_CA_ECDSA,
     TESTING_CA_ED448,
     TESTING_CA_ED25519,
 )
-
-from pyhanko_certvalidator import ValidationContext
 
 INPUT_PATH = 'input.pdf'
 SIGNED_OUTPUT_PATH = 'output.pdf'

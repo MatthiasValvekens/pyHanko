@@ -27,7 +27,8 @@ from pyhanko.sign.signers.pdf_cms import (
     signer_from_pemder_config,
 )
 from pyhanko.stamp import QRStampStyle, TextStampStyle
-from tests.samples import CRYPTO_DATA_DIR, TESTING_CA_DIR
+
+from .samples import CRYPTO_DATA_DIR, TESTING_CA_DIR
 
 
 def _parse_cli_config(config_string):
@@ -64,7 +65,8 @@ def test_read_vc_kwargs(trust_replace):
 def test_read_qr_config():
     from pyhanko.pdf_utils.font import SimpleFontEngineFactory
     from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
-    from tests.test_text import NOTO_SERIF_JP
+
+    from .test_text import NOTO_SERIF_JP
 
     config_string = f"""
     stamp-styles:

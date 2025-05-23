@@ -5,9 +5,10 @@ from pyhanko.cli import cli_root
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import PdfSignatureMetadata, sign_pdf
-from tests.cli_tests.conftest import INPUT_PATH
-from tests.samples import MINIMAL, MINIMAL_TWO_FIELDS, MINIMAL_TWO_PAGES
-from tests.signing_commons import FROM_CA
+
+from ..samples import MINIMAL, MINIMAL_TWO_FIELDS, MINIMAL_TWO_PAGES
+from ..signing_commons import FROM_CA
+from .conftest import INPUT_PATH
 
 
 def test_list_empty_fields_with_status(cli_runner):

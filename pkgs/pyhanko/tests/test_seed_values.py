@@ -20,8 +20,11 @@ from pyhanko.sign.validation import (
     async_validate_pdf_ltv_signature,
     async_validate_pdf_signature,
 )
-from tests.samples import MINIMAL
-from tests.signing_commons import (
+
+from pyhanko_certvalidator import CertificateValidator
+
+from .samples import MINIMAL
+from .signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_TS,
     FROM_CA,
@@ -32,9 +35,7 @@ from tests.signing_commons import (
     dummy_ocsp_vc,
     live_testing_vc,
 )
-from tests.test_pades import PADES, ts_response_callback
-
-from pyhanko_certvalidator import CertificateValidator
+from .test_pades import PADES, ts_response_callback
 
 
 def test_sv_deserialisation():

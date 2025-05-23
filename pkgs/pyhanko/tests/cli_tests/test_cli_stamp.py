@@ -1,5 +1,6 @@
 from pyhanko.cli import cli_root
-from tests.cli_tests.conftest import (
+
+from .conftest import (
     INPUT_PATH,
     SIGNED_OUTPUT_PATH,
     _write_config,

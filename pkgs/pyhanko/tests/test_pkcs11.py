@@ -28,8 +28,11 @@ from pyhanko.sign.pkcs11 import (
     criteria_satisfied_by,
     find_token,
 )
-from tests.samples import MINIMAL, TESTING_CA
-from tests.signing_commons import (
+
+from pyhanko_certvalidator.registry import SimpleCertificateStore
+
+from .samples import MINIMAL, TESTING_CA
+from .signing_commons import (
     SIMPLE_DSA_V_CONTEXT,
     SIMPLE_ECC_V_CONTEXT,
     SIMPLE_ED448_V_CONTEXT,
@@ -40,8 +43,6 @@ from tests.signing_commons import (
     pkcs11_test_module,
     val_trusted,
 )
-
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 pytestmark = pkcs11_only
 

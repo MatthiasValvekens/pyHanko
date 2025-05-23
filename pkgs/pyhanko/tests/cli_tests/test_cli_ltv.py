@@ -1,14 +1,15 @@
 import pytest
 from certomancer.registry import CertLabel
 from pyhanko.cli import cli_root
-from tests.cli_tests.conftest import (
+
+from ..samples import TESTING_CA
+from .conftest import (
     DUMMY_PASSPHRASE,
     INPUT_PATH,
     SIGNED_OUTPUT_PATH,
     _write_cert,
     _write_config,
 )
-from tests.samples import TESTING_CA
 
 
 def test_cli_lta_update(

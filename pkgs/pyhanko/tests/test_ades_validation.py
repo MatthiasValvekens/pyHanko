@@ -36,24 +36,6 @@ from pyhanko.sign.validation.policy_decl import (
     PdfSignatureValidationSpec,
     SignatureValidationSpec,
 )
-from tests.samples import (
-    CERTOMANCER,
-    MINIMAL_ONE_FIELD,
-    TESTING_CA,
-    UNRELATED_TSA,
-)
-from tests.signing_commons import (
-    DUMMY_HTTP_TS_VARIANT,
-    DUMMY_TS,
-    DUMMY_TS2,
-    FROM_CA,
-    INTERM_CERT,
-    REVOKED_SIGNER,
-    TRUST_ROOTS,
-    TSA_CERT,
-    live_testing_vc,
-)
-from tests.test_pades import PADES
 
 from pyhanko_certvalidator import policy_decl as certv_policy_decl
 from pyhanko_certvalidator.authority import CertTrustAnchor
@@ -82,6 +64,25 @@ from pyhanko_certvalidator.registry import (
     SimpleTrustManager,
 )
 from pyhanko_certvalidator.validate import async_validate_path
+
+from .samples import (
+    CERTOMANCER,
+    MINIMAL_ONE_FIELD,
+    TESTING_CA,
+    UNRELATED_TSA,
+)
+from .signing_commons import (
+    DUMMY_HTTP_TS_VARIANT,
+    DUMMY_TS,
+    DUMMY_TS2,
+    FROM_CA,
+    INTERM_CERT,
+    REVOKED_SIGNER,
+    TRUST_ROOTS,
+    TSA_CERT,
+    live_testing_vc,
+)
+from .test_pades import PADES
 
 
 async def _generate_pades_test_doc(requests_mock, signer=FROM_CA, **kwargs):

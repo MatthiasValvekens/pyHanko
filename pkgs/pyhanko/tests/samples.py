@@ -1,3 +1,5 @@
+import os.path
+
 import yaml
 from asn1crypto import cms
 from certomancer.registry import ArchLabel, CertomancerConfig
@@ -9,8 +11,10 @@ def read_all(fname):
         return f.read()
 
 
-CRYPTO_DATA_DIR = 'tests/data/crypto'
-PDF_DATA_DIR = 'tests/data/pdf'
+TEST_DIR = os.path.dirname(__file__)
+
+CRYPTO_DATA_DIR = f'{TEST_DIR}/data/crypto'
+PDF_DATA_DIR = f'{TEST_DIR}/data/pdf'
 MINIMAL_PATH = PDF_DATA_DIR + '/minimal.pdf'
 MINIMAL = read_all(MINIMAL_PATH)
 EMPTY_A4 = read_all(PDF_DATA_DIR + '/empty-a4.pdf')
@@ -108,8 +112,8 @@ PUBKEY_TEST_DECRYPTER_OLD = SimpleEnvelopeKeyDecrypter.load(
 
 # no keyEncipherment bit on this one
 PUBKEY_SELFSIGNED_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
-    "tests/data/crypto/selfsigned.key.pem",
-    "tests/data/crypto/selfsigned.cert.pem",
+    f"{CRYPTO_DATA_DIR}/selfsigned.key.pem",
+    f"{CRYPTO_DATA_DIR}/selfsigned.cert.pem",
     b'secret',
 )
 

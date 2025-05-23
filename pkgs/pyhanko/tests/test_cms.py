@@ -60,7 +60,15 @@ from pyhanko.sign.validation.errors import (
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 from pyhanko.sign.validation.status import ClaimedAttributes
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
-from tests.samples import (
+
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsageConstraint,
+    DisallowWeakAlgorithmsPolicy,
+)
+from pyhanko_certvalidator.registry import SimpleCertificateStore
+
+from .samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
     MINIMAL,
@@ -73,7 +81,7 @@ from tests.samples import (
     TESTING_CA_ED25519,
     TESTING_CA_ERRORS,
 )
-from tests.signing_commons import (
+from .signing_commons import (
     DSA_INTERM_CERT,
     DSA_ROOT_CERT,
     DUMMY_TS,
@@ -94,13 +102,6 @@ from tests.signing_commons import (
     val_trusted,
     val_untrusted,
 )
-
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.policy_decl import (
-    AlgorithmUsageConstraint,
-    DisallowWeakAlgorithmsPolicy,
-)
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 
 def test_generic_data_sign_legacy():

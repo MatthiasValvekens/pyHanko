@@ -15,21 +15,22 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
 from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
-from tests.cli_tests.conftest import (
+
+from pyhanko_certvalidator.registry import SimpleCertificateStore
+
+from ..samples import (
+    MINIMAL,
+    MINIMAL_AES256,
+    MINIMAL_PUBKEY_AES256,
+    TESTING_CA,
+)
+from .conftest import (
     FREEZE_DT,
     INPUT_PATH,
     _const,
     _write_cert,
     _write_config,
 )
-from tests.samples import (
-    MINIMAL,
-    MINIMAL_AES256,
-    MINIMAL_PUBKEY_AES256,
-    TESTING_CA,
-)
-
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 
 def _write_input_to_validate(

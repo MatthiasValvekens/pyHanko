@@ -5,7 +5,6 @@ from datetime import datetime
 import pytest
 from asn1crypto.util import timezone
 from freezegun import freeze_time
-from tests.common import load_cert_object, load_nist_cert
 
 from pyhanko_certvalidator import (
     CertificateValidator,
@@ -16,6 +15,8 @@ from pyhanko_certvalidator.errors import (
     InvalidCertificateError,
     PathValidationError,
 )
+
+from .common import load_cert_object, load_nist_cert
 
 
 @pytest.mark.asyncio

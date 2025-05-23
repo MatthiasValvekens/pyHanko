@@ -1,6 +1,7 @@
 from pyhanko.cli import cli_root
-from tests.cli_tests.conftest import INPUT_PATH
-from tests.samples import MINIMAL_AES256, MINIMAL_SLIGHTLY_BROKEN
+
+from ..samples import MINIMAL_AES256, MINIMAL_SLIGHTLY_BROKEN
+from .conftest import INPUT_PATH
 
 
 def test_fail_read(cli_runner):

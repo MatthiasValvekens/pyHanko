@@ -9,7 +9,8 @@ from pyhanko.pdf_utils import crypt, embed, generic, misc, writer
 from pyhanko.pdf_utils.crypt import AuthStatus
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from tests.samples import *
+
+from .samples import *
 
 
 def _embed_test(w, fname, ufname, data, created=None, modified=None):

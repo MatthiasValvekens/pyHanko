@@ -2,16 +2,17 @@ import getpass
 
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.pkcs11_cli import P11_PIN_ENV_VAR
-from tests.cli_tests.conftest import (
+
+from ..signing_commons import (
+    SOFTHSM,
+    pkcs11_only,
+    pkcs11_test_module,
+)
+from .conftest import (
     INPUT_PATH,
     SIGNED_OUTPUT_PATH,
     _const,
     _write_config,
-)
-from tests.signing_commons import (
-    SOFTHSM,
-    pkcs11_only,
-    pkcs11_test_module,
 )
 
 

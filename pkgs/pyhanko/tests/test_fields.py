@@ -13,7 +13,10 @@ from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import fields, signers
 from pyhanko.sign.fields import InvisSigSettings, VisibleSigSettings
 from pyhanko.sign.general import SigningError
-from tests.samples import (
+
+from pyhanko_certvalidator.registry import SimpleCertificateStore
+
+from .samples import (
     MINIMAL,
     MINIMAL_ONE_FIELD,
     MINIMAL_TWO_FIELDS,
@@ -22,15 +25,13 @@ from tests.samples import (
     TESTING_CA_ERRORS,
     simple_page,
 )
-from tests.signing_commons import (
+from .signing_commons import (
     FROM_CA,
     INTERM_CERT,
     ROOT_CERT,
     val_trusted,
 )
-from tests.test_signing import sign_test_files
-
-from pyhanko_certvalidator.registry import SimpleCertificateStore
+from .test_signing import sign_test_files
 
 
 def field_with_lock_sp(include_docmdp):

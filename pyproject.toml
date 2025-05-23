@@ -48,8 +48,16 @@ mypy = [
     "types-python-dateutil",
     "types-PyYAML",
     "types-tzlocal",
+]
+docs = [
     "sphinx",
     "sphinx-rtd-theme"
+]
+lint = ["isort", "black"]
+dev = [
+    {include-group = "docs"},
+    {include-group = "mypy"},
+    {include-group = "lint"},
 ]
 
 [tool.uv.workspace]

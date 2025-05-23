@@ -7,7 +7,8 @@ from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.reader import PdfFileReader
-from tests.samples import MINIMAL, MINIMAL_XREF
+
+from .samples import MINIMAL, MINIMAL_XREF
 
 
 @pytest.mark.parametrize(

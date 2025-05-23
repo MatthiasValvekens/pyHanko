@@ -360,7 +360,7 @@ def test_pdf_mac_pades(requests_mock):
     )
     Illusionist(TESTING_CA_ECDSA).register(requests_mock)
 
-    from tests.test_pades import PADES
+    from .test_pades import PADES
 
     signer = SimpleSigner(
         signing_cert=FROM_ECC_CA.signing_cert,

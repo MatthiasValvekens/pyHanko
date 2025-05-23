@@ -12,15 +12,10 @@ from pyhanko.cli import cli_root
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import async_validate_detached_cms
-from tests.cli_tests.conftest import (
-    DUMMY_PASSPHRASE,
-    INPUT_PATH,
-    SIGNED_OUTPUT_PATH,
-    _const,
-    _write_cert,
-    _write_config,
-)
-from tests.samples import (
+
+from pyhanko_certvalidator import ValidationContext
+
+from ..samples import (
     MINIMAL_AES256,
     MINIMAL_HYBRID,
     MINIMAL_ONE_FIELD,
@@ -28,8 +23,14 @@ from tests.samples import (
     MINIMAL_SLIGHTLY_BROKEN,
     TESTING_CA,
 )
-
-from pyhanko_certvalidator import ValidationContext
+from .conftest import (
+    DUMMY_PASSPHRASE,
+    INPUT_PATH,
+    SIGNED_OUTPUT_PATH,
+    _const,
+    _write_cert,
+    _write_config,
+)
 
 
 @pytest.fixture

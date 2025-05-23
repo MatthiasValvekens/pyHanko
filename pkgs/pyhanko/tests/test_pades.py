@@ -54,17 +54,30 @@ from pyhanko.sign.validation.errors import (
     SignatureValidationError,
     ValidationInfoReadingError,
 )
-from tests.samples import (
+
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.fetchers.requests_fetchers import (
+    RequestsFetcherBackend,
+)
+from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
+    RevocationCheckingPolicy,
+    RevocationCheckingRule,
+)
+from pyhanko_certvalidator.registry import SimpleCertificateStore
+
+from .samples import (
     CERTOMANCER,
     MINIMAL,
     MINIMAL_ONE_FIELD,
+    MINIMAL_SLIGHTLY_BROKEN,
     MINIMAL_TWO_FIELDS,
     PDF_DATA_DIR,
     SAMPLE_GROUP_ATTR,
     TESTING_CA,
     UNRELATED_TSA,
 )
-from tests.signing_commons import (
+from .signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_HTTP_TS_VARIANT,
     DUMMY_POLICY_ID,
@@ -84,19 +97,6 @@ from tests.signing_commons import (
     live_testing_vc,
     val_trusted,
 )
-
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
-)
-from pyhanko_certvalidator.policy_decl import (
-    CertRevTrustPolicy,
-    RevocationCheckingPolicy,
-    RevocationCheckingRule,
-)
-from pyhanko_certvalidator.registry import SimpleCertificateStore
-
-from .samples import MINIMAL_SLIGHTLY_BROKEN
 
 
 def ts_response_callback(request, _context):

@@ -4,7 +4,8 @@ import pytest
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.simple import PKCS12Plugin
 from pyhanko.cli.plugin_api import SigningCommandPlugin, register_signing_plugin
-from tests.cli_tests.conftest import _write_config
+
+from .conftest import _write_config
 
 if sys.version_info < (3, 8):
     pytest.skip(

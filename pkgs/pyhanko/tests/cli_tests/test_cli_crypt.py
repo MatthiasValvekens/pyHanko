@@ -15,14 +15,15 @@ from pyhanko.pdf_utils.crypt import (
 from pyhanko.pdf_utils.crypt.permissions import PubKeyPermissions
 from pyhanko.pdf_utils.crypt.pubkey import RecipientEncryptionPolicy
 from pyhanko.pdf_utils.reader import PdfFileReader
-from tests.cli_tests.conftest import INPUT_PATH, _const
-from tests.samples import (
+
+from ..samples import (
     MINIMAL,
     MINIMAL_AES256,
     MINIMAL_PUBKEY_AES256,
     PUBKEY_SELFSIGNED_DECRYPTER,
     PUBKEY_TEST_DECRYPTER,
 )
+from .conftest import INPUT_PATH, _const
 
 
 def _test_password(fname, password, expected_status=AuthStatus.OWNER):
