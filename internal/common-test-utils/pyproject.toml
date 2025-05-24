@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=80.8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "common-test-utils"
+version = "0.dev0"
+description = "Internal package with common testing utils & test data"
+requires-python = ">=3.9"
+dependencies = ["certomancer", "pyhanko", "pyhanko_certvalidator"]
+
+[project.optional-dependencies]
+csc = ["certomancer-csc-dummy==0.3.0"]
+
+[tool.setuptools]
+include-package-data = true
+package-dir = { "" = "src" }

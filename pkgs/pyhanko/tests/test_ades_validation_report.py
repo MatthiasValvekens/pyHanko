@@ -17,6 +17,14 @@ from pyhanko.sign.validation.policy_decl import (
     PdfSignatureValidationSpec,
     SignatureValidationSpec,
 )
+from test_data.samples import CERTOMANCER, MINIMAL_ONE_FIELD, SAMPLE_GROUP_ATTR
+from test_utils.signing_commons import (
+    DUMMY_POLICY_ID,
+    DUMMY_TS,
+    FROM_CA,
+    FROM_ECC_CA,
+    live_testing_vc,
+)
 
 from pyhanko_certvalidator.context import CertValidationPolicySpec
 from pyhanko_certvalidator.registry import (
@@ -24,14 +32,6 @@ from pyhanko_certvalidator.registry import (
     SimpleTrustManager,
 )
 
-from .samples import CERTOMANCER, MINIMAL_ONE_FIELD, SAMPLE_GROUP_ATTR
-from .signing_commons import (
-    DUMMY_POLICY_ID,
-    DUMMY_TS,
-    FROM_CA,
-    FROM_ECC_CA,
-    live_testing_vc,
-)
 from .test_ades_validation import DEFAULT_SIG_VALIDATION_SPEC
 from .test_pades import PADES
 

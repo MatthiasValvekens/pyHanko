@@ -1,0 +1,98 @@
+[build-system]
+requires = ["setuptools>=80.8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyhanko-cli"
+description = "CLI tools for stamping and signing PDF files"
+authors = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
+maintainers = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = [
+    "signature",
+    "pdf",
+    "pades",
+    "digital-signature",
+    "pkcs11",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "asn1crypto>=1.5.1",
+    "tzlocal>=4.3",
+    "pyhanko",
+    "pyhanko-certvalidator",
+    "click>=8.1.3,<8.2.0",
+]
+version = "0.0.0.dev1"
+
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/MatthiasValvekens/pyHanko"
+Documentation = "https://pyhanko.readthedocs.io/"
+Changes = "https://pyhanko.readthedocs.io/en/latest/changelog.html"
+"Source Code" = "https://github.com/MatthiasValvekens/pyHanko"
+"Issue Tracker" = "https://github.com/MatthiasValvekens/pyHanko/issues"
+
+[dependency-groups]
+testing-base = [
+    "common-test-utils",
+    "pytest>=6.1.1",
+    "requests-mock>=1.8.0",
+    "freezegun>=1.1.0",
+    "certomancer>=0.12.3,<0.13",
+    "pytest-cov>=4.0,<6.2",
+    "pytest-asyncio==0.24.0;python_version<\"3.9\"",
+    "pytest-asyncio==0.26.0;python_version>=\"3.9\"",
+    "backports.zoneinfo[tzdata];python_version<\"3.9\"",
+]
+testing = [
+    {include-group = "testing-base"},
+    "aiohttp>=3.9,<3.12",
+    "pytest-aiohttp>=1.0.4,<1.2.0",
+    "pyhanko[pkcs11,opentype,async_http,image-support]"
+]
+
+[project.scripts]
+pyhanko = "pyhanko.__main__:launch"
+
+[tool.setuptools]
+include-package-data = false
+package-dir = {"" = "src"}
+
+
+[tool.setuptools.package-data]
+pyhanko = ["py.typed"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+log_format = "%(asctime)s %(levelname)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+log_cli = true
+log_cli_level = "INFO"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope="function"
+
+[tool.coverage.run]
+omit = ["*docs*", "*test*", "*venv*", "setup.py", "_saslprep.py"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "pragma: nocover", "raise AssertionError", "raise NotImplementedError", "TYPE_CHECKING", "^\\s*\\.\\.\\."]
+precision = 2

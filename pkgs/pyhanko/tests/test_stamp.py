@@ -28,9 +28,8 @@ from pyhanko.stamp import (
     qr_stamp_file,
     text_stamp_file,
 )
-
-from .layout_test_utils import compare_output, with_layout_comparison
-from .samples import *
+from test_data.samples import *
+from test_utils.layout_test_utils import compare_output, with_layout_comparison
 
 FONT_DIR = f'{TEST_DIR}/data/fonts'
 

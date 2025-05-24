@@ -40,10 +40,9 @@ from pyhanko.sign.validation import (
     validate_pdf_signature,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
-
-from .samples import *
-from .samples import MINIMAL, PDF_DATA_DIR
-from .signing_commons import (
+from test_data.samples import *
+from test_data.samples import MINIMAL, PDF_DATA_DIR
+from test_utils.signing_commons import (
     DUMMY_TS,
     FROM_CA,
     FROM_ECC_CA,
@@ -55,6 +54,7 @@ from .signing_commons import (
     val_trusted_but_modified,
     val_untrusted,
 )
+
 from .test_pades import PADES
 
 

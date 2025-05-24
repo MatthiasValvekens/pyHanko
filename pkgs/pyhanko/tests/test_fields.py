@@ -7,16 +7,13 @@ from freezegun import freeze_time
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import PdfError, PdfReadError, PdfWriteError
+from pyhanko.pdf_utils.misc import PdfReadError, PdfWriteError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import fields, signers
 from pyhanko.sign.fields import InvisSigSettings, VisibleSigSettings
 from pyhanko.sign.general import SigningError
-
-from pyhanko_certvalidator.registry import SimpleCertificateStore
-
-from .samples import (
+from test_data.samples import (
     MINIMAL,
     MINIMAL_ONE_FIELD,
     MINIMAL_TWO_FIELDS,
@@ -25,12 +22,15 @@ from .samples import (
     TESTING_CA_ERRORS,
     simple_page,
 )
-from .signing_commons import (
+from test_utils.signing_commons import (
     FROM_CA,
     INTERM_CERT,
     ROOT_CERT,
     val_trusted,
 )
+
+from pyhanko_certvalidator.registry import SimpleCertificateStore
+
 from .test_signing import sign_test_files
 
 

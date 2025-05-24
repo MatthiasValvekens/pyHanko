@@ -33,7 +33,8 @@ env:
   IM_COMPARE_PATH: /usr/bin/compare
   SOFTHSM2_CONF: /tmp/softhsm2.conf
   SOFTHSM2_MODULE_PATH: /usr/lib/softhsm/libsofthsm2.so
-  CERTOMANCER_CONFIG_PATH: pkgs/pyhanko/tests/data/crypto/certomancer.yml
+  CERTOMANCER_CONFIG_PATH: internal/common-test-utils/src/test_data/data/crypto/certomancer.yml
+  COVERAGE_SCOPE: "--cov=pyhanko --cov=pyhanko_certvalidator"
 
 jobs:
   build:
@@ -90,7 +91,9 @@ jobs:
       - name: Test pyhanko-certvalidator with pytest
         run: |
           uv run --directory pkgs/pyhanko-certvalidator --no-dev --exact --group testing-base \
-            pytest --cov=src --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml \
+            tests
       - name: Install external tools for pyHanko test suite
         run: |
           sudo apt-get update
@@ -99,13 +102,23 @@ jobs:
         run: |
           mkdir softhsm_tokens
           echo "directories.tokendir = $(pwd)/softhsm_tokens" > $SOFTHSM2_CONF
-          ./pkgs/pyhanko/tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
+          ./internal/common-test-utils/src/test_data/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
         env:
           UV_PROJECT: pkgs/pyhanko
       - name: Test pyHanko with pytest
         run: |
           uv run --directory pkgs/pyhanko --no-dev --exact --group testing --all-extras \
-            pytest --cov=src --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml \
+            tests
+        env:
+          PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
+      - name: Test pyHanko CLI with pytest
+        run: |
+          uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing --all-extras \
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-cli-${{ matrix.python-version }}-coverage.xml \
+            tests
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
@@ -130,19 +143,19 @@ jobs:
       - uses: ./.github/actions/test-job-setup
       - name: Start Certomancer Animator daemon
         run: |
-          uv run --project pkgs/pyhanko --group live-test \
+          uv run --project internal/integration-tests \
             certomancer --service-url-prefix http://localhost:9000 \
             --config "$CERTOMANCER_CONFIG_PATH" animate &
       - name: Start CSC dummy server
         run: |
-          uv run --project pkgs/pyhanko --group live-test \
+          uv run --project internal/integration-tests \
             certomancer-csc "$CERTOMANCER_CONFIG_PATH" 8999 2 &
       - name: Test with pytest
         run: |
-          uv run --directory pkgs/pyhanko --no-dev --exact --group live-test \
-                pytest --cov=src --cov-report=xml:python-${{ matrix.python-version }}-live-coverage.xml \
-                tests/with_live_certomancer.py \
-                tests/with_live_csc_dummy.py
+          uv run --directory internal/integration-tests \
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-${{ matrix.python-version }}-live-coverage.xml \
+            tests
         env:
           LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
           LIVE_CSC_SCAL2_HOST_URL: http://localhost:8999
@@ -150,7 +163,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-live-${{ strategy.job-index }}
-          path: "pkgs/pyhanko/*-coverage.xml"
+          path: "internal/integration-tests/*-coverage.xml"
   smoke-tests:
     runs-on: ubuntu-latest
     needs: build
@@ -161,14 +174,23 @@ jobs:
         with:
           python-version: ${{ env.MAIN_PYTHON_VERSION }}
       - uses: ./.github/actions/test-job-setup
-      - name: Run smoke tests that should pass without optional dependencies
+      - name: Run library smoke tests with minimal deps
         # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
         # the PKCS#11 parts
         run: |
           uv run --directory pkgs/pyhanko --no-dev --exact --group testing-base \
-                pytest --cov=src --cov-report=xml:python-smoke-test-coverage.xml \
-                tests/test_signing.py tests/test_diff_analysis.py tests/test_crypt.py \
-                tests/test_cms.py tests/cli_tests
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-smoke-test-lib-coverage.xml \
+            tests/test_signing.py tests/test_diff_analysis.py tests/test_crypt.py \
+            tests/test_cms.py
+      - name: Run CLI test suite with minimal deps
+        # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
+        # the PKCS#11 parts
+        run: |
+          uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing-base \
+            pytest $COVERAGE_SCOPE \
+            -m "not nosmoke" --cov-report=xml:python-smoke-test-cli-coverage.xml \
+            tests
       - name: Stash coverage report
         uses: actions/upload-artifact@v4
         with:

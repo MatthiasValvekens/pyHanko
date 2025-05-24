@@ -1,8 +1,8 @@
 [project]
 name = "pyhanko-suite"
 description = "Tools for stamping and signing PDF files"
-authors = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
-maintainers = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
+authors = [{ name = "Matthias Valvekens", email = "dev@mvalvekens.be" }]
+maintainers = [{ name = "Matthias Valvekens", email = "dev@mvalvekens.be" }]
 license = "MIT"
 requires-python = ">=3.9"
 version = "0.0.0"
@@ -19,7 +19,7 @@ Changes = "https://pyhanko.readthedocs.io/en/latest/changelog.html"
 "Issue Tracker" = "https://github.com/MatthiasValvekens/pyHanko/issues"
 
 [tool.mypy]
-files = "pkgs/pyhanko/src,pkgs/pyhanko-certvalidator/src"
+packages = "pyhanko,pyhanko_certvalidator"
 exclude = ".*tests.*"
 
 [[tool.mypy.overrides]]
@@ -53,20 +53,23 @@ docs = [
     "sphinx-rtd-theme",
 ]
 docs-build = [
-    {include-group = "docs"},
+    { include-group = "docs" },
     "pyhanko[opentype,image-support,pkcs11,async-http,etsi]",
     "pyhanko-certvalidator",
 ]
 lint = ["isort", "black"]
 dev = [
-    {include-group = "docs"},
-    {include-group = "mypy"},
-    {include-group = "lint"},
+    { include-group = "docs" },
+    { include-group = "mypy" },
+    { include-group = "lint" },
 ]
 
 [tool.uv.workspace]
-members = ["pkgs/*"]
+members = ["pkgs/*", "internal/*"]
 
 [tool.uv.sources]
 pyhanko = { workspace = true }
 pyhanko-certvalidator = { workspace = true }
+pyhanko-cli = { workspace = true }
+common-test-utils = { workspace = true }
+integration-tests = { workspace = true }

@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
-from pyhanko import __version__
 from pyhanko.pdf_utils.misc import StringWithLanguage
+from pyhanko.version import __version__
 
 __all__ = [
     'DocumentMetadata',

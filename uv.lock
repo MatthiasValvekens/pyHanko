@@ -9,8 +9,11 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "common-test-utils",
+    "integration-tests",
     "pyhanko",
     "pyhanko-certvalidator",
+    "pyhanko-cli",
     "pyhanko-suite",
 ]
 
@@ -423,6 +426,30 @@ wheels = [
 ]
 
 [[package]]
+name = "common-test-utils"
+version = "0.dev0"
+source = { editable = "internal/common-test-utils" }
+dependencies = [
+    { name = "certomancer" },
+    { name = "pyhanko" },
+    { name = "pyhanko-certvalidator" },
+]
+
+[package.optional-dependencies]
+csc = [
+    { name = "certomancer-csc-dummy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "certomancer" },
+    { name = "certomancer-csc-dummy", marker = "extra == 'csc'", specifier = "==0.3.0" },
+    { name = "pyhanko", editable = "pkgs/pyhanko" },
+    { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
+]
+provides-extras = ["csc"]
+
+[[package]]
 name = "coverage"
 version = "7.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -783,6 +810,43 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f2/97/ebf4da567aa6827c909642694d71c9fcf53e5b504f2d96afea02718862f3/iniconfig-2.1.0.tar.gz", hash = "sha256:3abbd2e30b36733fee78f9c7f7308f2d0050e88f0087fd25c2645f63c773e1c7", size = 4793, upload-time = "2025-03-19T20:09:59.721Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2c/e1/e6716421ea10d38022b952c159d5161ca1193197fb744506875fbb87ea7b/iniconfig-2.1.0-py3-none-any.whl", hash = "sha256:9deba5723312380e77435581c6bf4935c94cbfab9b1ed33ef8d238ea168eb760", size = 6050, upload-time = "2025-03-19T20:10:01.071Z" },
+]
+
+[[package]]
+name = "integration-tests"
+version = "0.dev0"
+source = { virtual = "internal/integration-tests" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "certomancer", extra = ["web-api"] },
+    { name = "common-test-utils", extra = ["csc"] },
+    { name = "freezegun" },
+    { name = "pyhanko" },
+    { name = "pyhanko-certvalidator" },
+    { name = "pyhanko-cli" },
+    { name = "pytest" },
+    { name = "pytest-aiohttp" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "requests-mock" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.9,<3.12" },
+    { name = "certomancer" },
+    { name = "certomancer", extras = ["web-api"], specifier = ">=0.12.3,<0.13" },
+    { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
+    { name = "freezegun", specifier = ">=1.1.0" },
+    { name = "pyhanko", editable = "pkgs/pyhanko" },
+    { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
+    { name = "pyhanko-cli", editable = "pkgs/pyhanko-cli" },
+    { name = "pytest", specifier = ">=6.1.1" },
+    { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
+    { name = "pytest-asyncio", marker = "python_full_version < '3.9'", specifier = "==0.24.0" },
+    { name = "pytest-asyncio", marker = "python_full_version >= '3.9'", specifier = "==0.26.0" },
+    { name = "pytest-cov", specifier = ">=4.0,<6.2" },
+    { name = "requests-mock", specifier = ">=1.8.0" },
 ]
 
 [[package]]
@@ -1306,7 +1370,6 @@ version = "0.0.0.dev1"
 source = { editable = "pkgs/pyhanko" }
 dependencies = [
     { name = "asn1crypto" },
-    { name = "click" },
     { name = "cryptography" },
     { name = "defusedxml" },
     { name = "pyhanko-certvalidator" },
@@ -1336,21 +1399,10 @@ pkcs11 = [
 ]
 
 [package.dev-dependencies]
-live-test = [
-    { name = "aiohttp" },
-    { name = "certomancer", extra = ["web-api"] },
-    { name = "certomancer-csc-dummy" },
-    { name = "freezegun" },
-    { name = "pytest" },
-    { name = "pytest-aiohttp" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "requests-mock" },
-]
 testing = [
     { name = "aiohttp" },
     { name = "certomancer" },
-    { name = "certomancer-csc-dummy" },
+    { name = "common-test-utils", extra = ["csc"] },
     { name = "freezegun" },
     { name = "pytest" },
     { name = "pytest-aiohttp" },
@@ -1364,6 +1416,7 @@ testing-aiohttp = [
 ]
 testing-base = [
     { name = "certomancer" },
+    { name = "common-test-utils" },
     { name = "freezegun" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1375,7 +1428,6 @@ testing-base = [
 requires-dist = [
     { name = "aiohttp", marker = "extra == 'async-http'", specifier = ">=3.9,<3.12" },
     { name = "asn1crypto", specifier = ">=1.5.1" },
-    { name = "click", specifier = ">=8.1.3,<8.2.0" },
     { name = "cryptography", specifier = ">=43.0.3" },
     { name = "defusedxml", specifier = "~=0.7.1" },
     { name = "fonttools", marker = "extra == 'opentype'", specifier = ">=4.33.3" },
@@ -1393,25 +1445,12 @@ requires-dist = [
 provides-extras = ["opentype", "image-support", "pkcs11", "async-http", "etsi"]
 
 [package.metadata.requires-dev]
-live-test = [
-    { name = "aiohttp", specifier = ">=3.9,<3.12" },
-    { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
-    { name = "certomancer", specifier = ">=0.12.3,<0.13" },
-    { name = "certomancer", extras = ["web-api"], specifier = ">=0.12.3,<0.13" },
-    { name = "certomancer-csc-dummy", specifier = "==0.3.0" },
-    { name = "freezegun", specifier = ">=1.1.0" },
-    { name = "pytest", specifier = ">=6.1.1" },
-    { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
-    { name = "pytest-asyncio", marker = "python_full_version < '3.9'", specifier = "==0.24.0" },
-    { name = "pytest-asyncio", marker = "python_full_version >= '3.9'", specifier = "==0.26.0" },
-    { name = "pytest-cov", specifier = ">=4.0,<6.2" },
-    { name = "requests-mock", specifier = ">=1.8.0" },
-]
 testing = [
     { name = "aiohttp", specifier = ">=3.9,<3.12" },
     { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
     { name = "certomancer", specifier = ">=0.12.3,<0.13" },
-    { name = "certomancer-csc-dummy", specifier = "==0.3.0" },
+    { name = "common-test-utils", editable = "internal/common-test-utils" },
+    { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
@@ -1427,6 +1466,7 @@ testing-aiohttp = [
 testing-base = [
     { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
     { name = "certomancer", specifier = ">=0.12.3,<0.13" },
+    { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-asyncio", marker = "python_full_version < '3.9'", specifier = "==0.24.0" },
@@ -1479,6 +1519,77 @@ testing-base = [
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<6.1" },
+]
+
+[[package]]
+name = "pyhanko-cli"
+version = "0.0.0.dev1"
+source = { editable = "pkgs/pyhanko-cli" }
+dependencies = [
+    { name = "asn1crypto" },
+    { name = "click" },
+    { name = "pyhanko" },
+    { name = "pyhanko-certvalidator" },
+    { name = "tzlocal" },
+]
+
+[package.dev-dependencies]
+testing = [
+    { name = "aiohttp" },
+    { name = "certomancer" },
+    { name = "common-test-utils" },
+    { name = "freezegun" },
+    { name = "pyhanko", extra = ["async-http", "image-support", "opentype", "pkcs11"] },
+    { name = "pytest" },
+    { name = "pytest-aiohttp" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "requests-mock" },
+]
+testing-base = [
+    { name = "certomancer" },
+    { name = "common-test-utils" },
+    { name = "freezegun" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "requests-mock" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asn1crypto", specifier = ">=1.5.1" },
+    { name = "click", specifier = ">=8.1.3,<8.2.0" },
+    { name = "pyhanko", editable = "pkgs/pyhanko" },
+    { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
+    { name = "tzlocal", specifier = ">=4.3" },
+]
+
+[package.metadata.requires-dev]
+testing = [
+    { name = "aiohttp", specifier = ">=3.9,<3.12" },
+    { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
+    { name = "certomancer", specifier = ">=0.12.3,<0.13" },
+    { name = "common-test-utils", editable = "internal/common-test-utils" },
+    { name = "freezegun", specifier = ">=1.1.0" },
+    { name = "pyhanko", extras = ["pkcs11", "opentype", "async-http", "image-support"], editable = "pkgs/pyhanko" },
+    { name = "pytest", specifier = ">=6.1.1" },
+    { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
+    { name = "pytest-asyncio", marker = "python_full_version < '3.9'", specifier = "==0.24.0" },
+    { name = "pytest-asyncio", marker = "python_full_version >= '3.9'", specifier = "==0.26.0" },
+    { name = "pytest-cov", specifier = ">=4.0,<6.2" },
+    { name = "requests-mock", specifier = ">=1.8.0" },
+]
+testing-base = [
+    { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
+    { name = "certomancer", specifier = ">=0.12.3,<0.13" },
+    { name = "common-test-utils", editable = "internal/common-test-utils" },
+    { name = "freezegun", specifier = ">=1.1.0" },
+    { name = "pytest", specifier = ">=6.1.1" },
+    { name = "pytest-asyncio", marker = "python_full_version < '3.9'", specifier = "==0.24.0" },
+    { name = "pytest-asyncio", marker = "python_full_version >= '3.9'", specifier = "==0.26.0" },
+    { name = "pytest-cov", specifier = ">=4.0,<6.2" },
+    { name = "requests-mock", specifier = ">=1.8.0" },
 ]
 
 [[package]]

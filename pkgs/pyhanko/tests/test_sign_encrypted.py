@@ -12,8 +12,7 @@ from pyhanko.sign.signers.pdf_signer import (
     SigDSSPlacementPreference,
 )
 from pyhanko.sign.validation import validate_pdf_signature
-
-from .samples import (
+from test_data.samples import (
     MINIMAL_AES256,
     MINIMAL_ONE_FIELD_AES256,
     MINIMAL_ONE_FIELD_RC4,
@@ -23,13 +22,14 @@ from .samples import (
     PDF_DATA_DIR,
     PUBKEY_SELFSIGNED_DECRYPTER,
 )
-from .signing_commons import (
+from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     FROM_CA,
     SIMPLE_V_CONTEXT,
     live_testing_vc,
     val_trusted,
 )
+
 from .test_pades import PADES
 
 sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)

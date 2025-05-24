@@ -20,11 +20,8 @@ from pyhanko.sign.validation import (
     async_validate_pdf_ltv_signature,
     async_validate_pdf_signature,
 )
-
-from pyhanko_certvalidator import CertificateValidator
-
-from .samples import MINIMAL
-from .signing_commons import (
+from test_data.samples import MINIMAL
+from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_TS,
     FROM_CA,
@@ -35,6 +32,9 @@ from .signing_commons import (
     dummy_ocsp_vc,
     live_testing_vc,
 )
+
+from pyhanko_certvalidator import CertificateValidator
+
 from .test_pades import PADES, ts_response_callback
 
 

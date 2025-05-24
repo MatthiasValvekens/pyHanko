@@ -14,15 +14,14 @@ from pyhanko.pdf_utils.xref import (
     parse_xref_stream,
     read_object_header,
 )
-
-from .samples import (
+from test_data.samples import (
     MINIMAL,
     MINIMAL_AES256,
     MINIMAL_TWO_FIELDS_TAGGED,
     MINIMAL_XREF,
+    NONEXISTENT_XREF_PATH,
     PDF_DATA_DIR,
 )
-from .test_utils import NONEXISTENT_XREF_PATH
 
 
 @pytest.mark.parametrize(

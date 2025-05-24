@@ -48,13 +48,8 @@ from pyhanko.sign.validation import (
 )
 from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.stamp import QRStampStyle
-
-from pyhanko_certvalidator import CertificateValidator, ValidationContext
-from pyhanko_certvalidator.errors import PathValidationError
-from pyhanko_certvalidator.registry import SimpleCertificateStore
-
-from .samples import *
-from .signing_commons import (
+from test_data.samples import *
+from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_TS,
     FIXED_OCSP,
@@ -76,6 +71,10 @@ from .signing_commons import (
     val_trusted,
     val_untrusted,
 )
+
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.errors import PathValidationError
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 DUMMY_TS_NO_NONCE = timestamps.DummyTimeStamper(
     tsa_cert=TSA_CERT,

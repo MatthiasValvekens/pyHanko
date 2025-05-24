@@ -12,16 +12,16 @@ from pyhanko.sign.ades.report import AdESIndeterminate
 from pyhanko.sign.timestamps import HTTPTimeStamper, TimestampRequestError
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.timestamps.common_utils import handle_tsp_response
-
-from pyhanko_certvalidator import ValidationContext
-
-from .samples import *
-from .signing_commons import (
+from test_data.samples import *
+from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_TS,
     FROM_CA,
     val_trusted,
 )
+
+from pyhanko_certvalidator import ValidationContext
+
 from .test_pades import ts_response_callback
 
 # Run some tests against a real TSA
@@ -150,7 +150,7 @@ def test_handle_error_response(status_string, fail_info, err_resp):
 
 
 def test_handle_bad_nonce():
-    from .signing_commons import DUMMY_TS
+    from test_utils.signing_commons import DUMMY_TS
 
     message = b'Hello world!'
     nonce, req = DUMMY_TS.request_cms(

@@ -1,0 +1,32 @@
+[project]
+name = "integration-tests"
+version = "0.dev0"
+description = "Internal package with integration tests"
+requires-python = ">=3.9"
+dependencies = [
+    "certomancer", "pyhanko", "pyhanko-certvalidator", "pyhanko-cli", "common-test-utils[csc]",
+    "pytest>=6.1.1",
+    "requests-mock>=1.8.0",
+    "freezegun>=1.1.0",
+    "certomancer[web-api]>=0.12.3,<0.13",
+    "pytest-cov>=4.0,<6.2",
+    "pytest-asyncio==0.24.0;python_version<\"3.9\"",
+    "pytest-asyncio==0.26.0;python_version>=\"3.9\"",
+    "aiohttp>=3.9,<3.12",
+    "pytest-aiohttp>=1.0.4,<1.2.0",
+]
+
+
+[tool.pytest.ini_options]
+pythonpath = []
+log_format = "%(asctime)s %(levelname)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+log_cli = true
+log_cli_level = "INFO"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "pragma: nocover", "raise AssertionError", "raise NotImplementedError", "TYPE_CHECKING", "^\\s*\\.\\.\\."]
+precision = 2
