@@ -1624,12 +1624,6 @@ def test_rsa_with_sha384():
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
         cert_registry=FROM_CA.cert_registry,
-        # need the generic mechanism because asn1crypto (==1.5.1)
-        # doesn't have the OIDs for RSA-with-SHA3 family
-        # hash functions.
-        signature_mechanism=SignedDigestAlgorithm(
-            {'algorithm': 'rsassa_pkcs1v15'}
-        ),
     )
     out = signers.sign_pdf(
         w,
