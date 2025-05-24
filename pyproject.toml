@@ -51,7 +51,12 @@ mypy = [
 ]
 docs = [
     "sphinx",
-    "sphinx-rtd-theme"
+    "sphinx-rtd-theme",
+]
+docs-build = [
+    {include-group = "docs"},
+    "pyhanko[opentype,image-support,pkcs11,async-http]",
+    "pyhanko-certvalidator"
 ]
 lint = ["isort", "black"]
 dev = [
