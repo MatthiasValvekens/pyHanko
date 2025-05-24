@@ -28,7 +28,7 @@ from pyhanko.sign.signers.pdf_cms import (
 )
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 
-from .samples import CRYPTO_DATA_DIR, TESTING_CA_DIR
+from .samples import CRYPTO_DATA_DIR, TEST_DIR, TESTING_CA_DIR
 
 
 def _parse_cli_config(config_string):
@@ -85,11 +85,11 @@ def test_read_qr_config():
         alternative1:
             text-box-style:
                 font: {NOTO_SERIF_JP}
-            background: tests/data/img/stamp-indexed.png
+            background: {TEST_DIR}/data/img/stamp-indexed.png
             type: qr
         alternative2:
             type: qr
-            background: tests/data/pdf/pdf-background-test.pdf
+            background: {TEST_DIR}/data/pdf/pdf-background-test.pdf
         alternative3:
             type: text
         wrong-position:

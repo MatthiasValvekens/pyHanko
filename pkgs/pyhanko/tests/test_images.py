@@ -9,7 +9,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 from .samples import *
 
-IMG_DIR = 'tests/data/img'
+IMG_DIR = f'{TEST_DIR}/data/img'
 
 
 @pytest.mark.parametrize('infile', ['stamp.png', 'stamp-indexed.png'])

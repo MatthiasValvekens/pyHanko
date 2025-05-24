@@ -32,7 +32,7 @@ from pyhanko.stamp import (
 from .layout_test_utils import compare_output, with_layout_comparison
 from .samples import *
 
-FONT_DIR = 'tests/data/fonts'
+FONT_DIR = f'{TEST_DIR}/data/fonts'
 
 # Noto fonts are licensed under the OFL
 NOTO_SERIF_JP = f'{FONT_DIR}/NotoSerifJP-Regular.otf'
@@ -44,7 +44,7 @@ NOTO_SANS = f'{FONT_DIR}/NotoSans-Regular.ttf'
 # We're only using it here because it's a useful example of a string-keyed
 # CFF font.
 FREE_SERIF = f'{FONT_DIR}/FreeSerif.otf'
-EXPECTED_OUTPUT_DIR = 'tests/data/pdf/layout-tests'
+EXPECTED_OUTPUT_DIR = f'{TEST_DIR}/data/pdf/layout-tests'
 
 
 def test_simple_text_stamp(tmp_path):
@@ -247,7 +247,7 @@ def test_stamp_with_unscaled_bitmap_bg():
     )
     style = TextStampStyle(
         stamp_text=long_text,
-        background=PdfImage('tests/data/img/stamp-indexed.png'),
+        background=PdfImage(f'{TEST_DIR}/data/img/stamp-indexed.png'),
     )
 
     ts = TextStamp(w, style)
@@ -265,7 +265,7 @@ def test_stamp_with_scaled_bitmap_bg():
     )
     style = TextStampStyle(
         stamp_text=text,
-        background=PdfImage('tests/data/img/stamp-indexed.png'),
+        background=PdfImage(f'{TEST_DIR}/data/img/stamp-indexed.png'),
     )
 
     ts = TextStamp(w, style, box=layout.BoxConstraints(400, 100))
@@ -302,7 +302,9 @@ def test_stamp_with_scaled_pdf_bg():
     )
     style = TextStampStyle(
         stamp_text=text,
-        background=ImportedPdfPage('tests/data/pdf/pdf-background-test.pdf'),
+        background=ImportedPdfPage(
+            f'{TEST_DIR}/data/pdf/pdf-background-test.pdf'
+        ),
     )
 
     ts = TextStamp(w, style, box=layout.BoxConstraints(200, 50))
@@ -316,7 +318,7 @@ def test_stamp_with_fixed_pdf_content():
     w = empty_page()
 
     style = StaticStampStyle.from_pdf_file(
-        'tests/data/pdf/pdf-background-test.pdf'
+        f'{TEST_DIR}/data/pdf/pdf-background-test.pdf'
     )
 
     stamp = style.create_stamp(
@@ -341,7 +343,7 @@ def test_static_stamp_enforce_box_defined(box):
     w = empty_page()
 
     style = StaticStampStyle.from_pdf_file(
-        'tests/data/pdf/pdf-background-test.pdf'
+        f'{TEST_DIR}/data/pdf/pdf-background-test.pdf'
     )
 
     with pytest.raises(layout.LayoutError, match="predetermined bounding box"):

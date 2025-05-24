@@ -8,7 +8,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.reader import PdfFileReader
 
-from .samples import MINIMAL, MINIMAL_XREF
+from .samples import MINIMAL, MINIMAL_XREF, TEST_DIR
 
 
 @pytest.mark.parametrize(
@@ -31,7 +31,7 @@ def test_simple_textbox_render(with_border, natural_size):
         assert abs(y1 - y2) == 900
 
 
-NOTO_SERIF_JP = 'tests/data/fonts/NotoSerifJP-Regular.otf'
+NOTO_SERIF_JP = f'{TEST_DIR}/data/fonts/NotoSerifJP-Regular.otf'
 
 
 def test_embed_subset():
@@ -159,7 +159,7 @@ def test_opentype_with_langsys():
     with open(
         # subset rigged for exactly this test so we don't have to
         # ship the entire font file
-        f"tests/data/fonts/NotoSerifSubset.otf",
+        f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
         'rb',
     ) as ffile:
         ga1 = GlyphAccumulator(
@@ -179,7 +179,7 @@ def test_opentype_with_langsys():
 def test_opentype_langsys_tag_too_long():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     with open(
-        f"tests/data/fonts/NotoSerifSubset.otf",
+        f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
         'rb',
     ) as ffile:
         with pytest.raises(ValueError, match='4 bytes long'):
@@ -195,7 +195,7 @@ def test_opentype_langsys_tag_too_long():
 def test_opentype_langsys_tag_not_ascii():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     with open(
-        f"tests/data/fonts/NotoSerifSubset.otf",
+        f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
         'rb',
     ) as ffile:
         with pytest.raises(ValueError, match='encodable'):
@@ -211,7 +211,7 @@ def test_opentype_langsys_tag_not_ascii():
 def test_opentype_invalid_writing_direction():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     with open(
-        f"tests/data/fonts/NotoSerifSubset.otf",
+        f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
         'rb',
     ) as ffile:
         with pytest.raises(ValueError, match='direction must be one of'):

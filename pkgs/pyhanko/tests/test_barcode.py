@@ -11,9 +11,9 @@ from .layout_test_utils import (
     compare_output,
     with_layout_comparison,
 )
-from .samples import MINIMAL
+from .samples import MINIMAL, TEST_DIR
 
-EXPECTED_OUTPUT_DIR = 'tests/data/pdf/layout-tests'
+EXPECTED_OUTPUT_DIR = f'{TEST_DIR}/data/pdf/layout-tests'
 
 
 @freeze_time('2020-11-01')

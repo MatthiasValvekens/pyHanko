@@ -49,6 +49,7 @@ from .samples import (
     PUBKEY_SELFSIGNED_DECRYPTER,
     PUBKEY_TEST_DECRYPTER,
     PUBKEY_TEST_DECRYPTER_OLD,
+    TEST_DIR,
     TESTING_CA_DIR,
     VECTOR_IMAGE_PDF,
 )
@@ -948,7 +949,7 @@ def test_empty_user_pass():
 
 def test_load_pkcs12():
     sedk = SimpleEnvelopeKeyDecrypter.load_pkcs12(
-        "tests/data/crypto/selfsigned.pfx", b'exportsecret'
+        f"{TEST_DIR}/data/crypto/selfsigned.pfx", b'exportsecret'
     )
     assert sedk.cert.subject == PUBKEY_SELFSIGNED_DECRYPTER.cert.subject
 
