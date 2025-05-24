@@ -2,6 +2,28 @@
 Release history
 ***************
 
+.. _release-0.28.0:
+
+0.28.0
+======
+
+*Release date:* 2025-05-24
+
+
+Dependency changes
+------------------
+
+ * Retool repository structure as ``uv`` multi-project workspace.
+ * Include ``pyhanko-certvalidator`` as subproject.
+ * Remove dev-only & testing dependencies from package metadata.
+
+
+Bugs fixed
+----------
+
+ * Fix error in SHA-3 detection when determining whether to include
+   the ISO/TS 32001 extension metadata.
+
 
 .. _release-0.27.1:
 
