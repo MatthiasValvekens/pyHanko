@@ -39,7 +39,6 @@ ignore_missing_imports = true
 
 [tool.uv]
 package = false
-default-groups = "all"
 
 [dependency-groups]
 mypy = [
@@ -56,7 +55,7 @@ docs = [
 docs-build = [
     {include-group = "docs"},
     "pyhanko[opentype,image-support,pkcs11,async-http]",
-    "pyhanko-certvalidator"
+    "pyhanko-certvalidator",
 ]
 lint = ["isort", "black"]
 dev = [

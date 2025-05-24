@@ -125,7 +125,7 @@ log_date_format = "%Y-%m-%d %H:%M:%S"
 log_cli = true
 log_cli_level = "INFO"
 asyncio_mode = "strict"
-asyncio_default_fixture_loop_scope="fixture"
+asyncio_default_fixture_loop_scope="function"
 
 [tool.coverage.run]
 omit = ["*docs*", "*test*", "*venv*", "setup.py", "_saslprep.py"]

@@ -28,7 +28,7 @@ permissions:
   actions: read
   contents: read
 env:
-  MAIN_PYTHON_VERSION: "3.10"
+  MAIN_PYTHON_VERSION: "3.13"
   PDFTOPPM_PATH: /usr/bin/pdftoppm
   IM_COMPARE_PATH: /usr/bin/compare
   SOFTHSM2_CONF: /tmp/softhsm2.conf
@@ -136,14 +136,14 @@ jobs:
           package: pyhanko
       - name: Start Certomancer Animator daemon
         run: |
-          uv run certomancer --service-url-prefix http://localhost:9000 \
+          uv run --no-sync certomancer --service-url-prefix http://localhost:9000 \
             --config "$CERTOMANCER_CONFIG_PATH" animate &
       - name: Start CSC dummy server
         run: |
           uv run certomancer-csc "$CERTOMANCER_CONFIG_PATH" 8999 2 &
       - name: Test with pytest
         run: |
-          uv run --directory pkgs/pyhanko \
+          uv run --no-sync --directory pkgs/pyhanko \
                 pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-live-coverage.xml \
                 tests/with_live_certomancer.py \
                 tests/with_live_csc_dummy.py
