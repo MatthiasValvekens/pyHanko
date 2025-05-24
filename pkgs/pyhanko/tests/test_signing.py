@@ -1618,6 +1618,37 @@ def test_rsa_with_sha3():
 
 
 @freeze_time('2020-11-01')
+def test_rsa_with_sha384():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+        # need the generic mechanism because asn1crypto (==1.5.1)
+        # doesn't have the OIDs for RSA-with-SHA3 family
+        # hash functions.
+        signature_mechanism=SignedDigestAlgorithm(
+            {'algorithm': 'rsassa_pkcs1v15'}
+        ),
+    )
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            md_algorithm='sha384',
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s)
+    assert status.md_algorithm == 'sha384'
+
+    assert r.input_version == (1, 7)
+    assert '/Extensions' not in r.root
+
+
+@freeze_time('2020-11-01')
 def test_sign_with_build_props_app_name():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(

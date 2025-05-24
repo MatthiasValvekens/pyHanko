@@ -1207,7 +1207,7 @@ class PdfSigner:
             _ensure_iso32001_ext(pdf_out)
             _ensure_iso32002_ext(pdf_out)
         else:
-            if md_algorithm.startswith('sha3') or md_algorithm == 'shake256':
+            if md_algorithm.startswith('sha3_') or md_algorithm == 'shake256':
                 _ensure_iso32001_ext(pdf_out)
             cert = self.signer.signing_cert
             if (
