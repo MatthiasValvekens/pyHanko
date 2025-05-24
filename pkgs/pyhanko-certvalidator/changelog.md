@@ -1,6 +1,11 @@
 # changelog
 
 
+## 0.27.0
+
+- Integrated into pyHanko repository as separate sub-package.
+- No functional changes.
+
 ## 0.26.8
 
 - Fixed bug where an HTTP(S) CRL URI appearing next to

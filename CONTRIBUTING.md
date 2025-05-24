@@ -65,7 +65,7 @@ or ask on the discussion forum.
 
 ### General policy
 
-Currently, pyHanko aims to remain compatible with Python versions 3.8 and up,
+Currently, pyHanko aims to remain compatible with Python versions 3.9 and up,
 and this is expected of new contributions as well (for the time being).
 
 PyHanko follows [SemVer](https://semver.org/), but has not yet reached `1.0.0`.
