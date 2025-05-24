@@ -54,7 +54,6 @@ from pyhanko.sign.validation.errors import (
     SignatureValidationError,
     ValidationInfoReadingError,
 )
-
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.fetchers.requests_fetchers import (
     RequestsFetcherBackend,
@@ -66,7 +65,7 @@ from pyhanko_certvalidator.policy_decl import (
 )
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
-from .samples import (
+from test_data.samples import (
     CERTOMANCER,
     MINIMAL,
     MINIMAL_ONE_FIELD,
@@ -77,7 +76,7 @@ from .samples import (
     TESTING_CA,
     UNRELATED_TSA,
 )
-from .signing_commons import (
+from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_HTTP_TS_VARIANT,
     DUMMY_POLICY_ID,

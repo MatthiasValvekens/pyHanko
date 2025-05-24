@@ -60,7 +60,6 @@ from pyhanko.sign.validation.errors import (
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 from pyhanko.sign.validation.status import ClaimedAttributes
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
-
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsageConstraint,
@@ -68,7 +67,7 @@ from pyhanko_certvalidator.policy_decl import (
 )
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
-from .samples import (
+from test_data.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
     MINIMAL,
@@ -81,7 +80,7 @@ from .samples import (
     TESTING_CA_ED25519,
     TESTING_CA_ERRORS,
 )
-from .signing_commons import (
+from test_utils.signing_commons import (
     DSA_INTERM_CERT,
     DSA_ROOT_CERT,
     DUMMY_TS,
@@ -1593,7 +1592,6 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
         ),
     )
     from certomancer.integrations.illusionist import Illusionist
-
     from pyhanko_certvalidator.fetchers.requests_fetchers import (
         RequestsFetcherBackend,
     )

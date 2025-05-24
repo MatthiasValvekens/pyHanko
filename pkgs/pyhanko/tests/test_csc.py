@@ -13,8 +13,9 @@ from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import csc_signer
 from pyhanko.sign.validation.utils import validate_raw
 
+from test_data.samples import CERTOMANCER, TESTING_CA
+
 from .csc_utils.csc_dummy_client import CSCDummyClientAuthManager
-from .samples import CERTOMANCER, TESTING_CA
 
 SIGNER_B64 = """
 MIIEMDCCAxigAwIBAgICEAEwDQYJKoZIhvcNAQELBQAwWTELMAkGA1UEBhMCQkUxFDASBgNVBAoM

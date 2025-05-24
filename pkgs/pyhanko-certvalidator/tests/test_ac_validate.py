@@ -4,7 +4,6 @@ import os
 import pytest
 from asn1crypto import cms, crl, ocsp, x509
 from freezegun import freeze_time
-
 from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.context import ACTargetDescription, ValidationContext

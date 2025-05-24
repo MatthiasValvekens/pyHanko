@@ -8,7 +8,6 @@ import pytest
 from asn1crypto import x509
 from click.testing import CliRunner
 from cryptography.hazmat.primitives.serialization import pkcs12
-from pyhanko.cli import cli_root
 from pyhanko.keys import (
     _translate_pyca_cryptography_cert_to_asn1,
     _translate_pyca_cryptography_key_to_asn1,
@@ -24,14 +23,13 @@ from pyhanko.sign.validation import (
     RevocationInfoValidationType,
     async_validate_pdf_ltv_signature,
 )
-
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
     AIOHttpFetcherBackend,
 )
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
-from .samples import MINIMAL_ONE_FIELD
+from test_data.samples import MINIMAL_ONE_FIELD
 
 logger = logging.getLogger(__name__)
 
@@ -231,69 +229,72 @@ async def _retrieve_and_save_credentials(fname, session, arch, label):
         credf.write(result)
 
 
-@run_if_live
-def test_pades_lta_live_with_cli():
-    arch = "testing-ca"
-    infile = 'in.pdf'
-    outfile = 'out.pdf'
-    cred_file = 'credential.p12'
-    root_file = 'root.crt'
-    cli_runner = CliRunner()
+# TODO this should go into a separate integration testing package
 
-    cfg = f"""
-    pkcs12-setups:
-        test:
-            pfx-file: {cred_file}
-            pfx-passphrase: {TEST_PASSPHRASE.decode('ascii')}
-    validation-contexts:
-        default:
-            trust: {root_file}
-    """
-
-    async def _env_setup():
-        async with aiohttp.ClientSession() as session:
-            await _retrieve_and_save_credentials(
-                cred_file, session, arch, "signer1-long"
-            )
-            root = await _retrieve_cert(session, arch, "root")
-        with open(root_file, 'wb') as f:
-            f.write(root.dump())
-        with open(infile, 'wb') as f:
-            f.write(MINIMAL_ONE_FIELD)
-        with open('pyhanko.yml', 'w') as f:
-            f.write(cfg)
-
-    async def _check():
-        async with aiohttp.ClientSession() as session:
-            with open(outfile, 'rb') as f:
-                root = await _retrieve_cert(session, arch, "root")
-                await _check_pades_result(
-                    f, [root], session, RevocationInfoValidationType.PADES_LTA
-                )
-                r = PdfFileReader(f)
-                dss = DocumentSecurityStore.read_dss(r)
-                assert len(dss.crls) == 1
-                assert len(dss.ocsps) == 1
-
-    with cli_runner.isolated_filesystem():
-        asyncio.run(_env_setup())
-
-        result = cli_runner.invoke(
-            cli_root,
-            [
-                'sign',
-                'addsig',
-                '--with-validation-info',
-                '--use-pades-lta',
-                '--timestamp-url',
-                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa",
-                'pkcs12',
-                '--p12-setup',
-                'test',
-                infile,
-                outfile,
-                cred_file,
-            ],
-        )
-        assert not result.exception, result.output
-        asyncio.run(_check())
+# @run_if_live
+# def test_pades_lta_live_with_cli():
+#    arch = "testing-ca"
+#    infile = 'in.pdf'
+#    outfile = 'out.pdf'
+#    cred_file = 'credential.p12'
+#    root_file = 'root.crt'
+#    cli_runner = CliRunner()
+#
+#    cfg = f"""
+#    pkcs12-setups:
+#        test:
+#            pfx-file: {cred_file}
+#            pfx-passphrase: {TEST_PASSPHRASE.decode('ascii')}
+#    validation-contexts:
+#        default:
+#            trust: {root_file}
+#    """
+#
+#    async def _env_setup():
+#        async with aiohttp.ClientSession() as session:
+#            await _retrieve_and_save_credentials(
+#                cred_file, session, arch, "signer1-long"
+#            )
+#            root = await _retrieve_cert(session, arch, "root")
+#        with open(root_file, 'wb') as f:
+#            f.write(root.dump())
+#        with open(infile, 'wb') as f:
+#            f.write(MINIMAL_ONE_FIELD)
+#        with open('pyhanko.yml', 'w') as f:
+#            f.write(cfg)
+#
+#    async def _check():
+#        async with aiohttp.ClientSession() as session:
+#            with open(outfile, 'rb') as f:
+#                root = await _retrieve_cert(session, arch, "root")
+#                await _check_pades_result(
+#                    f, [root], session, RevocationInfoValidationType.PADES_LTA
+#                )
+#                r = PdfFileReader(f)
+#                dss = DocumentSecurityStore.read_dss(r)
+#                assert len(dss.crls) == 1
+#                assert len(dss.ocsps) == 1
+#
+#    with cli_runner.isolated_filesystem():
+#        asyncio.run(_env_setup())
+#
+#        result = cli_runner.invoke(
+#            cli_root,
+#            [
+#                'sign',
+#                'addsig',
+#                '--with-validation-info',
+#                '--use-pades-lta',
+#                '--timestamp-url',
+#                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa",
+#                'pkcs12',
+#                '--p12-setup',
+#                'test',
+#                infile,
+#                outfile,
+#                cred_file,
+#            ],
+#        )
+#        assert not result.exception, result.output
+#        asyncio.run(_check())
+#

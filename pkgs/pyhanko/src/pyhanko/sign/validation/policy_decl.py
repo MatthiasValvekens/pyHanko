@@ -8,7 +8,6 @@ from asn1crypto import x509
 from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
 from pyhanko.sign.validation import KeyUsageConstraints
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
-
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,

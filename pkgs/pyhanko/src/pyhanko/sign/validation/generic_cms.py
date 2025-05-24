@@ -33,7 +33,6 @@ from pyhanko.sign.general import (
     find_unique_cms_attribute,
     get_pyca_cryptography_hash,
 )
-
 from pyhanko_certvalidator import (
     CancelableAsyncIterator,
     ValidationContext,

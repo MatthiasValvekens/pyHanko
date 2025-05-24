@@ -1,6 +1,5 @@
 import requests
 from asn1crypto import tsp
-
 from pyhanko_certvalidator._asyncio_compat import to_thread
 
 from .api import TimeStamper

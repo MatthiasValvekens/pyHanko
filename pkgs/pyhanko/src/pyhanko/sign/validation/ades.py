@@ -73,7 +73,6 @@ from pyhanko.sign.validation.status import (
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
 )
-
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.authority import CertTrustAnchor, TrustAnchor
 from pyhanko_certvalidator.context import (

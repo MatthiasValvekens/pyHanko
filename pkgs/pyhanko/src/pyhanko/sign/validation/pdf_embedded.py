@@ -29,7 +29,6 @@ from pyhanko.sign.general import (
     byte_range_digest,
     extract_signer_info,
 )
-
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
 

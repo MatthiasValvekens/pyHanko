@@ -7,7 +7,6 @@ from pyhanko.config.api import (
     process_bit_string_flags,
     process_oids,
 )
-
 from pyhanko_certvalidator.errors import InvalidCertificateError
 
 

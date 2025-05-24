@@ -33,7 +33,7 @@ env:
   IM_COMPARE_PATH: /usr/bin/compare
   SOFTHSM2_CONF: /tmp/softhsm2.conf
   SOFTHSM2_MODULE_PATH: /usr/lib/softhsm/libsofthsm2.so
-  CERTOMANCER_CONFIG_PATH: pkgs/pyhanko/tests/data/crypto/certomancer.yml
+  CERTOMANCER_CONFIG_PATH: pkgs/common-test-utils/src/test_data/data/crypto/certomancer.yml
 
 jobs:
   build:
@@ -99,13 +99,19 @@ jobs:
         run: |
           mkdir softhsm_tokens
           echo "directories.tokendir = $(pwd)/softhsm_tokens" > $SOFTHSM2_CONF
-          ./pkgs/pyhanko/tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
+          ./pkgs/common-test-utils/src/test_data/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
         env:
           UV_PROJECT: pkgs/pyhanko
       - name: Test pyHanko with pytest
         run: |
           uv run --directory pkgs/pyhanko --no-dev --exact --group testing --all-extras \
             pytest --cov=src --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
+        env:
+          PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
+      - name: Test pyHanko CLI with pytest
+        run: |
+          uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing --all-extras \
+            pytest --cov=src --cov-report=xml:python-cli-${{ matrix.python-version }}-coverage.xml
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
@@ -161,14 +167,20 @@ jobs:
         with:
           python-version: ${{ env.MAIN_PYTHON_VERSION }}
       - uses: ./.github/actions/test-job-setup
-      - name: Run smoke tests that should pass without optional dependencies
+      - name: Run library smoke tests with minimal deps
         # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
         # the PKCS#11 parts
         run: |
           uv run --directory pkgs/pyhanko --no-dev --exact --group testing-base \
-                pytest --cov=src --cov-report=xml:python-smoke-test-coverage.xml \
+                pytest --cov=src --cov-report=xml:python-smoke-test-lib-coverage.xml \
                 tests/test_signing.py tests/test_diff_analysis.py tests/test_crypt.py \
-                tests/test_cms.py tests/cli_tests
+                tests/test_cms.py
+      - name: Run CLI test suite with minimal deps
+        # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
+        # the PKCS#11 parts
+        run: |
+          uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing-base \
+                pytest --cov=src --cov-report=xml:python-smoke-test-cli-coverage.xml
       - name: Stash coverage report
         uses: actions/upload-artifact@v4
         with:

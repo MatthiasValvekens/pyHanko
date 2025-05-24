@@ -45,7 +45,6 @@ from pyhanko.sign.general import (
 )
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.stamp import BaseStampStyle
-
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
 from pyhanko_certvalidator.path import ValidationPath

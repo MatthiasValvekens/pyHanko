@@ -4,7 +4,6 @@ from typing import IO, Optional, TypeVar, Union
 
 from asn1crypto import cms
 from pyhanko.pdf_utils import misc
-
 from pyhanko_certvalidator import ValidationContext
 
 from ..diff_analysis import DiffPolicy

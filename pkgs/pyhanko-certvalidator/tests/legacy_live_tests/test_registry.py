@@ -1,5 +1,4 @@
 import pytest
-
 from pyhanko_certvalidator.fetchers.requests_fetchers import (
     RequestsCertificateFetcher,
 )

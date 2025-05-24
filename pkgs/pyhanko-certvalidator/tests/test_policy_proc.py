@@ -1,7 +1,6 @@
 import pytest
 from asn1crypto import x509
 from freezegun import freeze_time
-
 from pyhanko_certvalidator.authority import (
     CertTrustAnchor,
     NamedKeyAuthority,

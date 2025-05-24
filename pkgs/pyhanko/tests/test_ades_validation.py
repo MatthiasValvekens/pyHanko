@@ -36,7 +36,6 @@ from pyhanko.sign.validation.policy_decl import (
     PdfSignatureValidationSpec,
     SignatureValidationSpec,
 )
-
 from pyhanko_certvalidator import policy_decl as certv_policy_decl
 from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.context import (
@@ -65,13 +64,13 @@ from pyhanko_certvalidator.registry import (
 )
 from pyhanko_certvalidator.validate import async_validate_path
 
-from .samples import (
+from test_data.samples import (
     CERTOMANCER,
     MINIMAL_ONE_FIELD,
     TESTING_CA,
     UNRELATED_TSA,
 )
-from .signing_commons import (
+from test_utils.signing_commons import (
     DUMMY_HTTP_TS_VARIANT,
     DUMMY_TS,
     DUMMY_TS2,
@@ -82,6 +81,7 @@ from .signing_commons import (
     TSA_CERT,
     live_testing_vc,
 )
+
 from .test_pades import PADES
 
 

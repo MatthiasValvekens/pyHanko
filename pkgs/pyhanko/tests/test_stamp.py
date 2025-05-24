@@ -29,8 +29,9 @@ from pyhanko.stamp import (
     text_stamp_file,
 )
 
+from test_data.samples import *
+
 from .layout_test_utils import compare_output, with_layout_comparison
-from .samples import *
 
 FONT_DIR = f'{TEST_DIR}/data/fonts'
 

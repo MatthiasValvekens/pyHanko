@@ -7,7 +7,7 @@ from pyhanko.pdf_utils import generic, images
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
-from .samples import *
+from test_data.samples import *
 
 IMG_DIR = f'{TEST_DIR}/data/img'
 

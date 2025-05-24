@@ -28,7 +28,7 @@ from pyhanko.pdf_utils.reader import (
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
-from .samples import *
+from test_data.samples import *
 
 try:
     import zoneinfo

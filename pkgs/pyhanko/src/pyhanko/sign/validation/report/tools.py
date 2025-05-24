@@ -29,9 +29,8 @@ from pyhanko.sign.validation.ades import (
 from pyhanko.sign.validation.generic_cms import get_signing_cert_attr
 from pyhanko.sign.validation.pdf_embedded import EmbeddedPdfSignature
 from pyhanko.sign.validation.status import PdfSignatureStatus
-from xsdata.models.datatype import XmlDateTime
-
 from pyhanko_certvalidator.ltv.poe import ValidationObject, ValidationObjectType
+from xsdata.models.datatype import XmlDateTime
 
 __all__ = ['generate_report']
 

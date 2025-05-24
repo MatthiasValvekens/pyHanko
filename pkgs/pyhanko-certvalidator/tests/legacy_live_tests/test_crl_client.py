@@ -1,7 +1,6 @@
 # coding: utf-8
 
 import pytest
-
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers
 from pyhanko_certvalidator.revinfo.validate_crl import verify_crl

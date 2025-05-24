@@ -10,7 +10,6 @@ import pytest
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 from freezegun import freeze_time
-
 from pyhanko_certvalidator import PKIXValidationParams
 from pyhanko_certvalidator.authority import Authority, CertTrustAnchor
 from pyhanko_certvalidator.context import ValidationContext

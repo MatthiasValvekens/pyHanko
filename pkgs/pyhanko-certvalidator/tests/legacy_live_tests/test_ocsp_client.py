@@ -4,7 +4,6 @@ import os
 
 import pytest
 from asn1crypto import pem, x509
-
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers

@@ -14,7 +14,6 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import get_and_apply
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
-
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
 

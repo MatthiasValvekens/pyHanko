@@ -1,7 +1,6 @@
 import os
 
 from asn1crypto import x509
-
 from pyhanko_certvalidator.fetchers.common_utils import (
     enumerate_delivery_point_urls,
     unpack_cert_content,

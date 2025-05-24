@@ -1,7 +1,6 @@
 import pytest
 from asn1crypto.x509 import ExtKeyUsageSyntax, KeyUsage
 from pyhanko.sign.validation.settings import KeyUsageConstraints
-
 from pyhanko_certvalidator.errors import InvalidCertificateError
 
 

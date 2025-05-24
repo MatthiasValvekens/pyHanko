@@ -7,11 +7,12 @@ from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
 
+from test_data.samples import MINIMAL, TEST_DIR
+
 from .layout_test_utils import (
     compare_output,
     with_layout_comparison,
 )
-from .samples import MINIMAL, TEST_DIR
 
 EXPECTED_OUTPUT_DIR = f'{TEST_DIR}/data/pdf/layout-tests'
 

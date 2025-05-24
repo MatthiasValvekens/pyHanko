@@ -43,7 +43,6 @@ from pyhanko.sign.general import (
     simple_cms_attribute,
 )
 from pyhanko.sign.timestamps import TimeStamper
-
 from pyhanko_certvalidator._asyncio_compat import to_thread
 from pyhanko_certvalidator.registry import (
     CertificateStore,
