@@ -232,7 +232,6 @@ async def _retrieve_and_save_credentials(fname, session, arch, label):
 
 
 @run_if_live
-@pytest.mark.asyncio
 def test_pades_lta_live_with_cli():
     arch = "testing-ca"
     infile = 'in.pdf'
