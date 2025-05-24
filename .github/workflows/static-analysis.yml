@@ -26,5 +26,5 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install --upgrade uv
-      - run: uv sync --all-packages --group mypy
+      - run: uv sync --all-packages --all-extras --group mypy
       - run: uv run mypy

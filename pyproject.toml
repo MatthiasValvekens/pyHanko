@@ -54,7 +54,7 @@ docs = [
 ]
 docs-build = [
     {include-group = "docs"},
-    "pyhanko[opentype,image-support,pkcs11,async-http]",
+    "pyhanko[opentype,image-support,pkcs11,async-http,etsi]",
     "pyhanko-certvalidator",
 ]
 lint = ["isort", "black"]
