@@ -14,54 +14,17 @@ supply chain issues.
 
 .. note::
 
-    For the purposes of all security checks described here (except PGP signatures),
+    For the purposes of all security checks described here,
     GitHub effectively acts as the trust root.
     In case of doubt, cross-reference the content of this page with
     `its source on GitHub <https://github.com/MatthiasValvekens/pyHanko/blob/master/docs/artifact-authenticity.rst>`_.
 
 
-PGP signatures
-==============
-
-Scope
------
-
-All pyHanko releases are signed using `the maintainer's PGP key <https://mvalvekens.be/contact.html>`_.
-These signatures are uploaded together with the release artifacts on GitHub.
-Whether validating releases in this way makes sense to you depends on your software supply chain trust
-model, but it should support at least simple TOFU-style usage.
-
-
 .. warning::
 
-    Due to the manual nature of this signing process, there's a small time lag between the release
-    artifacts being uploaded to GitHub/PyPI and the PGP signatures being added to the release.
-
-.. note::
-
-    If you need more in-depth validation of the identity tied to the key used to sign releases,
-    use the contact information in the `security policy on GitHub <https://github.com/MatthiasValvekens/pyHanko/security/policy>`_.
-    We may be able to arrange something (within reasonable parameters).
-
-
-Verifying PGP signatures using GnuPG
-------------------------------------
-
- #. Install a GnuPG-compatible PGP implementation
- #. Import the key with fingerprint ``9C41 44F3 5E74 2C88 A5D2 563C 15F4 2BEF A159 BA54`` and establish trust
-    using whatever mechanism is appropriate to your use case.
- #. Download the release artifacts you are interested in through whichever channel you prefer
-    (e.g. using ``pip wheel``, or manual download from GitHub/PyPI)
- #. Download the PGP signature files (``.sig``) from the GitHub release page.
- #. Validate the signatures: ``gpg --verify *.whl.sig``, ``gpg --verify *.tar.gz.sig``.
-
-
-.. warning::
-
-    The procedure described here is appropriate for all current releases with version
-    number ``0.10.0`` or later.
-    Older releases were signed with a now-discontinued key. If you really need one of these
-    very old builds, `review the key rotation statement here <https://mvalvekens.be/blog/2021/pgp-key-rotation-statement.html>`_
+    PGP signing of releases has been discontinued. If the methods of release validation described here do not
+    meet your needs, please start a thread on the
+    `discussion forum <https://github.com/MatthiasValvekens/pyHanko/discussions>`_.
 
 
 Sigstore signatures
@@ -97,13 +60,29 @@ Verifying Sigstore signatures issued through GitHub Actions OIDC
 
     #!/bin/bash
 
-    export EXPECTED_VERSION=<version number goes here>
-    export REPO=MatthiasValvekens/pyHanko
+    EXPECTED_VERSION=<version number goes here>
+    REPO=MatthiasValvekens/pyHanko
     sigstore verify github \
         --cert-identity "https://github.com/$REPO/.github/workflows/release.yml@refs/tags/v$EXPECTED_VERSION" \
         --ref "refs/tags/v$EXPECTED_VERSION" \
         --repo "$REPO" \
-        pyHanko-$EXPECTED_VERSION-*.whl pyHanko-$EXPECTED_VERSION.tar.gz
+        pyhanko-$EXPECTED_VERSION-*.whl pyhanko-$EXPECTED_VERSION.tar.gz
+
+
+For ``pyhanko-certvalidator`` (and subprojects other than ``pyhanko`` in general) you need to make sure
+the tag is prefixed correctly.
+
+.. code-block:: bash
+
+    #!/bin/bash
+
+    EXPECTED_VERSION=<version number goes here>
+    REPO=MatthiasValvekens/pyHanko
+    sigstore verify github \
+        --cert-identity "https://github.com/$REPO/.github/workflows/release.yml@refs/tags/pyhanko-certvalidator/v$EXPECTED_VERSION" \
+        --ref "refs/tags/pyhanko-certvalidator/v$EXPECTED_VERSION" \
+        --repo "$REPO" \
+        pyhanko_certvalidator-$EXPECTED_VERSION-*.whl pyhanko_certvalidator-$EXPECTED_VERSION.tar.gz
 
 
 SLSA provenance data
@@ -154,13 +133,26 @@ To verify one or more pyHanko release artifacts, perform the following steps:
 
 .. code-block:: bash
 
-    export EXPECTED_VERSION=<version number goes here>
-    export REPO=MatthiasValvekens/pyHanko
+    EXPECTED_VERSION=<version number goes here>
+    REPO=MatthiasValvekens/pyHanko
     slsa-verifier verify-artifact \
         --source-tag "v$EXPECTED_VERSION" \
         --provenance-path ./multiple.intoto.jsonl \
         --source-uri "github.com/$REPO" \
-        pyHanko-$EXPECTED_VERSION-*.whl pyHanko-$EXPECTED_VERSION.tar.gz
+        pyhanko-$EXPECTED_VERSION-*.whl pyhanko-$EXPECTED_VERSION.tar.gz
+
+
+For ``pyhanko-certvalidator``, that'd be
+
+.. code-block:: bash
+
+    EXPECTED_VERSION=<version number goes here>
+    REPO=MatthiasValvekens/pyHanko
+    slsa-verifier verify-artifact \
+        --source-tag "pyhanko-certvalidator/v$EXPECTED_VERSION" \
+        --provenance-path ./multiple.intoto.jsonl \
+        --source-uri "github.com/$REPO" \
+        pyhanko_certvalidator-$EXPECTED_VERSION-*.whl pyhanko_certvalidator-$EXPECTED_VERSION.tar.gz
 
 You can of course inspect the validated provenance data for any other authenticated metadata
 that you think might be useful.
