@@ -87,16 +87,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
       - uses: ./.github/actions/test-job-setup
-      - uses: ./.github/actions/uv-test-deps
-        with:
-          dependency-group: testing-base
-          package: pyhanko-certvalidator
       - name: Test pyhanko-certvalidator with pytest
-        run: uv run --directory pkgs/pyhanko-certvalidator pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
-      - uses: ./.github/actions/uv-test-deps
-        with:
-          dependency-group: testing
-          package: pyhanko
+        run: |
+          uv run --directory pkgs/pyhanko-certvalidator --no-dev --exact --group testing-base \
+            pytest --cov=src --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
       - name: Install external tools for pyHanko test suite
         run: |
           sudo apt-get update
@@ -106,8 +100,12 @@ jobs:
           mkdir softhsm_tokens
           echo "directories.tokendir = $(pwd)/softhsm_tokens" > $SOFTHSM2_CONF
           ./pkgs/pyhanko/tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
+        env:
+          UV_PROJECT: pkgs/pyhanko
       - name: Test pyHanko with pytest
-        run: uv run --directory pkgs/pyhanko pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
+        run: |
+          uv run --directory pkgs/pyhanko --no-dev --exact --group testing --all-extras \
+            pytest --cov=src --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
@@ -130,21 +128,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
       - uses: ./.github/actions/test-job-setup
-      - uses: ./.github/actions/uv-test-deps
-        with:
-          dependency-group: live-test
-          package: pyhanko
       - name: Start Certomancer Animator daemon
         run: |
-          uv run --no-sync certomancer --service-url-prefix http://localhost:9000 \
+          uv run --project pkgs/pyhanko --group live-test \
+            certomancer --service-url-prefix http://localhost:9000 \
             --config "$CERTOMANCER_CONFIG_PATH" animate &
       - name: Start CSC dummy server
         run: |
-          uv run certomancer-csc "$CERTOMANCER_CONFIG_PATH" 8999 2 &
+          uv run --project pkgs/pyhanko --group live-test \
+            certomancer-csc "$CERTOMANCER_CONFIG_PATH" 8999 2 &
       - name: Test with pytest
         run: |
-          uv run --no-sync --directory pkgs/pyhanko \
-                pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-live-coverage.xml \
+          uv run --directory pkgs/pyhanko --no-dev --exact --group live-test \
+                pytest --cov=src --cov-report=xml:python-${{ matrix.python-version }}-live-coverage.xml \
                 tests/with_live_certomancer.py \
                 tests/with_live_csc_dummy.py
         env:
@@ -165,23 +161,25 @@ jobs:
         with:
           python-version: ${{ env.MAIN_PYTHON_VERSION }}
       - uses: ./.github/actions/test-job-setup
-      - uses: ./.github/actions/uv-test-deps
-        with:
-          dependency-group: testing-base
-          package: pyhanko
       - name: Run smoke tests that should pass without optional dependencies
         # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
         # the PKCS#11 parts
         run: |
-          uv run --directory pkgs/pyhanko pytest \
-            tests/test_signing.py tests/test_diff_analysis.py tests/test_crypt.py \
-            tests/test_cms.py tests/cli_tests
+          uv run --directory pkgs/pyhanko --no-dev --exact --group testing-base \
+                pytest --cov=src --cov-report=xml:python-smoke-test-coverage.xml \
+                tests/test_signing.py tests/test_diff_analysis.py tests/test_crypt.py \
+                tests/test_cms.py tests/cli_tests
+      - name: Stash coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-smoke-tests
+          path: "pkgs/pyhanko/*-coverage.xml"
   codecov-upload:
     permissions:
       actions: write
       contents: read
     runs-on: ubuntu-latest
-    needs: [pytest-coverage,live-integration-tests]
+    needs: [pytest-coverage,live-integration-tests,smoke-tests]
     steps:
       # checkout necessary to ensure the uploaded report contains the correct paths
       - uses: actions/checkout@v4

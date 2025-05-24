@@ -1351,18 +1351,16 @@ testing = [
     { name = "aiohttp" },
     { name = "certomancer" },
     { name = "certomancer-csc-dummy" },
-    { name = "fonttools" },
     { name = "freezegun" },
-    { name = "pillow" },
     { name = "pytest" },
     { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "python-barcode" },
-    { name = "python-pkcs11" },
     { name = "requests-mock" },
-    { name = "uharfbuzz" },
-    { name = "xsdata" },
+]
+testing-aiohttp = [
+    { name = "aiohttp" },
+    { name = "pytest-aiohttp" },
 ]
 testing-base = [
     { name = "certomancer" },
@@ -1414,19 +1412,17 @@ testing = [
     { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
     { name = "certomancer", specifier = ">=0.12.3,<0.13" },
     { name = "certomancer-csc-dummy", specifier = "==0.3.0" },
-    { name = "fonttools", specifier = ">=4.33.3" },
     { name = "freezegun", specifier = ">=1.1.0" },
-    { name = "pillow", specifier = ">=7.2.0" },
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-asyncio", marker = "python_full_version < '3.9'", specifier = "==0.24.0" },
     { name = "pytest-asyncio", marker = "python_full_version >= '3.9'", specifier = "==0.26.0" },
     { name = "pytest-cov", specifier = ">=4.0,<6.2" },
-    { name = "python-barcode", specifier = "==0.15.1" },
-    { name = "python-pkcs11", specifier = "~=0.7.0" },
     { name = "requests-mock", specifier = ">=1.8.0" },
-    { name = "uharfbuzz", specifier = ">=0.25.0,<0.51.0" },
-    { name = "xsdata", specifier = ">=24.4,<26.0" },
+]
+testing-aiohttp = [
+    { name = "aiohttp", specifier = ">=3.9,<3.12" },
+    { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
 ]
 testing-base = [
     { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
@@ -1511,7 +1507,7 @@ docs = [
     { name = "sphinx-rtd-theme" },
 ]
 docs-build = [
-    { name = "pyhanko", extra = ["async-http", "image-support", "opentype", "pkcs11"] },
+    { name = "pyhanko", extra = ["async-http", "etsi", "image-support", "opentype", "pkcs11"] },
     { name = "pyhanko-certvalidator" },
     { name = "sphinx", version = "7.4.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "sphinx", version = "8.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
@@ -1549,7 +1545,7 @@ docs = [
     { name = "sphinx-rtd-theme" },
 ]
 docs-build = [
-    { name = "pyhanko", extras = ["opentype", "image-support", "pkcs11", "async-http"], editable = "pkgs/pyhanko" },
+    { name = "pyhanko", extras = ["opentype", "image-support", "pkcs11", "async-http", "etsi"], editable = "pkgs/pyhanko" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
     { name = "sphinx" },
     { name = "sphinx-rtd-theme" },

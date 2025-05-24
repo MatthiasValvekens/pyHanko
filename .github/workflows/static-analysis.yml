@@ -13,11 +13,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install --upgrade pip isort black
+      - run: pip install --upgrade uv
       - name: Check import order
-        run: isort --profile black --line-length 80 --check --src pkgs/*/src pkgs/*/tests
+        run: uv run --group lint isort --profile black --line-length 80 --check --src pkgs/*/src pkgs/*/tests
       - name: Run Black
-        run: black -S --line-length 80 --check pkgs
+        run: uv run --group lint black -S --line-length 80 --check pkgs
   mypy:
     runs-on: ubuntu-latest
     steps:
@@ -26,5 +26,4 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install --upgrade uv
-      - run: uv sync --all-packages --all-extras --group mypy
-      - run: uv run mypy
+      - run: uv run --all-packages --all-extras --group mypy mypy

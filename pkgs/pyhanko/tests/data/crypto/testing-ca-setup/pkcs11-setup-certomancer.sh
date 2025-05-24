@@ -19,8 +19,10 @@ softhsm2-util --init-token --label tested25519 --pin 1234 --so-pin 5678 --free
 softhsm2-util --init-token --label tested448 --pin 1234 --so-pin 5678 --free
 
 alchemise() {
- uv run certomancer --config "$CERTOMANCER_CONFIG_PATH" alch --cert signer1 \
-    --include-chain --pin 1234 --module "$SOFTHSM2_MODULE_PATH" --token-label $1 $2
+  uv run --exact --group testing --extra pkcs11 \
+     certomancer --config "$CERTOMANCER_CONFIG_PATH" alch --cert signer1 \
+     --include-chain --pin 1234 --module "$SOFTHSM2_MODULE_PATH" \
+     --token-label $1 $2
 }
 
 alchemise testrsa testing-ca
