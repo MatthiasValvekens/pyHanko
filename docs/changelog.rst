@@ -10,6 +10,12 @@ Release history
 *Release date:* 2025-05-24
 
 
+Breaking changes
+----------------
+
+ * Drop support for Python 3.8
+
+
 Dependency changes
 ------------------
 
