@@ -1,5 +1,5 @@
 ignore: 
-    - "pyhanko_tests"
+    - "pkgs/*/tests"
     - "docs"
-    - "pyhanko/__main__.py"
-    - "pyhanko/pdf_utils/_saslprep.py"  # this is mostly vendored code
+    - "pkgs/pyhanko/src/pyhanko/__main__.py"
+    - "pkgs/pyhanko/src/pyhanko/pdf_utils/_saslprep.py"  # this is mostly vendored code
