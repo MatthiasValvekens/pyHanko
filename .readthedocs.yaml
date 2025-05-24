@@ -3,7 +3,7 @@ version: 2
 sphinx:
   configuration: docs/conf.py
 build:
-  os: ubuntu-latest
+  os: ubuntu-24.04
   tools:
     python: "3.13"
 python:
