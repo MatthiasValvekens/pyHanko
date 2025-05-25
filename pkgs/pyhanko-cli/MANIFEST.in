@@ -1,0 +1,5 @@
+# Exclude tests from sdist until we have clear requirements
+#  from downstreams on how to package test data / build setup stuff
+#  in a monorepo context. All things considered, building from the whole
+#  source tarball seems like the only reasonable option in a context like that
+prune tests
