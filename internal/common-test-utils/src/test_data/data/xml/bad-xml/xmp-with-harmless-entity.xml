@@ -1,0 +1,20 @@
+<!DOCTYPE withref [
+<!ENTITY a "artificial example" >
+]>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"
+         xmlns:stDim="http://ns.adobe.com/xap/1.0/sType/Dimensions#"
+         xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+         xmlns:xe="http://ns.adobe.com/xmp-example/">
+    <rdf:Description rdf:about="">
+        <xmpTPg:MaxPageSize rdf:parseType="Resource">
+            <stDim:h>11.0</stDim:h>
+            <stDim:w>8.5</stDim:w>
+            <stDim:unit>inch</stDim:unit>
+        </xmpTPg:MaxPageSize>
+        <xmp:BaseURL rdf:parseType="Resource">
+            <rdf:value rdf:resource="https://www.adobe.com/"/>
+            <xe:qualifier>&a;</xe:qualifier>
+        </xmp:BaseURL>
+   </rdf:Description>
+</rdf:RDF>

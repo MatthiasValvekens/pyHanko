@@ -11,11 +11,9 @@ from typing import (
     Tuple,
     Union,
 )
-from xml.etree import ElementTree
 
 import tzlocal
-from defusedxml.ElementTree import XMLParser as DefusedXMLParser
-from defusedxml.ElementTree import parse as defused_parse
+from lxml import etree
 from pyhanko.pdf_utils import generic, misc
 
 from ..crypt.api import SecurityHandler
@@ -37,33 +35,38 @@ def _untag(tag: str) -> Optional[model.ExpandedName]:
     return None
 
 
-def _name(elem: ElementTree.Element) -> Optional[model.ExpandedName]:
-    return _untag(elem.tag)
+def _name(elem: etree._Element) -> Optional[model.ExpandedName]:
+    tag = elem.tag
+    if isinstance(tag, str):
+        return _untag(tag)
+    else:
+        return None
 
 
 def iter_attrs(
-    elem: ElementTree.Element,
+    elem: etree._Element,
 ) -> Iterator[Tuple[model.ExpandedName, str]]:
     for attr_name, value in elem.attrib.items():
+        # type stubs are polymorphic in byte IO / string IO
+        assert isinstance(attr_name, str)
+        assert isinstance(value, str)
         name = _untag(attr_name)
         if name:
             yield name, value
 
 
-def _xmp_struct_to_xml(
-    description: ElementTree.Element, value: model.XmpStructure
-):
+def _xmp_struct_to_xml(description: etree._Element, value: model.XmpStructure):
     for k, v in value:
         if isinstance(v.value, str) and not v.qualifiers:
             # simple unqualified non-URI fields can be serialised
             # as attributes
             description.set(_tag(k), v.value)
         else:
-            add_xmp_value(ElementTree.SubElement(description, _tag(k)), v)
+            add_xmp_value(etree.SubElement(description, _tag(k)), v)
 
 
 def _add_inner_value(
-    container: ElementTree.Element,
+    container: etree._Element,
     value: Union[model.XmpStructure, model.XmpArray, model.XmpUri, str],
 ):
     if isinstance(value, str):
@@ -73,35 +76,35 @@ def _add_inner_value(
         container.set(_tag(model.RDF_RESOURCE), str(value))
         return
     elif isinstance(value, model.XmpStructure):
-        description = ElementTree.SubElement(
+        description = etree.SubElement(
             container,
             _tag(model.RDF_DESCRIPTION),
         )
         _xmp_struct_to_xml(description, value)
         return
     elif isinstance(value, model.XmpArray):
-        arr = ElementTree.SubElement(
+        arr = etree.SubElement(
             container,
             _tag(value.array_type.as_rdf()),
         )
         for v in value.entries:
-            add_xmp_value(ElementTree.SubElement(arr, _tag(model.RDF_LI)), v)
+            add_xmp_value(etree.SubElement(arr, _tag(model.RDF_LI)), v)
         return
     raise NotImplementedError(str(type(value)))
 
 
-def add_xmp_value(container: ElementTree.Element, value: model.XmpValue):
+def add_xmp_value(container: etree._Element, value: model.XmpValue):
     quals = value.qualifiers
     if quals.has_non_lang_quals:
         # non-lang qualifiers -> nest
-        description = ElementTree.SubElement(
+        description = etree.SubElement(
             container,
             _tag(model.RDF_DESCRIPTION),
         )
         for k, v in quals.iter_quals(with_lang=False):
-            add_xmp_value(ElementTree.SubElement(description, _tag(k)), v)
+            add_xmp_value(etree.SubElement(description, _tag(k)), v)
         _add_inner_value(
-            ElementTree.SubElement(description, _tag(model.RDF_VALUE)),
+            etree.SubElement(description, _tag(model.RDF_VALUE)),
             value.value,
         )
     else:
@@ -111,12 +114,12 @@ def add_xmp_value(container: ElementTree.Element, value: model.XmpValue):
         container.set(_tag(model.XML_LANG), quals.lang)
 
 
-def _xmp_root_as_xml_tree(root: model.XmpStructure) -> ElementTree.ElementTree:
-    description = ElementTree.Element(_tag(model.RDF_DESCRIPTION))
+def _xmp_root_as_xml_tree(root: model.XmpStructure) -> etree._ElementTree:
+    description = etree.Element(_tag(model.RDF_DESCRIPTION))
     _xmp_struct_to_xml(description, root)
     # manually set rdf:about="" on each of the roots
     description.set(_tag(model.RDF_ABOUT), "")
-    return ElementTree.ElementTree(description)
+    return etree.ElementTree(description)
 
 
 def serialise_xmp(roots: List[model.XmpStructure], out: BinaryIO):
@@ -374,12 +377,12 @@ class XmpXmlProcessingError(ValueError):
     pass
 
 
-def _check_lang(elem: ElementTree.Element) -> Optional[str]:
+def _check_lang(elem: etree._Element) -> Optional[str]:
     return elem.get(_tag(model.XML_LANG), None)
 
 
 def _proc_xmp_struct(
-    elem: ElementTree.Element, lang: Optional[str]
+    elem: etree._Element, lang: Optional[str]
 ) -> model.XmpStructure:
     fields: Dict[model.ExpandedName, model.XmpValue] = {}
     # 'lang' can't occur on rdf:Description, so don't bother to check
@@ -409,9 +412,7 @@ def _proc_xmp_struct(
     return model.XmpStructure(fields)
 
 
-def _proc_xmp_arr(
-    elem: ElementTree.Element, lang: Optional[str]
-) -> model.XmpArray:
+def _proc_xmp_arr(elem: etree._Element, lang: Optional[str]) -> model.XmpArray:
     name = _name(elem)
     if name is None:
         raise ValueError
@@ -431,7 +432,7 @@ def _proc_xmp_arr(
 
 
 def _extract_qualifiers(
-    elem: ElementTree.Element, lang: Optional[str]
+    elem: etree._Element, lang: Optional[str]
 ) -> model.Qualifiers:
     # extract the qualifiers from a Description element wrapping
     # a value
@@ -446,7 +447,7 @@ def _extract_qualifiers(
     return model.Qualifiers.of(*_quals())
 
 
-def _unwrap_resource(elem: ElementTree.Element, lang: Optional[str]):
+def _unwrap_resource(elem: etree._Element, lang: Optional[str]):
     # check if we're dealing with a wrapped element
     try:
         rdf_value = next(c for c in elem if _name(c) == model.RDF_VALUE)
@@ -468,7 +469,7 @@ HTTP_URI_RE = re.compile("^https?://")
 
 
 def _proc_xmp_value(
-    elem: ElementTree.Element, lang: Optional[str]
+    elem: etree._Element, lang: Optional[str]
 ) -> model.XmpValue:
     lang = _check_lang(elem) or lang
     # Step 1: check for parseType=Resource
@@ -530,14 +531,18 @@ def parse_xmp(inp: BinaryIO) -> List[model.XmpStructure]:
         encoding = BOM_REGISTRY.get(bom, 'utf-8')
         start_offset = len(header_match.group(0))
     inp.seek(start_offset)
+    inp_str = inp.read().decode(encoding)
 
     # TODO this would be a lot cleaner with code gen, but that feels like
     #  overkill for a minor feature. Reevaluate later
-    tree: ElementTree.ElementTree = defused_parse(
-        inp, DefusedXMLParser(encoding=encoding)
-    )
+    parser = etree.XMLParser(resolve_entities=False, remove_comments=True)
+    try:
+        root = etree.fromstring(inp_str, parser=parser)
+    except Exception as e:
+        raise XmpXmlProcessingError("Failed to parse XMP XML") from e
+    if any(1 for _ in root.iter(etree.Entity)):
+        raise XmpXmlProcessingError("XML entities not supported")
 
-    root: ElementTree.Element = tree.getroot()
     root_name = _name(root)
 
     if root_name == model.RDF_RDF:
@@ -559,7 +564,7 @@ def parse_xmp(inp: BinaryIO) -> List[model.XmpStructure]:
 
 def register_namespaces():
     for prefix, uri in model.NS.items():
-        ElementTree.register_namespace(prefix, uri)
+        etree.register_namespace(prefix, uri)
 
 
 register_namespaces()

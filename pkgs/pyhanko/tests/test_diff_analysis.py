@@ -392,6 +392,46 @@ def test_bogus_metadata_manipulation():
     do_check()
 
 
+@freeze_time('2021-01-05')
+@pytest.mark.parametrize(
+    'bad_file',
+    [
+        'cyclic.xml',
+        'dtd.xml',
+        'external_file.xml',
+        'external.xml',
+        'quadratic.xml',
+        'simple-ns.xml',
+        'simple.xml',
+        'xmlbomb.xml',
+        'xmlbomb2.xml',
+        'xmp-with-harmless-entity.xml',
+    ],
+)
+def test_dangerous_xml_metadata_manipulation(bad_file):
+    xml_file = f"{TEST_DIR}/data/xml/bad-xml/{bad_file}"
+    with open(xml_file, 'rb') as f:
+        xml_data = f.read()
+
+    infile = BytesIO(
+        read_all(PDF_DATA_DIR + '/minimal-two-fields-signed-twice.pdf')
+    )
+
+    w = IncrementalPdfFileWriter(infile)
+    w._update_meta = lambda: None
+    w.root['/Metadata'] = w.add_object(
+        generic.StreamObject(stream_data=xml_data)
+    )
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = validate_pdf_signature(s)
+    assert status.modification_level == ModificationLevel.OTHER
+
+
 @freeze_time('2020-11-01')
 def test_double_sig_add_field_annots_indirect():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))

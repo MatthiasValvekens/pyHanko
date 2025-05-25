@@ -39,7 +39,6 @@ module = [
     "uharfbuzz.*",
     "fontTools.*",
     "qrcode.*",
-    "defusedxml.*",
     "oscrypto.*",
 ]
 ignore_missing_imports = true
@@ -54,6 +53,7 @@ mypy = [
     "types-python-dateutil",
     "types-PyYAML",
     "types-tzlocal",
+    "lxml-stubs",
 ]
 docs = [
     "sphinx",

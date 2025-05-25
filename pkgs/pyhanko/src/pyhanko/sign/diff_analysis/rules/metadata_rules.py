@@ -91,18 +91,20 @@ class MetadataUpdateRule(WhitelistRule):
                 "/Metadata should be a reference to a stream object"
             )
 
-        from defusedxml.ElementTree import XMLParser as DefusedXMLParser
-        from defusedxml.ElementTree import parse as defused_parse
-
         try:
-            defused_parse(
-                BytesIO(metadata_stream.data),
-                DefusedXMLParser(encoding='utf-8'),
-            )
+            from lxml import etree
+
+            parser = etree.XMLParser(resolve_entities=False, encoding='utf-8')
+            root = etree.fromstring(metadata_stream.data, parser=parser)
         except Exception as e:
             raise SuspiciousModification(
                 "/Metadata XML syntax could not be validated", e
             )
+        if any(1 for _ in root.iter(etree.Entity)):
+            raise SuspiciousModification("XML entities found in XMP metadata")
+        # forgo a full parse here
+        if root.tag != "{adobe:ns:meta/}xmpmeta":
+            raise SuspiciousModification("Metadata does not look like XMP")
 
     def apply(
         self, old: HistoricalResolver, new: HistoricalResolver
