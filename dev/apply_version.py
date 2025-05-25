@@ -14,11 +14,17 @@ def _other_projects(root: Path, project: str):
 def get_latest_version(project: str) -> str:
     url = f"https://pypi.org/pypi/{project}/json"
     response = requests.get(url)
-    return response.json()['info']['version']
+    if response.status_code == 200:
+        return response.json()['info']['version']
+    else:
+        raise ValueError("Could not get latest version")
 
 
 def apply_latest(root: Path, project: str):
-    latest = get_latest_version(project)
+    try:
+        latest = get_latest_version(project)
+    except ValueError:
+        return
     apply_version(root, project, latest)
 
 
@@ -57,7 +63,7 @@ def apply_version(root: Path, project: str, version: str):
 
         dep_arrs = (
             pyproj_content["project"]["dependencies"],
-            *pyproj_content["project"]["optional-dependencies"],
+            *pyproj_content["project"].get("optional-dependencies", ()),
         )
 
         modified = False
@@ -82,8 +88,14 @@ def apply_version(root: Path, project: str, version: str):
         if p.is_dir() and not p.name.startswith(".")
     )
     for pkg in python_packages:
-        version_file = pkg / "version.py"
-        if version_file.exists():
+        version_module = pkg / "version.py"
+        version_package = pkg / "version" / "__init__.py"
+        version_file = None
+        if version_module.exists():
+            version_file = version_module
+        elif version_package.exists():
+            version_file = version_package
+        if version_file:
             print(f"Setting version info in {version_file}...")
             with open(version_file, "w") as versionf:
                 versionf.write(f"__version__ = {version!r}\n")

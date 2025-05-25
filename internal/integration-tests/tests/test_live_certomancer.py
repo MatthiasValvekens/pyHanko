@@ -9,10 +9,7 @@ from asn1crypto import x509
 from click.testing import CliRunner
 from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko.cli import cli_root
-from pyhanko.keys import (
-    _translate_pyca_cryptography_cert_to_asn1,
-    _translate_pyca_cryptography_key_to_asn1,
-)
+from pyhanko.keys.internal import translate_pyca_cryptography_key_to_asn1, translate_pyca_cryptography_cert_to_asn1
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import SimpleSigner, signers
@@ -68,10 +65,10 @@ async def _retrieve_and_decode_credentials(
         pfx_bytes, TEST_PASSPHRASE
     )
 
-    kinfo = _translate_pyca_cryptography_key_to_asn1(private_key)
-    cert = _translate_pyca_cryptography_cert_to_asn1(cert)
+    kinfo = translate_pyca_cryptography_key_to_asn1(private_key)
+    cert = translate_pyca_cryptography_cert_to_asn1(cert)
     other_certs_pkcs12 = set(
-        map(_translate_pyca_cryptography_cert_to_asn1, other_certs_pkcs12)
+        map(translate_pyca_cryptography_cert_to_asn1, other_certs_pkcs12)
     )
 
     cs = SimpleCertificateStore()

@@ -51,11 +51,13 @@ from pyhanko_certvalidator.registry import (
 )
 
 from ...keys import (
-    _translate_pyca_cryptography_cert_to_asn1,
-    _translate_pyca_cryptography_key_to_asn1,
     load_cert_from_pemder,
     load_certs_from_pemder,
     load_private_key_from_pemder,
+)
+from ...keys.internal import (
+    translate_pyca_cryptography_cert_to_asn1,
+    translate_pyca_cryptography_key_to_asn1,
 )
 from . import constants
 
@@ -1541,10 +1543,10 @@ class SimpleSigner(Signer):
                 'Could not load key material from PKCS#12 file', exc_info=e
             )
             return None
-        kinfo = _translate_pyca_cryptography_key_to_asn1(private_key)
-        cert = _translate_pyca_cryptography_cert_to_asn1(cert)
+        kinfo = translate_pyca_cryptography_key_to_asn1(private_key)
+        cert = translate_pyca_cryptography_cert_to_asn1(cert)
         other_certs_pkcs12 = set(
-            map(_translate_pyca_cryptography_cert_to_asn1, other_certs_pkcs12)
+            map(translate_pyca_cryptography_cert_to_asn1, other_certs_pkcs12)
         )
 
         cs = SimpleCertificateStore()

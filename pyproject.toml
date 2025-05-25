@@ -19,7 +19,14 @@ Changes = "https://pyhanko.readthedocs.io/en/latest/changelog.html"
 "Issue Tracker" = "https://github.com/MatthiasValvekens/pyHanko/issues"
 
 [tool.mypy]
-packages = "pyhanko,pyhanko_certvalidator"
+packages = """
+    pyhanko.cli,\
+    pyhanko.config,\
+    pyhanko.keys,\
+    pyhanko.pdf_utils,\
+    pyhanko.sign,\
+    pyhanko.stamp,\
+    pyhanko_certvalidator"""
 exclude = ".*tests.*"
 
 [[tool.mypy.overrides]]

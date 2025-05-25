@@ -839,13 +839,13 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
                 pfx_bytes, passphrase
             )
 
-            from ...keys import (
-                _translate_pyca_cryptography_cert_to_asn1,
-                _translate_pyca_cryptography_key_to_asn1,
+            from ...keys.internal import (
+                translate_pyca_cryptography_cert_to_asn1,
+                translate_pyca_cryptography_key_to_asn1,
             )
 
-            cert = _translate_pyca_cryptography_cert_to_asn1(cert)
-            private_key = _translate_pyca_cryptography_key_to_asn1(private_key)
+            cert = translate_pyca_cryptography_cert_to_asn1(cert)
+            private_key = translate_pyca_cryptography_key_to_asn1(private_key)
         except (IOError, ValueError, TypeError) as e:  # pragma: nocover
             logger.error(f'Could not open PKCS#12 file {pfx_file}.', exc_info=e)
             return None

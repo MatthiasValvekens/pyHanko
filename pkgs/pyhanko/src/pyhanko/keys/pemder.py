@@ -1,12 +1,9 @@
-"""
-Utility module to load keys and certificates.
-"""
-
-import logging
 from typing import Optional
 
 from asn1crypto import keys, pem, x509
 from cryptography.hazmat.primitives import serialization
+
+from .internal import translate_pyca_cryptography_key_to_asn1
 
 __all__ = [
     'load_cert_from_pemder',
@@ -15,8 +12,6 @@ __all__ = [
     'load_private_key_from_pemder',
     'load_private_key_from_pemder_data',
 ]
-
-logger = logging.getLogger(__name__)
 
 
 def load_certs_from_pemder(cert_files):
@@ -52,11 +47,6 @@ def load_certs_from_pemder_data(cert_data_bytes: bytes):
         for type_name, _, der in pems:
             if type_name is None or type_name.lower() == 'certificate':
                 yield x509.Certificate.load(der)
-            else:  # pragma: nocover
-                logger.debug(
-                    f'Skipping PEM block of type {type_name} in '
-                    f'CA chain file.'
-                )
     else:
         # no need to unarmor, just try to load it immediately
         yield x509.Certificate.load(cert_data_bytes)
@@ -114,32 +104,6 @@ def load_private_key_from_pemder_data(
         if pem.detect(key_bytes)
         else serialization.load_der_private_key
     )
-    return _translate_pyca_cryptography_key_to_asn1(
+    return translate_pyca_cryptography_key_to_asn1(
         load_fun(key_bytes, password=passphrase)
     )
-
-
-def _translate_pyca_cryptography_key_to_asn1(
-    private_key,
-) -> keys.PrivateKeyInfo:
-    # Store the cert and key as generic ASN.1 structures for more
-    # "standardised" introspection. This comes at the cost of some encoding/
-    # decoding operations, but those should be fairly insignificant in the
-    # grand scheme of things.
-    #
-    # Note: we're not losing any memory protections here:
-    #  (https://cryptography.io/en/latest/limitations.html)
-    # Arguably, memory safety is nigh impossible to obtain in a Python
-    # context anyhow, and people with that kind of Serious (TM) security
-    # requirements should be using HSMs to manage keys.
-    return keys.PrivateKeyInfo.load(
-        private_key.private_bytes(
-            serialization.Encoding.DER,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
-        )
-    )
-
-
-def _translate_pyca_cryptography_cert_to_asn1(cert) -> x509.Certificate:
-    return x509.Certificate.load(cert.public_bytes(serialization.Encoding.DER))
