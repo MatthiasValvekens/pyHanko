@@ -7,8 +7,6 @@
 
 The lack of open-source CLI tooling to handle digitally signing and stamping PDF files was bothering me, so I went ahead and rolled my own.
 
-*Note:* The working title of this project (and former name of the repository on GitHub) was `pdf-stamp`, which might still linger in some references.
-
 *Note:* This project is currently in beta, and not yet production-ready.
 
 ### Documentation
@@ -23,19 +21,19 @@ PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
 and can be installed using `pip`:
 
 ```bash
-pip install 'pyHanko[pkcs11,image-support,opentype]'
+pip install 'pyHanko[pkcs11,image-support,opentype]' pyhanko-cli
 ```
 
 Depending on your shell, you might have to leave off the quotes:
 
 ```bash
-pip install pyHanko[pkcs11,image-support,opentype]
+pip install pyHanko[pkcs11,image-support,opentype] pyhanko-cli
 ```
 
 This `pip` invocation includes the optional dependencies required for PKCS#11, image handling and
-OpenType/TrueType support.
+OpenType/TrueType support, and the CLI.
 
-PyHanko requires Python 3.8 or later.
+PyHanko requires Python 3.9 or later.
 
 ### Contributing
 
@@ -58,7 +56,8 @@ and development should be asked in the [discussion forum][discussion-forum] inst
 
 ### Features
 
-The code in this repository functions both as a library and as a command-line tool.
+The code in this repository functions both as a library and as a command-line tool
+(the latter is distributed as a distinct ``pyhanko-cli`` package).
 Here is a short overview of the features.
 Note that not all of these are necessarily exposed through the CLI.
 
