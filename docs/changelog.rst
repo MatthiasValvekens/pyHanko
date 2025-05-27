@@ -2,6 +2,37 @@
 Release history
 ***************
 
+-------
+pyHanko
+-------
+
+
+.. _release-0.29.0:
+
+0.29.0
+======
+
+*Release date:* 2025-05-27
+
+
+Breaking changes
+----------------
+
+ * The root ``pyhanko`` package is now a namespace package.
+    * The ``pyhanko.keys`` and ``pyhanko.stamp`` modules were turned into packages, exposing the same API in their
+      respective ``__init__.py``, so this change is source-compatible.
+    * The ``__version__`` and ``__version_info__`` attributes are no longer exposed at the root package
+      level, but have been moved into ``pyhanko.version`` (which was also turned into a subpackage).
+ * Drop dependency on ``click`` in ``pyhanko`` distribution, move CLI code into ``pyhanko-cli`` instead.
+    * The CLI code still installs as ``pyhanko.cli`` in the package hierarchy.
+    * There are no code-level changes for CLI plugins other than the requirement to add a dependency on ``pyhanko-cli``.
+      In principle, this allows "old" plugins to keep working without needing a re-release as long as ``pyhanko-cli``
+      is installed together with ``pyhanko``.
+ * Make the dependency on ``qrcode`` optional (in the new ``[qr]`` dependency group)
+ * Replace ``defusedxml`` with a dependency on ``lxml``, configured appropriately. This was done in anticipation of
+   some future feature work that will require a dependency on ``lxml`` either way.
+
+
 .. _release-0.28.0:
 
 0.28.0
@@ -2247,3 +2278,17 @@ Bugs fixed
 *Release date:* 2020-12-30
 
 Initial release.
+
+
+-----------
+pyhanko-cli
+-----------
+
+.. _cli-release-0.1.0:
+
+0.1.0
+=====
+
+*Release date:* 2025-05-27
+
+Initial release split off from main pyHanko distribution artifact.

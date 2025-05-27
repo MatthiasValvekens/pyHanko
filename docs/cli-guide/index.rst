@@ -6,9 +6,12 @@ CLI user's guide
 
 This guide offers a high-level overview of pyHanko as a command-line tool.
 
-*(Under construction)*
+.. warning::
+    Starting from version ``0.29.0``, the pyHanko CLI is no longer installed automatically
+    with the ``pyhanko`` distributable. You'll need to install ``pyhanko-cli`` separately.
 
-If you installed pyHanko using ``pip``, you should be able to invoke pyHanko
+
+If you installed ``pyhanko-cli`` using ``pip``, you should be able to invoke pyHanko
 using the ``pyhanko`` command, like so::
 
     pyhanko --help
