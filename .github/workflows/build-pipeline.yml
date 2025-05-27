@@ -52,7 +52,7 @@ jobs:
       - name: Apply package version for release
         if: inputs.package != ''
         run: |
-          python dev/apply_version.py ${{ inputs.package }} ${{ inputs.version }}
+          uv run python dev/apply_version.py ${{ inputs.package }} ${{ inputs.version }}
           git diff
       - name: Build release artifacts
         run: uv build --all-packages
