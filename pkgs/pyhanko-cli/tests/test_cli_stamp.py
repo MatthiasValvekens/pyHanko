@@ -1,3 +1,4 @@
+import pytest
 from pyhanko.cli import cli_root
 
 from .conftest import (
@@ -28,6 +29,7 @@ def test_cli_stamp_with_style(cli_runner):
     # TODO make this a layout test
 
 
+@pytest.mark.nosmoke
 def test_cli_stamp_with_qr_style(cli_runner):
     cfg = {'stamp-styles': {'test': {'type': 'qr', 'background': '__stamp__'}}}
     _write_config(cfg)
@@ -89,6 +91,7 @@ def test_cli_stamp_style_stamp_url_unnecessary(cli_runner):
     assert "only meaningful for QR" in result.output
 
 
+@pytest.mark.nosmoke
 def test_cli_stamp_style_stamp_url_mandatory(cli_runner):
     cfg = {'stamp-styles': {'test': {'type': 'qr', 'background': '__stamp__'}}}
     _write_config(cfg)
@@ -129,6 +132,7 @@ def test_cli_stamp_style_undefined(cli_runner):
     assert "no stamp style named" in result.output
 
 
+@pytest.mark.nosmoke
 def test_cli_stamp_style_unspecified(cli_runner):
     cfg = {
         'stamp-styles': {

@@ -1473,7 +1473,6 @@ dependencies = [
     { name = "lxml" },
     { name = "pyhanko-certvalidator" },
     { name = "pyyaml" },
-    { name = "qrcode" },
     { name = "requests" },
     { name = "tzlocal" },
 ]
@@ -1495,6 +1494,9 @@ opentype = [
 ]
 pkcs11 = [
     { name = "python-pkcs11" },
+]
+qr = [
+    { name = "qrcode" },
 ]
 
 [package.dev-dependencies]
@@ -1535,13 +1537,13 @@ requires-dist = [
     { name = "python-barcode", marker = "extra == 'image-support'", specifier = "==0.15.1" },
     { name = "python-pkcs11", marker = "extra == 'pkcs11'", specifier = "~=0.7.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "qrcode", specifier = ">=7.3.1" },
+    { name = "qrcode", marker = "extra == 'qr'", specifier = ">=7.3.1" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "tzlocal", specifier = ">=4.3" },
     { name = "uharfbuzz", marker = "extra == 'opentype'", specifier = ">=0.25.0,<0.51.0" },
     { name = "xsdata", marker = "extra == 'etsi'", specifier = ">=24.4,<26.0" },
 ]
-provides-extras = ["opentype", "image-support", "pkcs11", "async-http", "etsi"]
+provides-extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "etsi"]
 
 [package.metadata.requires-dev]
 testing = [

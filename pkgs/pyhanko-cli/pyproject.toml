@@ -67,7 +67,7 @@ testing = [
     {include-group = "testing-base"},
     "aiohttp>=3.9,<3.12",
     "pytest-aiohttp>=1.0.4,<1.2.0",
-    "pyhanko[pkcs11,opentype,async_http,image-support]"
+    "pyhanko[pkcs11,opentype,async_http,image-support,qr]"
 ]
 
 [project.scripts]
@@ -89,6 +89,9 @@ log_cli = true
 log_cli_level = "INFO"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope="function"
+markers = [
+    "nosmoke: exclude from smoke test runs"
+]
 
 [tool.coverage.run]
 omit = ["*docs*", "*test*", "*venv*", "setup.py", "_saslprep.py"]

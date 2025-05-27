@@ -21,14 +21,14 @@ inline docstrings.
 Optional dependencies are managed at the level of the ``pyhanko`` package.
 
 ```bash
-pip install 'pyHanko[pkcs11,image-support,opentype]' pyhanko-cli
+pip install 'pyHanko[pkcs11,image-support,opentype,qr]' pyhanko-cli
 ```
 
 Depending on your shell, you might have to leave off the quotes:
 
 ```bash
-pip install pyHanko[pkcs11,image-support,opentype] pyhanko-cli
+pip install pyHanko[pkcs11,image-support,opentype,qr] pyhanko-cli
 ```
 
-This `pip` invocation includes the optional dependencies required for PKCS#11, image handling and
-OpenType/TrueType support.
+This `pip` invocation includes the optional dependencies required for PKCS#11, image handling,
+OpenType/TrueType support and QR code generation.

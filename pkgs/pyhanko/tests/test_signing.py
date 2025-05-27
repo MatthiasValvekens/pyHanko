@@ -599,6 +599,7 @@ def test_adobe_revinfo_live_nofullchain():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.nosmoke
 def test_simple_qr_sign():
     style = QRStampStyle(stamp_text="Hi, it's\n%(ts)s")
     signer = signers.PdfSigner(
@@ -621,6 +622,7 @@ def test_simple_qr_sign():
 
 
 @pytest.mark.parametrize('params_value', [None, {}, {'some': 'value'}])
+@pytest.mark.nosmoke
 def test_qr_sign_enforce_url_param(params_value):
     style = QRStampStyle(stamp_text="Hi, it's\n%(ts)s")
     signer = signers.PdfSigner(

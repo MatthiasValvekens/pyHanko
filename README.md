@@ -21,17 +21,17 @@ PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
 and can be installed using `pip`:
 
 ```bash
-pip install 'pyHanko[pkcs11,image-support,opentype]' pyhanko-cli
+pip install 'pyHanko[pkcs11,image-support,opentype,qr]' pyhanko-cli
 ```
 
 Depending on your shell, you might have to leave off the quotes:
 
 ```bash
-pip install pyHanko[pkcs11,image-support,opentype] pyhanko-cli
+pip install pyHanko[pkcs11,image-support,opentype,qr] pyhanko-cli
 ```
 
-This `pip` invocation includes the optional dependencies required for PKCS#11, image handling and
-OpenType/TrueType support, and the CLI.
+This `pip` invocation includes the optional dependencies required for PKCS#11, image handling,
+OpenType/TrueType support, QR code generation and the CLI.
 
 PyHanko requires Python 3.9 or later.
 

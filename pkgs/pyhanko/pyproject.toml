@@ -32,7 +32,6 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "asn1crypto>=1.5.1",
-    "qrcode>=7.3.1",
     "tzlocal>=4.3",
     "pyhanko-certvalidator",
     "requests>=2.31.0",
@@ -61,6 +60,7 @@ opentype = [
     # we set an explicit range
     "uharfbuzz>=0.25.0,<0.51.0",
 ]
+qr = ["qrcode>=7.3.1"]
 image-support = [
     # Only tested systematically on 8.x,
     # but we allow 7.2.x to support system PIL on Ubuntu
@@ -110,6 +110,9 @@ log_cli = true
 log_cli_level = "INFO"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "nosmoke: exclude from smoke test runs"
+]
 
 [tool.coverage.run]
 omit = ["*docs*", "*test*", "*venv*", "setup.py", "_saslprep.py"]

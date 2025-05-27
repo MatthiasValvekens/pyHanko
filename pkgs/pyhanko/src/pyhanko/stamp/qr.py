@@ -2,11 +2,9 @@ import enum
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import qrcode
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils import content, generic, layout
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
-from pyhanko.pdf_utils.qr import PdfFancyQRImage, PdfStreamQRImage
 from pyhanko.pdf_utils.writer import BasePdfFileWriter, init_xobject_dictionary
 
 from .appearances import CoordinateSystem
@@ -281,6 +279,9 @@ class QRStamp(TextStamp):
         return commands, (inn_width, inn_height)
 
     def _qr_xobject(self):
+        import qrcode
+        from pyhanko.pdf_utils.qr import PdfFancyQRImage, PdfStreamQRImage
+
         is_fancy = self.style.qr_inner_content is not None
         err_corr = (
             qrcode.constants.ERROR_CORRECT_H
