@@ -64,11 +64,13 @@ docs-build = [
     "pyhanko[opentype,image-support,pkcs11,async-http,etsi]",
     "pyhanko-certvalidator",
 ]
+release = ["setuptools>=80.8.0", "tomlkit>=0.13.2", "requests>=2.32.3"]
 lint = ["isort", "black"]
 dev = [
     { include-group = "docs" },
     { include-group = "mypy" },
     { include-group = "lint" },
+    { include-group = "release" },
 ]
 
 [tool.uv.workspace]

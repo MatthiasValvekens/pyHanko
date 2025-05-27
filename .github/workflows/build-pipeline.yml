@@ -48,7 +48,7 @@ jobs:
         with:
           python-version: ${{ env.MAIN_PYTHON_VERSION }} 
       - name: Install build tools
-        run: pip install --upgrade setuptools pip wheel uv tomlkit requests
+        run: pip install --upgrade uv && uv sync --group release
       - name: Apply package version for release
         if: inputs.package != ''
         run: |
