@@ -34,7 +34,7 @@ env:
   SOFTHSM2_CONF: /tmp/softhsm2.conf
   SOFTHSM2_MODULE_PATH: /usr/lib/softhsm/libsofthsm2.so
   CERTOMANCER_CONFIG_PATH: internal/common-test-utils/src/test_data/data/crypto/certomancer.yml
-  COVERAGE_SCOPE: "--cov=pyhanko --cov=pyhanko_certvalidator"
+  COVERAGE_SCOPE: "--cov=pyhanko --cov=pyhanko_certvalidator --cov-branch"
 
 jobs:
   build:
