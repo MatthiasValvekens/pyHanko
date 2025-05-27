@@ -10,14 +10,18 @@ from pyhanko.cli.plugin_api import (
     SIGNING_PLUGIN_REGISTRY,
 )
 from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE, logging_setup
+from pyhanko.cli.version import __version__ as cli_version
 from pyhanko.config.logging import LogConfig, parse_logging_config
-from pyhanko.version import __version__
+from pyhanko.version import __version__ as lib_version
 
 __all__ = ['cli_root']
 
 
+full_version = f"{lib_version} (CLI {cli_version})"
+
+
 @click.group()
-@click.version_option(prog_name='pyHanko', version=__version__)
+@click.version_option(prog_name='pyHanko', version=full_version)
 @click.option(
     '--config',
     help=(

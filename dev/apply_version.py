@@ -11,6 +11,7 @@ def _other_projects(root: Path, project: str):
         if p.is_dir() and p.name != project and not p.name.startswith(".")
     )
 
+
 def get_latest_version(project: str) -> str:
     url = f"https://pypi.org/pypi/{project}/json"
     response = requests.get(url)
@@ -31,6 +32,26 @@ def apply_latest(root: Path, project: str):
 def apply_latest_for_others(root: Path, project: str):
     for other_proj in _other_projects(root, project):
         apply_latest(root, other_proj.name)
+
+
+def version_file_candidates(project_dir: Path):
+    python_packages = [
+        p
+        for p in (project_dir / "src").iterdir()
+        if p.is_dir() and ("." not in p.name)
+    ]
+
+    # First check version.py and version/__init__.py
+    # in top-level packages
+    for pkg in python_packages:
+        yield pkg / "version.py"
+        yield pkg / "version" / "__init__.py"
+
+    # then look for version.py in subpackages
+    for pkg in python_packages:
+        pkgs = sorted(pkg.iterdir(), key=lambda p: p.name)
+        for sub_pkg in pkgs:
+            yield sub_pkg / "version.py"
 
 
 def apply_version(root: Path, project: str, version: str):
@@ -82,24 +103,16 @@ def apply_version(root: Path, project: str, version: str):
                 tomlkit.dump(pyproj_content, pyproj)
 
     # set the version in version.py
-    python_packages = (
-        p
-        for p in (project_dir / "src").iterdir()
-        if p.is_dir() and not p.name.startswith(".")
-    )
-    for pkg in python_packages:
-        version_module = pkg / "version.py"
-        version_package = pkg / "version" / "__init__.py"
-        version_file = None
-        if version_module.exists():
-            version_file = version_module
-        elif version_package.exists():
-            version_file = version_package
-        if version_file:
-            print(f"Setting version info in {version_file}...")
-            with open(version_file, "w") as versionf:
-                versionf.write(f"__version__ = {version!r}\n")
-                versionf.write(f"__version_info__ = {version_info!r}\n")
+    try:
+        version_file = next(
+            p for p in version_file_candidates(project_dir) if p.exists()
+        )
+        print(f"Setting version info for {project} in {version_file}...")
+        with open(version_file, "w") as versionf:
+            versionf.write(f"__version__ = {version!r}\n")
+            versionf.write(f"__version_info__ = {version_info!r}\n")
+    except StopIteration:
+        raise ValueError(f"Version file for {project} not found")
 
 
 def run():
