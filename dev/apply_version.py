@@ -1,7 +1,11 @@
-import requests
+import re
 import sys
-import tomlkit
 from pathlib import Path
+
+import requests
+import tomlkit
+
+PROJECT_REGEX = re.compile("[a-zA-Z_-]+")
 
 
 def _other_projects(root: Path, project: str):
@@ -56,6 +60,10 @@ def version_file_candidates(project_dir: Path):
 
 def apply_version(root: Path, project: str, version: str):
     version_info_str = version.split('.', maxsplit=3)
+    if len(version_info_str) < 3:
+        raise ValueError(
+            f"Don't know how to interpret {version!r} as a version number"
+        )
     major = int(version_info_str[0])
     minor = int(version_info_str[1])
     patch = int(version_info_str[2])
@@ -118,6 +126,8 @@ def apply_version(root: Path, project: str, version: str):
 def run():
     repo_root = Path(__file__).resolve().parents[1]
     pkg_name = sys.argv[1]
+    if not PROJECT_REGEX.fullmatch(pkg_name):
+        raise ValueError(f"Expected package name, not {pkg_name!r}")
     version = sys.argv[2]
 
     apply_version(repo_root, pkg_name, version)
