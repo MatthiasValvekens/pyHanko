@@ -946,6 +946,20 @@ def test_empty_user_pass():
     assert r.root['/AcroForm']['/Fields'][0]['/T'] == 'Sig1'
 
 
+def test_reauthenticate():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt('ownersecret', 'usersecret')
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    result = r.decrypt('wrong')
+    assert result.status == AuthStatus.FAILED
+    result = r.decrypt('usersecret')
+    assert result.status == AuthStatus.USER
+    assert r.root['/AcroForm']['/Fields'][0]['/T'] == 'Sig1'
+
+
 def test_load_pkcs12():
     sedk = SimpleEnvelopeKeyDecrypter.load_pkcs12(
         f"{TEST_DIR}/data/crypto/selfsigned.pfx", b'exportsecret'

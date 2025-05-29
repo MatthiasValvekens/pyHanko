@@ -815,6 +815,7 @@ class StandardSecurityHandler(SecurityHandler):
             res, key = self._authenticate_legacy(id1, credential)
         if key is not None:
             self._shared_key = key
+            self._auth_failed = False
         else:
             self._auth_failed = True
         return AuthResult(status=res, permission_flags=self.perms)
