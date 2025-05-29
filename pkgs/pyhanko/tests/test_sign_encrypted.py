@@ -2,6 +2,8 @@ from io import BytesIO
 
 import pytest
 from freezegun import freeze_time
+from pyhanko.pdf_utils import writer
+from pyhanko.pdf_utils.crypt import AuthStatus
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
@@ -14,6 +16,7 @@ from pyhanko.sign.signers.pdf_signer import (
 from pyhanko.sign.validation import validate_pdf_signature
 from test_data.samples import (
     MINIMAL_AES256,
+    MINIMAL_ONE_FIELD,
     MINIMAL_ONE_FIELD_AES256,
     MINIMAL_ONE_FIELD_RC4,
     MINIMAL_PUBKEY_ONE_FIELD_AES256,
@@ -68,6 +71,30 @@ def test_sign_crypt_aes256(password):
 
     r = PdfFileReader(out)
     r.decrypt(password)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_sign_crypt_empty_user_pass():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt('ownersecret', '')
+    out = BytesIO()
+    w.write(out)
+
+    w = IncrementalPdfFileWriter(out)
+    w.encrypt('')
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_CA,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    result = r.decrypt('')
+    assert result.status == AuthStatus.USER
     s = r.embedded_signatures[0]
     val_trusted(s)
 
