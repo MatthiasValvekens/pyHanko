@@ -2284,6 +2284,7 @@ Initial release.
 pyhanko-cli
 -----------
 
+
 .. _cli-release-0.1.0:
 
 0.1.0
@@ -2292,3 +2293,17 @@ pyhanko-cli
 *Release date:* 2025-05-27
 
 Initial release split off from main pyHanko distribution artifact.
+
+
+.. _cli-release-0.1.1:
+
+0.1.1
+=====
+
+*Release date:* 2025-05-29
+
+
+Dependency changes
+------------------
+
+ * Remove upper bound on ``click`` (excluding version ``8.2.0`` as incompatible)
