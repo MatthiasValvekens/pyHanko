@@ -63,6 +63,7 @@ ALLOWED_MD_ALGS = frozenset(
         'sha3_384',
         'sha512',
         'sha3_512',
+        'shake256',
     ]
 )
 """

@@ -310,9 +310,17 @@ def validate_signatures(
             r = PdfFileReader(infile)
         sh = r.security_handler
         if isinstance(sh, crypt.StandardSecurityHandler):
+            auth_result = None
             if password is None:
-                password = getpass.getpass(prompt='File password: ')
-            auth_result = r.decrypt(password)
+                # attempt the empty user password first--validation is a read-only
+                # operation, so this is in line with expected UX in other viewers.
+                empty_auth_result = r.decrypt("")
+                if empty_auth_result.status == crypt.AuthStatus.FAILED:
+                    password = getpass.getpass(prompt='File password: ')
+                else:
+                    auth_result = empty_auth_result
+            if not auth_result:
+                auth_result = r.decrypt(password)
             if auth_result.status == crypt.AuthStatus.FAILED:
                 raise click.ClickException("Password didn't match.")
         elif sh is not None:

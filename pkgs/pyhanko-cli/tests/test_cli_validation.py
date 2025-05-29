@@ -11,13 +11,16 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko.cli import cli_root
+from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
 from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
 from test_data.samples import (
     MINIMAL,
     MINIMAL_AES256,
+    MINIMAL_ONE_FIELD,
     MINIMAL_PUBKEY_AES256,
     TESTING_CA,
 )
@@ -119,6 +122,54 @@ def test_validate_encrypted_wrong_password(
         [
             'sign',
             'validate',
+            '--trust',
+            root_cert,
+            fname,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Password didn't match." in result.output
+
+
+def test_validate_encrypted_empty_user_password(
+    cli_runner, pki_arch, root_cert, monkeypatch
+):
+    fname = 'encrypted.pdf'
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt('ownersecret', '')
+    _write_input_to_validate(pki_arch, fname, w)
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--trust',
+            root_cert,
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+
+
+def test_validate_encrypted_empty_user_password_wrong_explicit_password(
+    cli_runner, pki_arch, root_cert, monkeypatch
+):
+    fname = 'encrypted.pdf'
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt('ownersecret', '')
+    _write_input_to_validate(pki_arch, fname, w)
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--password',
+            'bogus',
             '--trust',
             root_cert,
             fname,
