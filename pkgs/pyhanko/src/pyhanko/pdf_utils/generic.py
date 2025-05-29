@@ -448,6 +448,12 @@ class ArrayObject(list, PdfObject):
     def __getitem__(self, index):
         return self.raw_get(index).get_object()
 
+    def iterate(
+        self, decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT
+    ):
+        for ix in range(len(self)):
+            yield self.raw_get(ix, decrypt)
+
     def raw_get(
         self,
         index,

@@ -1298,13 +1298,13 @@ def test_extension_registration_unclear(new_ext):
 def test_extension_registration_type_err():
     w = writer.PdfFileWriter()
     w.root['/Extensions'] = generic.DictionaryObject(
-        {TEST_EXT2.prefix_name: generic.NullObject()}
+        {TEST_EXT2.prefix_name: generic.NumberObject(7)}
     )
     out = BytesIO()
     w.write(out)
 
     w = writer.copy_into_new_writer(PdfFileReader(out))
-    with pytest.raises(misc.PdfReadError, match="type.*NullObject"):
+    with pytest.raises(misc.PdfReadError, match="type.*NumberObject"):
         w.register_extension(TEST_EXT2)
 
 

@@ -28,6 +28,8 @@ from test_data.samples import (
 from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     FROM_CA,
+    FROM_ED25519_CA,
+    SIMPLE_ED25519_V_CONTEXT,
     SIMPLE_V_CONTEXT,
     live_testing_vc,
     val_trusted,
@@ -97,6 +99,30 @@ def test_sign_crypt_empty_user_pass():
     assert result.status == AuthStatus.USER
     s = r.embedded_signatures[0]
     val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_sign_encrypted_with_extensions():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt('secret')
+    out = BytesIO()
+    w.write(out)
+
+    w = IncrementalPdfFileWriter(out)
+    w.encrypt('secret')
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_ED25519_CA,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    result = r.decrypt('secret')
+    assert result.status == AuthStatus.OWNER
+    s = r.embedded_signatures[0]
+    val_trusted(s, vc=SIMPLE_ED25519_V_CONTEXT())
 
 
 @freeze_time('2020-11-01')

@@ -275,9 +275,7 @@ class BasePdfFileWriter(PdfHandler):
 
         # check if the extension is already registered,
         try:
-            cur_ext_value = extensions.raw_get(
-                ext.prefix_name, decrypt=generic.EncryptedObjAccess.RAW
-            )
+            cur_ext_value = extensions[ext.prefix_name]
         except KeyError:
             cur_ext_value = None
         extension_dicts: Iterable[generic.PdfObject] = ()
@@ -285,7 +283,7 @@ class BasePdfFileWriter(PdfHandler):
         if isinstance(cur_ext_value, generic.DictionaryObject):
             extension_dicts = (cur_ext_value,)
         elif isinstance(cur_ext_value, generic.ArrayObject):
-            extension_dicts = tuple(cur_ext_value)
+            extension_dicts = tuple(cur_ext_value.iterate())
             old_ext_multivalued = True
         elif cur_ext_value is not None:
             cls_name = type(cur_ext_value).__name__
