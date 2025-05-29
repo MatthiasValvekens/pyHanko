@@ -179,6 +179,56 @@ def test_validate_encrypted_empty_user_password_wrong_explicit_password(
     assert "Password didn't match." in result.output
 
 
+def test_validate_encrypted_explicit_empty_password(
+    cli_runner, pki_arch, root_cert, monkeypatch
+):
+    fname = 'encrypted.pdf'
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt('ownersecret', '')
+    _write_input_to_validate(pki_arch, fname, w)
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--password',
+            '',
+            '--trust',
+            root_cert,
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+
+
+def test_validate_encrypted_wrong_explicit_empty_password(
+    cli_runner, pki_arch, root_cert, monkeypatch
+):
+    fname = 'encrypted.pdf'
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt('ownersecret', 'usersecret')
+    _write_input_to_validate(pki_arch, fname, w)
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--password',
+            '',
+            '--trust',
+            root_cert,
+            fname,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Password didn't match." in result.output
+
+
 def test_validate_unsupported_handler(
     cli_runner, pki_arch, root_cert, monkeypatch
 ):
