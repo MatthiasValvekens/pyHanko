@@ -35,7 +35,7 @@ dependencies = [
     "tzlocal>=4.3",
     "pyhanko",
     "pyhanko-certvalidator",
-    "click>=8.1.3,<8.2.0",
+    "click>=8.1.3,!=8.2.0",
 ]
 version = "0.0.0.dev1"
 
@@ -85,8 +85,6 @@ pyhanko = ["py.typed"]
 pythonpath = ["src"]
 log_format = "%(asctime)s %(levelname)s %(message)s"
 log_date_format = "%Y-%m-%d %H:%M:%S"
-log_cli = true
-log_cli_level = "INFO"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope="function"
 markers = [
