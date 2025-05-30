@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Iterable, List, Optional, TypeVar, Union
 
 from asn1crypto import algos, crl, ocsp
-from pyhanko_certvalidator._types import type_name
 from pyhanko_certvalidator.ltv.types import (
     IssuedItemContainer,
     ValidationTimingParams,
@@ -413,7 +412,8 @@ def process_legacy_crl_input(
         else:
             raise TypeError(
                 f"crls must be a list of byte strings or "
-                f"asn1crypto.crl.CertificateList objects, not {type_name(crl_)}"
+                f"asn1crypto.crl.CertificateList objects, "
+                f"not {type(crl_).__name__}"
             )
     return new_crls
 
@@ -443,6 +443,7 @@ def process_legacy_ocsp_input(
         else:
             raise TypeError(
                 f"ocsps must be a list of byte strings or "
-                f"asn1crypto.ocsp.OCSPResponse objects, not {type_name(ocsp_)}"
+                f"asn1crypto.ocsp.OCSPResponse objects, "
+                f"not {type(ocsp_).__name__}"
             )
     return new_ocsps

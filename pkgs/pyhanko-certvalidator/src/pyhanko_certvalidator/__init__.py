@@ -4,7 +4,6 @@ from typing import Iterable, Optional
 
 from asn1crypto import x509
 
-from ._types import type_name
 from .context import ValidationContext
 from .errors import InvalidCertificateError, PathBuildingError, ValidationError
 from .path import ValidationPath

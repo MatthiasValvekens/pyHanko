@@ -6,6 +6,7 @@ signatures.
 import asyncio
 import logging
 import warnings
+from asyncio import to_thread
 from dataclasses import dataclass
 from datetime import datetime
 from typing import IO, Callable, Iterable, List, Optional, Union
@@ -44,7 +45,6 @@ from pyhanko.sign.general import (
 )
 from pyhanko.sign.timestamps import TimeStamper
 
-from pyhanko_certvalidator._asyncio_compat import to_thread
 from pyhanko_certvalidator.registry import (
     CertificateStore,
     SimpleCertificateStore,

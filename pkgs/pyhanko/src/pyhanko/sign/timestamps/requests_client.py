@@ -1,7 +1,7 @@
+from asyncio import to_thread
+
 import requests
 from asn1crypto import tsp
-
-from pyhanko_certvalidator._asyncio_compat import to_thread
 
 from .api import TimeStamper
 from .common_utils import TimestampRequestError, set_tsp_headers
