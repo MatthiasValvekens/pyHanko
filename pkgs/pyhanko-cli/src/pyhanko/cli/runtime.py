@@ -25,7 +25,7 @@ def logging_setup(log_configs, verbose: bool):
         cur_logger.setLevel(log_config.level)
         handler: logging.StreamHandler
         if isinstance(log_config.output, StdLogOutput):
-            if StdLogOutput == StdLogOutput.STDOUT:
+            if log_config.output == StdLogOutput.STDOUT:
                 handler = logging.StreamHandler(sys.stdout)
             else:
                 handler = logging.StreamHandler()
@@ -59,9 +59,6 @@ def pyhanko_exception_manager():
     except misc.PdfReadError as e:
         exception = e
         msg = f"Failed to read PDF file: {e.msg}"
-    except misc.PdfWriteError as e:
-        exception = e
-        msg = f"Failed to write PDF file: {e.msg}"
     except SigningError as e:
         exception = e
         msg = f"Error raised while producing signed file: {e.msg}"

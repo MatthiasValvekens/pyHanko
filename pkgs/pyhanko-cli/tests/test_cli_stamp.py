@@ -132,6 +132,32 @@ def test_cli_stamp_style_undefined(cli_runner):
     assert "no stamp style named" in result.output
 
 
+def test_cli_stamp_text_param_missing(cli_runner):
+    cfg = {
+        'stamp-styles': {
+            'default': {
+                'type': 'text',
+                'stamp_text': '%(nonexistent)s',
+                'background': '__stamp__',
+            }
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'stamp',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            '0',
+            '0',
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Error raised while producing signature layout" in result.output
+    assert "nonexistent" in result.output
+
+
 @pytest.mark.nosmoke
 def test_cli_stamp_style_unspecified(cli_runner):
     cfg = {
