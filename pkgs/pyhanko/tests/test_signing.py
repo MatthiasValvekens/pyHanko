@@ -1728,3 +1728,23 @@ def test_sign_reject_econtent_if_detached():
             SignatureValidationError, match='detached.*encapsulated'
         ):
             val_untrusted(emb)
+
+
+def test_do_not_enforce_key_usage_if_signer_is_root():
+
+    signer_with_bogus_key_usage = signers.SimpleSigner.load(
+        f"{CRYPTO_DATA_DIR}/keys-rsa/signer.key.pem",
+        f"{CRYPTO_DATA_DIR}/testing-ca/interm/decrypter1.cert.pem",
+        key_passphrase=b'secret',
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=signer_with_bogus_key_usage)
+
+    vc = ValidationContext(
+        trust_roots=[signer_with_bogus_key_usage.signing_cert]
+    )
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, vc=vc)

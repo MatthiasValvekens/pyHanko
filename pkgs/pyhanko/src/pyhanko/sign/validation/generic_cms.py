@@ -568,13 +568,17 @@ async def validate_cert_usage(
 
     async def _check() -> ValidationPath:
         # validate usage without going through pyhanko_certvalidator
-        key_usage_settings.validate(cert)
-        return await find_valid_path(
+        path: ValidationPath = await find_valid_path(
             cert,
             paths,
             validation_context=validation_context,
             pkix_validation_params=pkix_validation_params,
         )
+        if path.pkix_len > 0:
+            # Corner case: if the signer's cert is a trust root,
+            # don't enforce the key usage policy
+            key_usage_settings.validate(cert)
+        return path
 
     return await handle_certvalidator_errors(_check())
 
