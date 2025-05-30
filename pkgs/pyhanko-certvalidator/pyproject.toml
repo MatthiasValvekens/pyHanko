@@ -85,3 +85,7 @@ testpaths = "tests"
 asyncio_mode = "strict"
 norecursedirs = "tests/legacy_live_tests"
 asyncio_default_fixture_loop_scope="function"
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "pragma: nocover", "raise AssertionError", "raise NotImplementedError", "TYPE_CHECKING", "^\\s*\\.\\.\\."]
+precision = 2
