@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 import click
@@ -39,7 +40,7 @@ def select_style(ctx: click.Context, style_name: str, url: str):
     return style
 
 
-# TODO: text_params support
+PARAM_REGEX = re.compile("([a-zA-Z0-9_]+):(.*)")
 
 
 @cli_root.command(help='stamp PDF files', name='stamp')
@@ -67,6 +68,13 @@ def select_style(ctx: click.Context, style_name: str, url: str):
     required=False,
     type=str,
 )
+@click.option(
+    '--text-param',
+    help='parameter to interpolate in the stamp text (multiple allowed)',
+    required=False,
+    multiple=True,
+    type=str,
+)
 @click.pass_context
 def stamp(
     ctx,
@@ -77,10 +85,20 @@ def stamp(
     style_name: str,
     page: int,
     stamp_url: str,
+    text_param: list,
 ):
     cli_config: Optional[CLIConfig] = ctx.obj.config
     if cli_config is None:
         raise click.ClickException(_CONFIG_REQUIRED_MSG)
+    text_params = {}
+    for param in text_param:
+        m = PARAM_REGEX.match(param)
+        if not m:
+            raise click.ClickException(
+                f"--text-param must be of the form "
+                f"<name>:<value>, not f{param!r}"
+            )
+        text_params[m.group(1)] = m.group(2)
     with pyhanko_exception_manager():
         stamp_style = select_style(ctx, style_name, stamp_url)
         page_ix = _index_page(page)
@@ -93,8 +111,15 @@ def stamp(
                 x=x,
                 y=y,
                 url=stamp_url,
+                text_params=text_params,
             )
         else:
             text_stamp_file(
-                infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y
+                infile,
+                outfile,
+                stamp_style,
+                dest_page=page_ix,
+                x=x,
+                y=y,
+                text_params=text_params,
             )

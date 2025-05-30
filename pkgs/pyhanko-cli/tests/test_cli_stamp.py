@@ -155,7 +155,83 @@ def test_cli_stamp_text_param_missing(cli_runner):
     )
     assert result.exit_code == 1
     assert "Error raised while producing signature layout" in result.output
-    assert "nonexistent" in result.output
+    assert "'nonexistent' is missing" in result.output
+
+
+@pytest.mark.parametrize("param", ["nonsense", "---:blah", "%:blah"])
+def test_cli_stamp_text_param_formatting_wrong(cli_runner, param):
+    _write_config({})
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'stamp',
+            '--text-param',
+            param,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            '0',
+            '0',
+        ],
+    )
+    assert result.exit_code == 1
+    assert "must be of the form" in result.output
+    assert param in result.output
+
+
+def test_cli_stamp_text_param_multiple_substitution(cli_runner):
+    cfg = {
+        'stamp-styles': {
+            'default': {
+                'type': 'text',
+                'stamp_text': 'Signing as %(my_name)s\n%(something_else)s',
+                'background': '__stamp__',
+            }
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'stamp',
+            "--text-param",
+            "my_name:John Doe",
+            "--text-param",
+            "something_else:Who knows",
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            '0',
+            '0',
+        ],
+    )
+    assert result.exit_code == 0
+
+
+def test_cli_stamp_text_param_fail_partial_substitution(cli_runner):
+    cfg = {
+        'stamp-styles': {
+            'default': {
+                'type': 'text',
+                'stamp_text': 'Signing as %(my_name)s\n%(something_else)s',
+                'background': '__stamp__',
+            }
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'stamp',
+            "--text-param",
+            "my_name:John Doe",
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            '0',
+            '0',
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Error raised while producing signature layout" in result.output
+    assert "'something_else' is missing" in result.output
 
 
 @pytest.mark.nosmoke
