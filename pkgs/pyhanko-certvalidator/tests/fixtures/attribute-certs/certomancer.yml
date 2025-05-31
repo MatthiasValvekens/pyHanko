@@ -198,6 +198,8 @@ pki-architectures:
               schema: aia-urls
               params:
                 ocsp-responder-names: [role-aa]
+                ca-issuer-links:
+                  - repo: interm
         revocation:
           revoked-since: "2020-12-01T00:00:00+0000"
           reason: key_compromise

@@ -6,7 +6,7 @@ and OCSP responses.
 import asyncio
 import logging
 import os
-from typing import Awaitable, Callable, Dict, Iterable, Optional, TypeVar, Union
+from typing import Awaitable, Callable, Dict, Optional, TypeVar, Union
 
 from asn1crypto import algos, cms, core, ocsp, pem, x509
 from asn1crypto.x509 import DistributionPoint
@@ -24,6 +24,7 @@ __all__ = [
     'ocsp_job_get_earliest',
     'complete_certificate_fetch_jobs',
     'gather_aia_issuer_urls',
+    'enumerate_delivery_point_urls',
     'ACCEPTABLE_STRICT_CERT_CONTENT_TYPES',
     'ACCEPTABLE_CERT_PEM_ALIASES',
     'ACCEPTABLE_PKCS7_DER_ALIASES',
@@ -356,6 +357,9 @@ async def complete_certificate_fetch_jobs(fetch_jobs):
 def enumerate_delivery_point_urls(distribution_point: DistributionPoint):
     name = distribution_point['distribution_point']
     if name.name != 'full_name':
+        logger.debug(
+            f"Relative delivery point name {name.chosen.native!r} is not supported"
+        )
         # We don't support relative DPs
         #  (esp. since we don't support directory-based lookups at all)
         return
