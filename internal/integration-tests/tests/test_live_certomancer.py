@@ -10,27 +10,38 @@ from click.testing import CliRunner
 from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko.cli import cli_root
 from pyhanko.keys.internal import (
-    translate_pyca_cryptography_key_to_asn1,
     translate_pyca_cryptography_cert_to_asn1,
+    translate_pyca_cryptography_key_to_asn1,
 )
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import SimpleSigner, signers
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.fields import SigSeedSubFilter
+from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
     RevocationInfoValidationType,
     async_validate_pdf_ltv_signature,
 )
+from test_data.samples import MINIMAL_ONE_FIELD
+
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.fetchers import Fetchers
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
+    AIOHttpCertificateFetcher,
+    AIOHttpCRLFetcher,
     AIOHttpFetcherBackend,
+    AIOHttpOCSPFetcher,
+    LazySession,
+)
+from pyhanko_certvalidator.fetchers.requests_fetchers import (
+    RequestsCertificateFetcher,
+    RequestsCRLFetcher,
+    RequestsOCSPFetcher,
 )
 from pyhanko_certvalidator.registry import SimpleCertificateStore
-
-from test_data.samples import MINIMAL_ONE_FIELD
 
 logger = logging.getLogger(__name__)
 
@@ -100,9 +111,9 @@ def _fetcher_backend(session):
     return AIOHttpFetcherBackend(session, per_request_timeout=TIMEOUT)
 
 
-async def _init_validation_context(session, arch, **kwargs):
+async def _init_validation_context(session, arch, *, backend=None, **kwargs):
     root = await _retrieve_cert(session, arch, "root")
-    backend = _fetcher_backend(session)
+    backend = backend or _fetcher_backend(session)
     kwargs.setdefault("revocation_mode", "require")
     vc = ValidationContext(
         trust_roots=[root],
@@ -236,6 +247,117 @@ async def test_async_sign_many_concurrent():
             await _check_pades_result(
                 out, [root], session, RevocationInfoValidationType.PADES_LTA
             )
+
+
+@run_if_live
+@pytest.mark.asyncio
+async def test_async_lazy_session():
+    # explicitly validate the lazy session usage that is used as a fallback in some places
+
+    arch = "testing-ca"
+    async with aiohttp.ClientSession() as session:
+        signer = await _retrieve_and_decode_credentials(
+            session, arch, "signer1-long", skip_other_certs=True
+        )
+
+        vc, root = await _init_validation_context(
+            session, arch, backend=AIOHttpFetcherBackend(session=None)
+        )
+
+    timestamper = AIOHttpTimeStamper(
+        f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa", session=LazySession()
+    )
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1',
+        validation_context=vc,
+        subfilter=SigSeedSubFilter.PADES,
+        embed_validation_info=True,
+        use_pades_lta=True,
+    )
+    pdf_signer = signers.PdfSigner(meta, signer, timestamper=timestamper)
+    out = await pdf_signer.async_sign_pdf(w, in_place=True)
+    async with aiohttp.ClientSession() as session:
+        await _check_pades_result(
+            out, [root], session, RevocationInfoValidationType.PADES_LTA
+        )
+
+
+@run_if_live
+@pytest.mark.asyncio
+async def test_async_strict_cert_fetchers_happy_path():
+    arch = "testing-ca"
+    async with aiohttp.ClientSession() as session:
+        signer = await _retrieve_and_decode_credentials(
+            session, arch, "signer1-long", skip_other_certs=True
+        )
+        fetchers = Fetchers(
+            ocsp_fetcher=AIOHttpOCSPFetcher(session, per_request_timeout=10),
+            crl_fetcher=AIOHttpCRLFetcher(session, per_request_timeout=10),
+            cert_fetcher=AIOHttpCertificateFetcher(
+                session, per_request_timeout=10, permit_pem=False
+            ),
+        )
+        vc, root = await _init_validation_context(
+            session, arch, backend=None, fetchers=fetchers
+        )
+
+        timestamper = AIOHttpTimeStamper(
+            f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa", session=session
+        )
+
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+        meta = signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=vc,
+            subfilter=SigSeedSubFilter.PADES,
+            embed_validation_info=True,
+            use_pades_lta=True,
+        )
+        pdf_signer = signers.PdfSigner(meta, signer, timestamper=timestamper)
+        out = await pdf_signer.async_sign_pdf(w, in_place=True)
+        await _check_pades_result(
+            out, [root], session, RevocationInfoValidationType.PADES_LTA
+        )
+
+
+@run_if_live
+@pytest.mark.asyncio
+@pytest.mark.parametrize('strict', [True, False])
+async def test_requests_fetchers_happy_path(strict):
+    arch = "testing-ca"
+    async with aiohttp.ClientSession() as session:
+        signer = await _retrieve_and_decode_credentials(
+            session, arch, "signer1-long", skip_other_certs=True
+        )
+        fetchers = Fetchers(
+            ocsp_fetcher=RequestsOCSPFetcher(per_request_timeout=10),
+            crl_fetcher=RequestsCRLFetcher(per_request_timeout=10),
+            cert_fetcher=RequestsCertificateFetcher(
+                per_request_timeout=10, permit_pem=strict
+            ),
+        )
+        vc, root = await _init_validation_context(
+            session, arch, backend=None, fetchers=fetchers
+        )
+
+    timestamper = HTTPTimeStamper(f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa")
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1',
+        validation_context=vc,
+        subfilter=SigSeedSubFilter.PADES,
+        embed_validation_info=True,
+        use_pades_lta=True,
+    )
+    pdf_signer = signers.PdfSigner(meta, signer, timestamper=timestamper)
+    out = await pdf_signer.async_sign_pdf(w, in_place=True)
+    async with aiohttp.ClientSession() as session:
+        await _check_pades_result(
+            out, [root], session, RevocationInfoValidationType.PADES_LTA
+        )
 
 
 async def _retrieve_and_save_credentials(fname, session, arch, label):

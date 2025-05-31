@@ -16,11 +16,6 @@ from pyhanko.sign.validation import (
     async_validate_pdf_signature,
     validate_pdf_signature,
 )
-
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
-from pyhanko_certvalidator.registry import SimpleCertificateStore
-
 from test_data.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
@@ -33,6 +28,10 @@ from test_data.samples import (
     UNRELATED_TSA,
     read_all,
 )
+
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 logger = logging.getLogger(__name__)
 
