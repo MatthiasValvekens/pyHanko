@@ -63,7 +63,6 @@ NONEXISTENT_XREF_PATH = os.path.join(
 )
 
 
-
 def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     # based on the minimal pdf file of
     # https://brendanzagaeski.appspot.com/0004.html
