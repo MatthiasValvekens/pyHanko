@@ -15,9 +15,9 @@ jobs:
           python-version: "3.13"
       - run: pip install --upgrade uv
       - name: Check import order
-        run: uv run --group lint isort --profile black --line-length 80 --check --src pkgs/*/src pkgs/*/tests
+        run: uv run --group lint isort --profile black --line-length 80 --check --src pkgs/*/src pkgs/*/tests internal/*/src internal/*/tests
       - name: Run Black
-        run: uv run --group lint black -S --line-length 80 --check pkgs
+        run: uv run --group lint black -S --line-length 80 --check pkgs internal
   mypy:
     runs-on: ubuntu-latest
     steps:

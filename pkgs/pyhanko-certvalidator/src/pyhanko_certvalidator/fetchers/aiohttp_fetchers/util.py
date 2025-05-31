@@ -51,11 +51,6 @@ class AIOHttpMixin:
             v for v in self.__results.values() if not isinstance(v, Exception)
         }
 
-    def get_results_for_tag(self, tag):
-        result = self.__results[tag]
-        if isinstance(result, Exception):
-            raise KeyError
-
     def _iter_results(self):
         for k, v in self.__results.items():
             if not isinstance(v, Exception):
