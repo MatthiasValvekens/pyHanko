@@ -32,7 +32,6 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-
 ACCEPTABLE_STRICT_CERT_CONTENT_TYPES = frozenset(
     [
         'application/pkix-cert',
@@ -60,11 +59,11 @@ ACCEPTABLE_CERT_DER_ALIASES = frozenset(
     ]
 )
 
-
 ACCEPTABLE_PKCS7_DER_ALIASES = frozenset(
     [
         'application/pkcs7-mime',
         'application/x-pkcs7-certificates',
+        'application/octet-stream',
         'binary/octet-stream',
     ]
 )
@@ -92,6 +91,10 @@ def unpack_cert_content(
             yield from _unpack_der_pkcs7(response_data, url)
         elif der_sequence_length == 3:
             yield x509.Certificate.load(response_data)
+        else:
+            raise ValueError(
+                f"Failed to heuristically determine content of payload from source URL {url}"
+            )
     elif (content_type in ACCEPTABLE_PKCS7_DER_ALIASES) and not is_pem:
         yield from _unpack_der_pkcs7(response_data, url)
     elif permit_pem and is_pem:
@@ -102,7 +105,7 @@ def unpack_cert_content(
                 yield from _unpack_der_pkcs7(data, url)
             else:
                 yield x509.Certificate.load(data)
-    else:  # pragma: nocover
+    else:
         raise ValueError(
             f"Failed to extract certs from {content_type} payload. "
             f"Source URL: {url}."
