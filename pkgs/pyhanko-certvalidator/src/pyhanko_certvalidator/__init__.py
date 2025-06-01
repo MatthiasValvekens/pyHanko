@@ -1,5 +1,3 @@
-import asyncio
-import warnings
 from typing import Iterable, Optional
 
 from asn1crypto import x509
@@ -111,10 +109,6 @@ class CertificateValidator:
         self._certificate: x509.Certificate = end_entity_cert
         self._params: Optional[PKIXValidationParams] = pkix_params
 
-    @property
-    def certificate(self):
-        return self._certificate
-
     async def async_validate_path(self) -> ValidationPath:
         """
         Builds possible certificate paths and validates them until a valid one
@@ -139,76 +133,6 @@ class CertificateValidator:
             pkix_validation_params=self._params,
         )
         return candidate_path
-
-    def validate_usage(
-        self, key_usage, extended_key_usage=None, extended_optional=False
-    ):
-        """
-        Validates the certificate path and that the certificate is valid for
-        the key usage and extended key usage purposes specified.
-
-        .. deprecated:: 0.17.0
-            Use :meth:`async_validate_usage` instead.
-
-        :param key_usage:
-            A set of unicode strings of the required key usage purposes. Valid
-            values include:
-
-             - "digital_signature"
-             - "non_repudiation"
-             - "key_encipherment"
-             - "data_encipherment"
-             - "key_agreement"
-             - "key_cert_sign"
-             - "crl_sign"
-             - "encipher_only"
-             - "decipher_only"
-
-        :param extended_key_usage:
-            A set of unicode strings of the required extended key usage
-            purposes. These must be either dotted number OIDs, or one of the
-            following extended key usage purposes:
-
-             - "server_auth"
-             - "client_auth"
-             - "code_signing"
-             - "email_protection"
-             - "ipsec_end_system"
-             - "ipsec_tunnel"
-             - "ipsec_user"
-             - "time_stamping"
-             - "ocsp_signing"
-             - "wireless_access_points"
-
-            An example of a dotted number OID:
-
-             - "1.3.6.1.5.5.7.3.1"
-
-        :param extended_optional:
-            A bool - if the extended_key_usage extension may be ommited and still
-            considered valid
-
-        :raises:
-            pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
-            pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
-            pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
-
-        :return:
-            A pyhanko_certvalidator.path.ValidationPath object of the validated
-            certificate validation path
-        """
-
-        warnings.warn(
-            "'validate_usage' is deprecated, use "
-            "'async_validate_usage' instead",
-            DeprecationWarning,
-        )
-
-        return asyncio.run(
-            self.async_validate_usage(
-                key_usage, extended_key_usage, extended_optional
-            )
-        )
 
     async def async_validate_usage(
         self, key_usage, extended_key_usage=None, extended_optional=False
@@ -274,35 +198,6 @@ class CertificateValidator:
             extended_optional,
         )
         return validated_path
-
-    def validate_tls(self, hostname):
-        """
-        Validates the certificate path, that the certificate is valid for
-        the hostname provided and that the certificate is valid for the purpose
-        of a TLS connection.
-
-        .. deprecated:: 0.17.0
-            Use :meth:`async_validate_tls` instead.
-
-        :param hostname:
-            A unicode string of the TLS server hostname
-
-        :raises:
-            pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
-            pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
-            pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
-
-        :return:
-            A pyhanko_certvalidator.path.ValidationPath object of the validated
-            certificate validation path
-        """
-
-        warnings.warn(
-            "'validate_tls' is deprecated, use 'async_validate_tls' instead",
-            DeprecationWarning,
-        )
-
-        return asyncio.run(self.async_validate_tls(hostname))
 
     async def async_validate_tls(self, hostname):
         """
