@@ -681,9 +681,9 @@ def _get_crl_authority_name(
             if crl_idp_name.name == 'full_name':
                 crl_authority_name = crl_idp_name.chosen[0].chosen
             else:
-                crl_authority_name = cert_issuer_name.copy().chosen.append(
-                    crl_idp_name.chosen
-                )
+                crl_authority_name = cert_issuer_name.copy()
+                # append modifies the name in-place
+                crl_authority_name.chosen.append(crl_idp_name.chosen)
         elif certificate_list.authority_key_identifier:
             tmp_crl_issuer = certificate_registry.retrieve_by_key_identifier(
                 certificate_list.authority_key_identifier
@@ -1043,6 +1043,7 @@ async def verify_crl(
     proc_state = proc_state or ValProcState(
         cert_path_stack=ConsList.sing(path),
         ee_name_override="attribute certificate" if not is_pkc else None,
+        init_index=path.pkix_len,
     )
 
     revinfo_manager = validation_context.revinfo_manager

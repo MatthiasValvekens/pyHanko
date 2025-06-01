@@ -12,10 +12,11 @@ class ValProcState:
         cert_path_stack: ConsList[ValidationPath],
         ee_name_override: Optional[str] = None,
         is_side_validation: bool = False,
+        init_index: int = 0,
     ):
         if cert_path_stack.head is None:
             raise ValueError("Empty path stack")
-        self.index: int = 0
+        self.index = init_index
         self.ee_name_override = ee_name_override
         self.is_side_validation = bool(
             is_side_validation or cert_path_stack.tail

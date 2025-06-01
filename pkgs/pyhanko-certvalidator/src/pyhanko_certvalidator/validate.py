@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import enum
 import logging
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, Iterable, List, Optional, Set
@@ -685,6 +686,7 @@ async def async_validate_ac(
                         cert_path_stack=ConsList.sing(candidate_path),
                         ee_name_override="AA certificate",
                     ),
+                    cert_profile=EECertProfile.ATTRIBUTE_AUTHORITY,
                 )
                 aa_path = candidate_path
                 break
@@ -712,7 +714,8 @@ async def async_validate_ac(
     proc_state = ValProcState(
         cert_path_stack=ConsList.sing(ac_path),
         is_side_validation=False,
-        ee_name_override="the attribute certificate",
+        ee_name_override="attribute certificate",
+        init_index=len(ac_path),
     )
     _check_validity(
         validity=Validity(
@@ -1024,11 +1027,18 @@ SUPPORTED_EXTENSIONS = frozenset(
 )
 
 
+@enum.unique
+class EECertProfile(enum.Enum):
+    REGULAR = 'regular'
+    ATTRIBUTE_AUTHORITY = 'attribute_authority'
+
+
 async def intl_validate_path(
     validation_context: ValidationContext,
     path: ValidationPath,
     proc_state: ValProcState,
     parameters: Optional[PKIXValidationParams] = None,
+    cert_profile: EECertProfile = EECertProfile.REGULAR,
 ):
     """
     Internal copy of validate_path() that allows overriding the name of the
@@ -1049,6 +1059,10 @@ async def intl_validate_path(
     :param parameters:
         Additional input parameters to the PKIX validation algorithm.
         These are not used when validating CRLs and OCSP responses.
+
+    :param cert_profile:
+        End-entity certificate profile to use.
+        Currently, this is only used to decide whether to process the AAControls extension.
 
     :return:
         The final certificate in the path - an instance of
@@ -1158,7 +1172,8 @@ async def intl_validate_path(
             # Step 3: prepare for certificate index+1
             _prepare_next_step(index, cert, state, proc_state=proc_state)
 
-        _check_aa_controls(cert, state, index, proc_state=proc_state)
+        if cert_profile == EECertProfile.ATTRIBUTE_AUTHORITY:
+            _check_aa_controls(cert, state, index, proc_state=proc_state)
 
         # Step 3 o / 4 f
         # Check for critical unsupported extensions
