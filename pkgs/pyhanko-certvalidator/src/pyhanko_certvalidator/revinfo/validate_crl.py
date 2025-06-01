@@ -57,7 +57,6 @@ class CRLWithPaths:
 
 
 async def _find_candidate_crl_issuer_certs(
-    crl_authority_name: x509.Name,
     certificate_list: crl.CertificateList,
     *,
     cert_issuer_auth: Authority,
@@ -65,7 +64,7 @@ async def _find_candidate_crl_issuer_certs(
 ) -> List[x509.Certificate]:
     # first, look for certs issued to the issuer named as the entity
     # that signed the CRL.
-    # In both cases, we prioritise the next-level issuer in the main path
+    # We prioritise the next-level issuer in the main path
     # if it matches the criteria.
     delegated_issuer = certificate_list.issuer
     cert_issuer_cert = None
@@ -74,22 +73,15 @@ async def _find_candidate_crl_issuer_certs(
     candidates = cert_registry.retrieve_by_name(
         delegated_issuer, cert_issuer_cert
     )
-    if not candidates and crl_authority_name != certificate_list.issuer:
-        # next, look in the cache for certs issued to the entity named
-        # in the issuing distribution point (i.e. the issuing authority)
-        candidates = cert_registry.retrieve_by_name(
-            crl_authority_name, cert_issuer_cert
-        )
     if not candidates and cert_registry.fetcher is not None:
         candidates = []
-        valid_names = (crl_authority_name, delegated_issuer)
         # Try to download certificates from URLs in the AIA extension,
         # if there is one
         async for cert in cert_registry.fetcher.fetch_crl_issuers(
             certificate_list
         ):
             # filter by name
-            if cert.subject in valid_names:
+            if cert.subject == delegated_issuer:
                 candidates.insert(0, cert)
     return candidates
 
@@ -180,7 +172,6 @@ async def _validate_crl_issuer_path(
 
 
 async def _find_candidate_crl_paths(
-    crl_authority_name: x509.Name,
     certificate_list: crl.CertificateList,
     *,
     cert: Union[x509.Certificate, cms.AttributeCertificateV2],
@@ -193,7 +184,6 @@ async def _find_candidate_crl_paths(
     cert_sha256 = hashlib.sha256(cert.dump()).digest()
 
     candidate_crl_issuers = await _find_candidate_crl_issuer_certs(
-        crl_authority_name,
         certificate_list,
         cert_issuer_auth=cert_issuer_auth,
         cert_registry=certificate_registry,
@@ -251,7 +241,6 @@ async def _find_candidate_crl_paths(
 
 
 async def _find_crl_issuer(
-    crl_authority_name: x509.Name,
     certificate_list: crl.CertificateList,
     *,
     cert: Union[x509.Certificate, cms.AttributeCertificateV2],
@@ -262,7 +251,6 @@ async def _find_crl_issuer(
     proc_state: ValProcState,
 ) -> ValidationPath:
     candidate_paths, errs = await _find_candidate_crl_paths(
-        crl_authority_name,
         certificate_list,
         cert=cert,
         cert_issuer_auth=cert_issuer_auth,
@@ -561,16 +549,9 @@ async def _handle_single_crl(
 ) -> Optional[Set[str]]:
     certificate_list = certificate_list_cont.crl_data
 
-    try:
-        is_indirect, crl_authority_name = _get_crl_authority_name(
-            certificate_list_cont,
-            cert_issuer_auth.name,
-            certificate_registry=validation_context.certificate_registry,
-            errs=errs,
-        )
-    except LookupError:
-        # already logged by _get_crl_authority_name
-        return None
+    is_indirect = _is_indirect(
+        certificate_list_cont,
+    )
 
     # check if we already know the issuer of this CRL
     crl_issuer = validation_context.revinfo_manager.check_crl_issuer(
@@ -580,7 +561,6 @@ async def _handle_single_crl(
     if not crl_issuer:
         try:
             crl_issuer_path = await _find_crl_issuer(
-                crl_authority_name,
                 certificate_list,
                 cert=cert,
                 cert_issuer_auth=cert_issuer_auth,
@@ -657,46 +637,15 @@ async def _handle_single_crl(
     return interim_reasons
 
 
-def _get_crl_authority_name(
+def _is_indirect(
     certificate_list_cont: CRLContainer,
-    cert_issuer_name: x509.Name,
-    certificate_registry: CertificateRegistry,
-    errs: _CRLErrs,
-) -> Tuple[bool, x509.Name]:
-    """
-    Figure out the name of the entity on behalf of which the CRL was issued.
-    """
-
+) -> bool:
     certificate_list = certificate_list_cont.crl_data
 
     crl_idp: crl.IssuingDistributionPoint = (
         certificate_list.issuing_distribution_point_value
     )
-    is_indirect = bool(crl_idp and crl_idp['indirect_crl'].native)
-    if not is_indirect:
-        crl_authority_name = certificate_list.issuer
-    else:
-        crl_idp_name = crl_idp['distribution_point']
-        if crl_idp_name:
-            if crl_idp_name.name == 'full_name':
-                crl_authority_name = crl_idp_name.chosen[0].chosen
-            else:
-                crl_authority_name = cert_issuer_name.copy()
-                # append modifies the name in-place
-                crl_authority_name.chosen.append(crl_idp_name.chosen)
-        elif certificate_list.authority_key_identifier:
-            tmp_crl_issuer = certificate_registry.retrieve_by_key_identifier(
-                certificate_list.authority_key_identifier
-            )
-            crl_authority_name = tmp_crl_issuer.subject
-        else:
-            errs.append(
-                'CRL is marked as an indirect CRL, but provides no '
-                'mechanism for locating the CRL issuer certificate',
-                certificate_list_cont,
-            )
-            raise LookupError
-    return is_indirect, crl_authority_name
+    return bool(crl_idp and crl_idp['indirect_crl'].native)
 
 
 def _maybe_get_delta_crl(
@@ -1191,11 +1140,6 @@ class CRLOfInterest:
     Boolean indicating whether the CRL is an indirect one.
     """
 
-    crl_authority_name: x509.Name
-    """
-    Distinguished name for the authority for which the CRL controls revocation.
-    """
-
 
 @dataclass(frozen=True)
 class CRLCollectionResult:
@@ -1228,20 +1172,10 @@ async def _assess_crl_relevance(
 ) -> Optional[CRLOfInterest]:
     certificate_list = certificate_list_cont.crl_data
     registry = revinfo_manager.certificate_registry
-    try:
-        is_indirect, crl_authority_name = _get_crl_authority_name(
-            certificate_list_cont,
-            cert_issuer_auth.name,
-            certificate_registry=registry,
-            errs=errs,
-        )
-    except LookupError:
-        # already logged by _get_crl_authority_name
-        return None
+    is_indirect = _is_indirect(certificate_list_cont)
 
     try:
         candidate_paths, _ = await _find_candidate_crl_paths(
-            crl_authority_name,
             certificate_list,
             cert=cert,
             cert_issuer_auth=cert_issuer_auth,
@@ -1293,7 +1227,6 @@ async def _assess_crl_relevance(
         crl=certificate_list_cont,
         prov_paths=provisional_results,
         is_indirect=is_indirect,
-        crl_authority_name=crl_authority_name,
     )
 
 
