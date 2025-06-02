@@ -225,7 +225,7 @@ wheels = [
 
 [[package]]
 name = "certomancer"
-version = "0.12.3"
+version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asn1crypto" },
@@ -236,9 +236,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tzlocal" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/23/04/9bad2cd0f728f9a4b7b90029c3b659d59500867d96875aa7ebd3a3dde821/certomancer-0.12.3.tar.gz", hash = "sha256:75ccf5eb3fb452a716584c63fdaf5d9f2cd02352e79fd868ab71ba4fa4ca46bc", size = 74566, upload-time = "2024-11-17T15:41:39.852Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/9d/5a27e7a18f586c12e9c2847c9e17f719f16fc12e4ca312ab50ee7e8f7afc/certomancer-0.13.0.tar.gz", hash = "sha256:5e6e6525e8c135cb564457c3f87e37839e3d75027372cb79198d9b00588ad4e2", size = 76028, upload-time = "2025-06-02T22:11:19.882Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/59/a0862854ecf574b86fb9a74ec72fd8be93545032f01ccc3542e5a70ad494/certomancer-0.12.3-py3-none-any.whl", hash = "sha256:e07250a8879ee8a9bbb8850536e68a230eeb88b3c962ca12df1dd6a8e2c5f5fc", size = 72392, upload-time = "2024-11-17T15:41:37.896Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/a8/5d58c411081b177bb1f23bf0b2237e65daf0a57027c0a8019bd7d18f69bf/certomancer-0.13.0-py3-none-any.whl", hash = "sha256:bf86e23f8f7ca4fbc6dec0a5dbbde110af3099e030e5f6fc830cec27779e0129", size = 73534, upload-time = "2025-06-02T22:11:17.922Z" },
 ]
 
 [package.optional-dependencies]
@@ -249,7 +249,7 @@ web-api = [
 
 [[package]]
 name = "certomancer-csc-dummy"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -258,9 +258,9 @@ dependencies = [
     { name = "cryptography" },
     { name = "python-pae" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1d/25/c8afb607be8f604492dfd08a75b8abfdb3714dc64da1ca9ba9004a70bac6/certomancer-csc-dummy-0.3.0.tar.gz", hash = "sha256:fb3f8f25f23b6134b0070d635bfad6f1c499814794c85019dc0acc20cdd17548", size = 10598, upload-time = "2024-03-18T21:43:20.445Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3e/41/c0630032b25a05273abec0c063085ef23e15f595893beaf9623e9d49a8c5/certomancer_csc_dummy-0.4.0.tar.gz", hash = "sha256:c575fb56f325d5326ad61e40d0781cce19f33addcf7d7fcb35e772a68e54fd6f", size = 10627, upload-time = "2025-06-02T22:21:34.127Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4c/77/5e50f337f9136e131f69506c9cc6c2459d98ecdc88ff01322dfe6421a58e/certomancer_csc_dummy-0.3.0-py3-none-any.whl", hash = "sha256:f18785354c0e4f4e0faed7d498523a8795c5cc907754fc31378c9906c12b74b9", size = 11432, upload-time = "2024-03-18T21:43:18.66Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/94/2c7cb45659d061596f012d3683b436cf15d844651a7e94c867b32054cbcd/certomancer_csc_dummy-0.4.0-py3-none-any.whl", hash = "sha256:3e4af693b161a14057fe1b14f1852ba538c88d21e5e65c7ac92e280c47f8aa95", size = 11506, upload-time = "2025-06-02T22:21:32.757Z" },
 ]
 
 [[package]]
@@ -464,7 +464,7 @@ csc = [
 [package.metadata]
 requires-dist = [
     { name = "certomancer" },
-    { name = "certomancer-csc-dummy", marker = "extra == 'csc'", specifier = "==0.3.0" },
+    { name = "certomancer-csc-dummy", marker = "extra == 'csc'", specifier = "==0.4.0" },
     { name = "pyhanko", editable = "pkgs/pyhanko" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
 ]
@@ -610,7 +610,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [
@@ -851,7 +851,7 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9,<3.12" },
     { name = "certomancer" },
-    { name = "certomancer", extras = ["web-api"], specifier = ">=0.12.3,<0.13" },
+    { name = "certomancer", extras = ["web-api"], specifier = ">=0.13.0,<0.14" },
     { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pyhanko", editable = "pkgs/pyhanko" },
@@ -1574,7 +1574,7 @@ provides-extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "e
 testing = [
     { name = "aiohttp", specifier = ">=3.9,<3.12" },
     { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
-    { name = "certomancer", specifier = ">=0.12.3,<0.13" },
+    { name = "certomancer", specifier = ">=0.13.0,<0.14" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
@@ -1591,7 +1591,7 @@ testing-aiohttp = [
 ]
 testing-base = [
     { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
-    { name = "certomancer", specifier = ">=0.12.3,<0.13" },
+    { name = "certomancer", specifier = ">=0.13.0,<0.14" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
@@ -1696,7 +1696,7 @@ requires-dist = [
 testing = [
     { name = "aiohttp", specifier = ">=3.9,<3.12" },
     { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
-    { name = "certomancer", specifier = ">=0.12.3,<0.13" },
+    { name = "certomancer", specifier = ">=0.13.0,<0.14" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pyhanko", extras = ["pkcs11", "opentype", "async-http", "image-support", "qr"], editable = "pkgs/pyhanko" },
@@ -1709,7 +1709,7 @@ testing = [
 ]
 testing-base = [
     { name = "backports-zoneinfo", extras = ["tzdata"], marker = "python_full_version < '3.9'" },
-    { name = "certomancer", specifier = ">=0.12.3,<0.13" },
+    { name = "certomancer", specifier = ">=0.13.0,<0.14" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },

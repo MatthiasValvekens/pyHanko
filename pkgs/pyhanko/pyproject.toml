@@ -77,7 +77,7 @@ testing-base = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
-    "certomancer>=0.12.3,<0.13",
+    "certomancer>=0.13.0,<0.14",
     "pytest-cov>=4.0,<6.2",
     "pytest-asyncio==0.24.0;python_version<\"3.9\"",
     "pytest-asyncio==0.26.0;python_version>=\"3.9\"",
