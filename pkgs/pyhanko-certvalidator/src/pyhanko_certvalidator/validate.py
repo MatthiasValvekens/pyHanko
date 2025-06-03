@@ -390,7 +390,7 @@ def _process_aki_ext(aki_ext: x509.AuthorityKeyIdentifier):
         )
         auth_ser = aki_ext['authority_cert_serial_number'].native
         if auth_ser is not None:
-            auth_iss_ser = b'%s:%d' % (auth_ser.sha256, auth_ser)
+            auth_iss_ser = b'%s:%d' % (auth_iss_dirname.sha256, auth_ser)
 
     return aki, auth_iss_dirname, auth_iss_ser
 
