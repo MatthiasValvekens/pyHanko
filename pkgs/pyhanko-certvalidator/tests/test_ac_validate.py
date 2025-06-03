@@ -5,12 +5,12 @@ import pytest
 from asn1crypto import cms, crl, ocsp, x509
 from freezegun import freeze_time
 
-from pyhanko_certvalidator import validate
+from pyhanko_certvalidator import PathBuildingError, validate
 from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.context import ACTargetDescription, ValidationContext
 from pyhanko_certvalidator.errors import (
-    CRLNoMatchesError,
     CRLValidationIndeterminateError,
+    InvalidAttrCertificateError,
     InvalidCertificateError,
     PathValidationError,
     RevokedError,
@@ -351,6 +351,74 @@ async def test_match_holder_ac():
     )
 
     await validate.async_validate_ac(ac, vc, holder_cert=alice)
+
+
+@freeze_time('2022-05-01')
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'name',
+    [
+        'alice-aki-with-issuer-id.attr.crt',
+        'alice-v1form-issuer.attr.crt',
+        'alice-v2form-only-base-cert-id.attr.crt',
+        'alice-v2form-with-base-certificate-id.attr.crt',
+        'alice-no-aki-with-base-certificate-id.attr.crt',
+        'alice-aki-with-issuer-id-and-base-certificate-id.attr.crt',
+    ],
+)
+async def test_ac_issuer_search_nonstandard_forms(name):
+    ac = load_attr_cert(os.path.join(attr_cert_dir, 'oneoff', name))
+
+    root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+    interm = load_cert(os.path.join(basic_aa_dir, 'root', 'interm-role.crt'))
+    role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
+
+    alice = load_cert(os.path.join(basic_aa_dir, 'people-ca', 'alice.crt'))
+
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm, role_aa],
+    )
+
+    await validate.async_validate_ac(ac, vc, holder_cert=alice)
+
+
+@freeze_time('2022-05-01')
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'name,err_type,err_str',
+    [
+        (
+            'alice-v2form-issuer-aki-misaligned.attr.crt',
+            InvalidAttrCertificateError,
+            'conflicting',
+        ),
+        ('alice-misleading-aki.attr.crt', PathBuildingError, 'suitable AA'),
+        (
+            'alice-v2form-wrong-serial.attr.crt',
+            PathBuildingError,
+            'suitable AA',
+        ),
+    ],
+)
+async def test_ac_issuer_search_nonstandard_forms_failures(
+    name, err_type, err_str
+):
+    ac = load_attr_cert(os.path.join(attr_cert_dir, 'oneoff', name))
+
+    root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+    interm = load_cert(os.path.join(basic_aa_dir, 'root', 'interm-role.crt'))
+    role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
+
+    alice = load_cert(os.path.join(basic_aa_dir, 'people-ca', 'alice.crt'))
+
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm, role_aa],
+    )
+
+    with pytest.raises(err_type, match=err_str):
+        await validate.async_validate_ac(ac, vc, holder_cert=alice)
 
 
 @freeze_time('2022-05-01')
