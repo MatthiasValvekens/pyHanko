@@ -193,6 +193,15 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
         This is currently only supported for ECDSA signatures.
     """
 
+    only_resident_certs: bool = False
+    """
+    Limit certificate searches to certificates that are marked as physically
+    stored on the token, not generated on-the-fly.
+
+    .. note::
+        This corresponds to the ``TOKEN`` flag being set on the PKCS#11 object.
+    """
+
     signature_mechanism: Optional[algos.SignedDigestAlgorithm] = None
     """
     Manually specify the signature mechanism in ASN.1 fully.

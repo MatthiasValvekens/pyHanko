@@ -4,22 +4,20 @@ Tests for PKCS#11 functionality.
 NOTE: these are not run in CI, due to lack of testing setup.
 """
 
-import asyncio
 import binascii
 from io import BytesIO
 from typing import Optional
 
 import pytest
 from asn1crypto import algos
-from asn1crypto.algos import SignedDigestAlgorithm
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
-from pkcs11 import Mechanism, NoSuchKey, PKCS11Error
+from pkcs11 import Mechanism, PKCS11Error
 from pkcs11 import types as p11_types
 from pyhanko.config.pkcs11 import PKCS11PinEntryMode, PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign import general, pkcs11, signers
+from pyhanko.sign import pkcs11, signers
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.pkcs11 import (
     PKCS11Signer,
@@ -175,20 +173,17 @@ def test_sign_external_certs(bulk_fetch):
             ca_chain=(TESTING_CA.get_cert(CertLabel('interm')),),
             bulk_fetch=bulk_fetch,
         )
-        orig_fetcher = pkcs11._pull_cert
-        try:
+        orig_fetcher = signer._pull_single_cert
 
-            def _trap_pull(session, *, label=None, cert_id=None):
-                if label != SIGNER_LABEL:
-                    raise RuntimeError
-                return orig_fetcher(session, label=label, cert_id=cert_id)
+        def _trap_pull(*, label=None, cert_id=None):
+            if label != SIGNER_LABEL:
+                raise RuntimeError
+            return orig_fetcher(label=label, cert_id=cert_id)
 
-            pkcs11._pull_cert = _trap_pull
-            assert isinstance(signer.cert_registry, SimpleCertificateStore)
-            assert len(list(signer.cert_registry)) == 1
-            out = signers.sign_pdf(w, meta, signer=signer)
-        finally:
-            pkcs11._pull_cert = orig_fetcher
+        signer._pull_cert = _trap_pull
+        assert isinstance(signer.cert_registry, SimpleCertificateStore)
+        assert len(list(signer.cert_registry)) == 1
+        out = signers.sign_pdf(w, meta, signer=signer)
 
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
@@ -232,7 +227,24 @@ def test_wrong_key_label(bulk_fetch):
             bulk_fetch=bulk_fetch,
             key_label='NoSuchKeyExists',
         )
-        with pytest.raises(NoSuchKey):
+        with pytest.raises(PKCS11Error, match="Could not find private key"):
+            signers.sign_pdf(w, meta, signer=signer)
+
+
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_wrong_key_id(bulk_fetch):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with _simple_sess() as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess,
+            SIGNER_LABEL,
+            other_certs_to_pull=default_other_certs,
+            bulk_fetch=bulk_fetch,
+            key_id=binascii.unhexlify(b'deadbeef'),
+        )
+        with pytest.raises(PKCS11Error, match="Could not find private key"):
             signers.sign_pdf(w, meta, signer=signer)
 
 
@@ -447,6 +459,7 @@ def test_simple_sign_from_config():
         cert_label=SIGNER_LABEL,
         user_pin='1234',
         other_certs_to_pull=None,
+        only_resident_certs=True,
     )
 
     with PKCS11SigningContext(config) as signer:
@@ -484,7 +497,7 @@ def test_sign_skip_login_fail():
     )
 
     # no key will be found, since we didn't bother logging in
-    with pytest.raises(NoSuchKey):
+    with pytest.raises(PKCS11Error, match="Could not find private key"):
         with PKCS11SigningContext(config) as signer:
             signers.sign_pdf(w, meta, signer=signer)
 
@@ -618,7 +631,7 @@ def test_select_ecdsa_mech(md):
 )
 def test_pull_err_fmt(label, cert_id, no_results, exp_err):
     err = pkcs11._format_pull_err_msg(
-        no_results=no_results, label=label, cert_id=cert_id
+        "cert", no_results=no_results, label=label, id_value=cert_id
     )
     assert err == exp_err
 
@@ -649,86 +662,6 @@ async def test_simple_sign_from_config_async(bulk_fetch, pss):
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     await async_val_trusted(emb)
-
-
-@pytest.mark.skip  # FIXME flaky test, sometimes coredumps with SoftHSM
-@pytest.mark.parametrize(
-    'bulk_fetch,pss',
-    [(True, True), (False, False), (True, False), (True, True)],
-)
-@pytest.mark.asyncio
-async def test_async_sign_many_concurrent(bulk_fetch, pss):
-    concurrent_count = 10
-    config = PKCS11SignatureConfig(
-        module_path=pkcs11_test_module,
-        token_criteria=TokenCriteria(label='testrsa'),
-        other_certs_to_pull=default_other_certs,
-        bulk_fetch=bulk_fetch,
-        prefer_pss=pss,
-        cert_label=SIGNER_LABEL,
-        user_pin='1234',
-    )
-    async with PKCS11SigningContext(config=config) as signer:
-
-        async def _job(_i):
-            w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-            meta = signers.PdfSignatureMetadata(
-                field_name='Sig1', reason=f"PKCS#11 concurrency test #{_i}!"
-            )
-            pdf_signer = signers.PdfSigner(meta, signer)
-            sig_result = await pdf_signer.async_sign_pdf(w, in_place=True)
-            await asyncio.sleep(2)
-            return _i, sig_result
-
-        jobs = asyncio.as_completed(map(_job, range(1, concurrent_count + 1)))
-        for finished_job in jobs:
-            i, out = await finished_job
-            r = PdfFileReader(out)
-            emb = r.embedded_signatures[0]
-            assert emb.field_name == 'Sig1'
-            assert emb.sig_object['/Reason'].endswith(f"#{i}!")
-            with freeze_time("2020-11-01"):
-                await async_val_trusted(emb)
-
-
-@pytest.mark.skip  # FIXME flaky test, sometimes coredumps with SoftHSM
-@pytest.mark.parametrize(
-    'bulk_fetch,pss',
-    [(True, True), (False, False), (True, False), (True, True)],
-)
-@pytest.mark.asyncio
-async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
-    concurrent_count = 10
-
-    # don't instantiate through PKCS11SigningContext
-    # also, just sign raw strings, we want to exercise the correctness of
-    # the awaiting logic in sign_raw for object loading
-    with _simple_sess() as sess:
-        signer = pkcs11.PKCS11Signer(
-            sess,
-            SIGNER_LABEL,
-            other_certs_to_pull=default_other_certs,
-            bulk_fetch=bulk_fetch,
-        )
-
-        async def _job(_i):
-            payload = f"PKCS#11 concurrency test #{_i}!".encode('utf8')
-            sig_result = await signer.async_sign_raw(payload, 'sha256')
-            await asyncio.sleep(2)
-            return _i, sig_result
-
-        jobs = asyncio.as_completed(map(_job, range(1, concurrent_count + 1)))
-        for finished_job in jobs:
-            i, sig = await finished_job
-            general.validate_raw(
-                signature=sig,
-                signed_data=f"PKCS#11 concurrency test #{i}!".encode('utf8'),
-                cert=signer.signing_cert,
-                md_algorithm='sha256',
-                signature_algorithm=SignedDigestAlgorithm(
-                    {'algorithm': 'sha256_rsa'}
-                ),
-            )
 
 
 def test_token_does_not_exist():

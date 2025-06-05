@@ -107,12 +107,14 @@ def find_token(
                 "must be provided"
             )
 
+    token = None
     if slot_no is None:
         for slot in slots:
             try:
-                token = slot.get_token()
-                if criteria_satisfied_by(token_criteria, token):
-                    return token
+                cur_token = slot.get_token()
+                if criteria_satisfied_by(token_criteria, cur_token):
+                    token = cur_token
+                    break
             except PKCS11Error:
                 continue
     else:
@@ -120,8 +122,8 @@ def find_token(
             raise PKCS11Error(
                 f"Slot index {slot_no} too large; there are only {len(slots)}"
             )
-        token = slots[slot_no].get_token()
-        errors = criteria_mismatches(token_criteria, token)
+        cur_token = slots[slot_no].get_token()
+        errors = criteria_mismatches(token_criteria, cur_token)
         if errors:
             err_str = ", ".join(
                 f"{field} is not {val!r}" for field, val in errors
@@ -129,8 +131,9 @@ def find_token(
             raise PKCS11Error(
                 f"Token in slot {slot_no} does not satisfy criteria; {err_str}."
             )
-        return token
-    return None
+        else:
+            token = cur_token
+    return token
 
 
 @dataclass(frozen=True)
@@ -377,46 +380,22 @@ def open_pkcs11_session(
 
 
 def _format_pull_err_msg(
+    object_kind: str,
     no_results: bool,
     label: Optional[str] = None,
-    cert_id: Optional[bytes] = None,
+    id_value: Optional[bytes] = None,
 ):
     info_strs = []
     if label is not None:
         info_strs.append(f"label '{label}'")
-    if cert_id is not None:
-        info_strs.append(f"ID '{binascii.hexlify(cert_id).decode('ascii')}'")
+    if id_value is not None:
+        info_strs.append(f"ID '{binascii.hexlify(id_value).decode('ascii')}'")
     qualifier = f" with {', '.join(info_strs)}" if info_strs else ""
     if no_results:
-        err = f"Could not find cert{qualifier}."
+        err = f"Could not find {object_kind}{qualifier}."
     else:
-        err = f"Found more than one cert{qualifier}."
+        err = f"Found more than one {object_kind}{qualifier}."
     return err
-
-
-def _pull_cert(
-    pkcs11_session: Session,
-    label: Optional[str] = None,
-    cert_id: Optional[bytes] = None,
-):
-    query_params = {Attribute.CLASS: ObjectClass.CERTIFICATE}
-    if label is not None:
-        query_params[Attribute.LABEL] = label
-    if cert_id is not None:
-        query_params[Attribute.ID] = cert_id
-    q = pkcs11_session.get_objects(query_params)
-
-    # need to run through the full iterator to make sure the operation
-    # terminates
-    results = list(q)
-    if len(results) == 1:
-        cert_obj = results[0]
-        return x509.Certificate.load(cert_obj[Attribute.VALUE])
-    else:
-        err = _format_pull_err_msg(
-            no_results=not results, label=label, cert_id=cert_id
-        )
-        raise PKCS11Error(err)
 
 
 def _hash_fully(digest_algorithm: str, *, wrap_digest_info: bool):
@@ -494,6 +473,9 @@ class PKCS11Signer(Signer):
             basis.
     """
 
+    default_cert_query_params: Dict[Attribute, Any]
+    default_key_query_params: Dict[Attribute, Any]
+
     def __init__(
         self,
         pkcs11_session: Session,
@@ -540,6 +522,13 @@ class PKCS11Signer(Signer):
             self._cert_registry.register_multiple(ca_chain)
         if signing_cert is not None:
             self._cert_registry.register(signing_cert)
+        self.default_cert_query_params = {
+            Attribute.CLASS: ObjectClass.CERTIFICATE
+        }
+        self.default_key_query_params = {
+            Attribute.CLASS: ObjectClass.PRIVATE_KEY,
+            Attribute.SIGN: True,
+        }
 
     def _init_cert_registry(self):
         # it's conceivable that one might want to load this separately from
@@ -599,6 +588,88 @@ class PKCS11Signer(Signer):
     def _load_other_certs(self) -> Set[x509.Certificate]:
         return set(self.__pull())
 
+    def bulk_cert_fetch_params(self) -> Dict[Attribute, Any]:
+        """
+        Search parameters to bulk fetch certificates from the token.
+
+        .. note:: Can be overridden in subclasses.
+        """
+        return dict(self.default_cert_query_params)
+
+    def single_cert_fetch_params(
+        self,
+        label: Optional[str],
+        cert_id: Optional[bytes],
+    ) -> Dict[Attribute, Any]:
+        """
+        Search parameters to fetch a single certificate from the token.
+
+        .. note:: Can be overridden in subclasses.
+        """
+
+        query_params: Dict[Attribute, Any] = dict(
+            self.default_cert_query_params
+        )
+        if label is not None:
+            query_params[Attribute.LABEL] = label
+        if cert_id is not None:
+            query_params[Attribute.ID] = cert_id
+        return query_params
+
+    def signing_key_fetch_params(self) -> Dict[Attribute, Any]:
+        """
+        Search parameters to fetch the signing key from the token.
+
+        .. note:: Can be overridden in subclasses.
+        """
+        query_params: Dict[Attribute, Any] = dict(self.default_key_query_params)
+        if self.key_label is not None:
+            query_params[Attribute.LABEL] = self.key_label
+        if self.key_id is not None:
+            query_params[Attribute.ID] = self.key_id
+
+        return query_params
+
+    def _pull_single_cert(
+        self,
+        label: Optional[str],
+        cert_id: Optional[bytes],
+    ):
+
+        query_params = self.single_cert_fetch_params(label, cert_id)
+        q = self.pkcs11_session.get_objects(query_params)
+
+        # need to run through the full iterator to make sure the operation
+        # terminates
+        results = list(q)
+        if len(results) == 1:
+            cert_obj = results[0]
+            return x509.Certificate.load(cert_obj[Attribute.VALUE])
+        else:
+            err = _format_pull_err_msg(
+                "certificate",
+                no_results=not results,
+                label=label,
+                id_value=cert_id,
+            )
+            raise PKCS11Error(err)
+
+    def _pull_signing_key_handle(self):
+        query_params = self.signing_key_fetch_params()
+        q = self.pkcs11_session.get_objects(query_params)
+
+        results = list(q)
+        if len(results) == 1:
+            return results[0]
+        else:
+            err = _format_pull_err_msg(
+                "private key",
+                no_results=not results,
+                label=self.key_label,
+                id_value=self.key_id,
+            )
+            raise PKCS11Error(err)
+
     def __pull(self):
         other_cert_labels = self.other_certs
         if other_cert_labels is not None and len(other_cert_labels) == 0:
@@ -608,9 +679,7 @@ class PKCS11Signer(Signer):
             return
         if other_cert_labels is None or self.bulk_fetch:
             # first, query all certs
-            q = self.pkcs11_session.get_objects(
-                {Attribute.CLASS: ObjectClass.CERTIFICATE}
-            )
+            q = self.pkcs11_session.get_objects(self.bulk_cert_fetch_params())
             logger.debug("Pulling all certificates from PKCS#11 token...")
             for cert_obj in q:
                 label = cert_obj[Attribute.LABEL]
@@ -632,7 +701,7 @@ class PKCS11Signer(Signer):
                     f"PKCS#11 token..."
                 )
                 logger.debug(msg)  # lgtm
-                yield _pull_cert(self.pkcs11_session, label)
+                yield self._pull_single_cert(label=label, cert_id=None)
 
     async def ensure_objects_loaded(self):
         """
@@ -670,13 +739,11 @@ class PKCS11Signer(Signer):
 
         self._init_cert_registry()
         if self._signing_cert is None:
-            self._signing_cert = _pull_cert(
-                self.pkcs11_session, label=self.cert_label, cert_id=self.cert_id
+            self._signing_cert = self._pull_single_cert(
+                label=self.cert_label, cert_id=self.cert_id
             )
 
-        kh = self.pkcs11_session.get_key(
-            ObjectClass.PRIVATE_KEY, label=self.key_label, id=self.key_id
-        )
+        kh = self._pull_signing_key_handle()
         self._key_handle = kh
 
         self._loaded = True
@@ -718,7 +785,7 @@ class PKCS11SigningContext:
             raise SigningError(
                 f"PKCS#11 error while opening session to {config.module_path}: [{type(ex).__name__}] {ex}"
             ) from ex
-        return PKCS11Signer(
+        signer = PKCS11Signer(
             session,
             config.cert_label,
             ca_chain=config.other_certs,
@@ -732,6 +799,9 @@ class PKCS11SigningContext:
             signing_cert=config.signing_certificate,
             signature_mechanism=config.signature_mechanism,
         )
+        if config.only_resident_certs:
+            signer.default_cert_query_params[Attribute.TOKEN] = True
+        return signer
 
     def __enter__(self):
         return self._instantiate()

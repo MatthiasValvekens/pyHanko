@@ -605,6 +605,7 @@ def test_read_pkcs11_config():
                     label: testrsa
                 cert-label: signer
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+                only-resident-certs: no
         """
     )
     setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
@@ -613,6 +614,7 @@ def test_read_pkcs11_config():
 
     assert setup.token_criteria == TokenCriteria('testrsa')
     assert setup.module_path == '/path/to/libfoo.so'
+    assert not setup.only_resident_certs
     assert len(setup.other_certs) == 2
 
 
@@ -631,6 +633,7 @@ def test_read_pkcs11_config_legacy():
         setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
     assert setup.token_criteria == TokenCriteria('testrsa')
+    assert not setup.only_resident_certs
 
 
 def test_read_pkcs11_config_legacy_with_extra_criteria():
@@ -644,6 +647,7 @@ def test_read_pkcs11_config_legacy_with_extra_criteria():
                     serial: deadbeef
                 cert-label: signer
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+                only-resident-certs: yes
         """
     )
     with pytest.deprecated_call():
@@ -652,6 +656,7 @@ def test_read_pkcs11_config_legacy_with_extra_criteria():
     assert setup.token_criteria == TokenCriteria(
         label='testrsa', serial=b'\xde\xad\xbe\xef'
     )
+    assert setup.only_resident_certs
 
 
 def test_read_pkcs11_config_slot_no():
