@@ -9,9 +9,7 @@ updates:
     timezone: "Europe/Brussels"
   labels:
     - "gha-deps"
-  reviewers:
-    - "MatthiasValvekens"
-- package-ecosystem: "pip"
+- package-ecosystem: "uv"
   directory: "/"
   schedule:
     interval: "daily"
@@ -19,5 +17,3 @@ updates:
     timezone: "Europe/Brussels"
   labels:
     - "python-deps"
-  reviewers:
-    - "MatthiasValvekens"
