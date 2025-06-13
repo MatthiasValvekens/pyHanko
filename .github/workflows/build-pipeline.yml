@@ -28,7 +28,7 @@ permissions:
   actions: read
   contents: read
 env:
-  MAIN_PYTHON_VERSION: "3.13"
+  UV_PYTHON_PREFERENCE: only-system
   PDFTOPPM_PATH: /usr/bin/pdftoppm
   IM_COMPARE_PATH: /usr/bin/compare
   SOFTHSM2_CONF: /tmp/softhsm2.conf
@@ -45,10 +45,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ env.MAIN_PYTHON_VERSION }} 
+          enable-cache: true
       - name: Install build tools
-        run: pip install --upgrade uv && uv sync --group release
+        run: uv sync --group release
       - name: Apply package version for release
         if: inputs.package != ''
         run: |
@@ -87,7 +89,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
-      - uses: ./.github/actions/test-job-setup
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - name: Disable Python problem matchers
+        shell: bash
+        # we remove setup-python's problem matchers because
+        # they aren't really an asset given the way pyHanko is tested
+        run: echo "::remove-matcher owner=python::"
       - name: Test pyhanko-certvalidator with pytest
         run: |
           uv run --directory pkgs/pyhanko-certvalidator --no-dev --exact --group testing-base \
@@ -140,7 +151,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
-      - uses: ./.github/actions/test-job-setup
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - name: Disable Python problem matchers
+        shell: bash
+        # we remove setup-python's problem matchers because
+        # they aren't really an asset given the way pyHanko is tested
+        run: echo "::remove-matcher owner=python::"
       - name: Start Certomancer Animator daemon
         run: |
           uv run --project internal/integration-tests \
@@ -171,9 +191,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ env.MAIN_PYTHON_VERSION }}
-      - uses: ./.github/actions/test-job-setup
+          enable-cache: true
+      - name: Disable Python problem matchers
+        shell: bash
+        # we remove setup-python's problem matchers because
+        # they aren't really an asset given the way pyHanko is tested
+        run: echo "::remove-matcher owner=python::"
       - name: Run library smoke tests with minimal deps
         # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
         # the PKCS#11 parts
