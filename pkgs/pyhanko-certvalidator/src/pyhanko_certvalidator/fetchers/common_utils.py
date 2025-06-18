@@ -284,6 +284,7 @@ async def crl_job_results_as_completed(jobs):
     for crl_job in asyncio.as_completed(list(jobs)):
         try:
             fetched_crl = await crl_job
+            at_least_one_success = True
             yield fetched_crl
         except errors.CRLFetchError as e:
             last_e = e
