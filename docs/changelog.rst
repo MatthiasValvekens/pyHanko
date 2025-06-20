@@ -2310,14 +2310,20 @@ pyhanko-cli
 -----------
 
 
-.. _cli-release-0.1.0:
+.. _cli-release-0.1.2:
 
-0.1.0
+0.1.2
 =====
 
-*Release date:* 2025-05-27
+*Release date:* 2025-06-20
 
-Initial release split off from main pyHanko distribution artifact.
+
+New features and enhancements
+-----------------------------
+
+ * Auto-open document when validating an encrypted document using the CLI
+   and there is no user password.
+ * Support ``--text-param`` argument for stamps.
 
 
 .. _cli-release-0.1.1:
@@ -2332,3 +2338,12 @@ Dependency changes
 ------------------
 
  * Remove upper bound on ``click`` (excluding version ``8.2.0`` as incompatible)
+
+.. _cli-release-0.1.0:
+
+0.1.0
+=====
+
+*Release date:* 2025-05-27
+
+Initial release split off from main pyHanko distribution artifact.
