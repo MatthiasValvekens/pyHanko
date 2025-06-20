@@ -7,7 +7,6 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 import asyncio
 import binascii
 import logging
-import struct
 import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
@@ -297,17 +296,7 @@ def select_pkcs11_signing_params(
             # Note: Ed448-ph isn't the same thing.
             raise NotImplementedError("Ed448 not available in raw mode")
         kwargs['mechanism'] = Mechanism.EDDSA
-        # Definition of the param type:
-        # typedef struct CK_EDDSA_PARAMS {
-        #    CK_BBOOL     phFlag;
-        #    CK_ULONG     ulContextDataLen;
-        #    CK_BYTE_PTR  pContextData;
-        # }  CK_EDDSA_PARAMS;
-        # We use native size and alignment here on purpose
-
-        # NOTE: I _think_ this is correct, but it looks like SoftHSMv2
-        # doesn't really care about the params, so maybe I'm wrong.
-        kwargs['mechanism_param'] = struct.pack('@?LP', False, 0, 0)
+        kwargs['mechanism_param'] = (False, None)
     else:
         raise NotImplementedError(
             f"Signature algorithm '{signature_algo}' is not supported."
