@@ -259,13 +259,14 @@ async def fetch_certs_in_csc_credential(
         "certInfo": False,
     }
 
+    cl_timeout = aiohttp.ClientTimeout(total=timeout)
     try:
         async with session.post(
             url,
             headers=csc_session_info.auth_headers,
             json=req_data,
             raise_for_status=True,
-            timeout=timeout,
+            timeout=cl_timeout,
         ) as response:
             response_data = await response.json()
     except aiohttp.ClientError as e:
@@ -804,12 +805,13 @@ class CSCSigner(Signer):
             session_info = self.auth_manager.csc_session_info
             url = session_info.endpoint_url("signatures/signHash")
             session = self.session
+            cl_timeout = aiohttp.ClientTimeout(total=self.sign_timeout)
             async with session.post(
                 url,
                 headers=self.auth_manager.auth_headers,
                 json=req_data,
                 raise_for_status=True,
-                timeout=self.sign_timeout,
+                timeout=cl_timeout,
             ) as response:
                 response_data = await response.json()
             sig_b64s = response_data['signatures']

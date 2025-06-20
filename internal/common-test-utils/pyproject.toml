@@ -10,7 +10,7 @@ requires-python = ">=3.9"
 dependencies = ["certomancer", "pyhanko", "pyhanko_certvalidator"]
 
 [project.optional-dependencies]
-csc = ["certomancer-csc-dummy==0.4.0"]
+csc = ["certomancer-csc-dummy==0.4.2"]
 
 [tool.setuptools]
 include-package-data = true

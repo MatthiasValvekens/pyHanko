@@ -12,17 +12,13 @@ dependencies = [
     "pytest-cov>=4.0,<6.2",
     "pytest-asyncio==0.24.0;python_version<\"3.9\"",
     "pytest-asyncio==0.26.0;python_version>=\"3.9\"",
-    "aiohttp>=3.9,<3.12",
+    "aiohttp>=3.9,<3.13",
     "pytest-aiohttp>=1.0.4,<1.2.0",
 ]
 
 
 [tool.pytest.ini_options]
 pythonpath = []
-log_format = "%(asctime)s %(levelname)s %(message)s"
-log_date_format = "%Y-%m-%d %H:%M:%S"
-log_cli = true
-log_cli_level = "INFO"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 

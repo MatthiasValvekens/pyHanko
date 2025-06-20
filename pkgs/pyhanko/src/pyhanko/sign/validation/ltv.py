@@ -123,9 +123,7 @@ def _strict_vc_context_kwargs(
     # Certs with OCSP/CRL endpoints should have the relevant revocation data
     # embedded, if no stricter revocation_mode policy is in place already
 
-    revinfo_policy: CertRevTrustPolicy = validation_context_kwargs.get(
-        'revinfo_policy', None
-    )
+    revinfo_policy = validation_context_kwargs.get('revinfo_policy', None)
     retroactive = validation_context_kwargs.get('retroactive_revinfo', False)
     if revinfo_policy is None:
         # handle legacy revocation mode
@@ -212,7 +210,7 @@ def get_timestamp_chain(
 
 @dataclass
 class _TimestampTrustData:
-    latest_dts: EmbeddedPdfSignature
+    latest_dts: Optional[EmbeddedPdfSignature]
     earliest_ts_status: Optional[TimestampSignatureStatus]
     ts_chain_length: int
     current_signature_vc_kwargs: dict

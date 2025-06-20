@@ -65,7 +65,7 @@ testing-base = [
 ]
 testing = [
     {include-group = "testing-base"},
-    "aiohttp>=3.9,<3.12",
+    "aiohttp>=3.9,<3.13",
     "pytest-aiohttp>=1.0.4,<1.2.0",
     "pyhanko[pkcs11,opentype,async_http,image-support,qr]"
 ]
@@ -83,8 +83,6 @@ pyhanko = ["py.typed"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-log_format = "%(asctime)s %(levelname)s %(message)s"
-log_date_format = "%Y-%m-%d %H:%M:%S"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope="function"
 markers = [
