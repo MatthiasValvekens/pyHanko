@@ -6,6 +6,31 @@ Release history
 pyHanko
 -------
 
+.. _release-0.29.1:
+
+0.29.1
+======
+
+*Release date:* 2025-06-20
+
+
+Dependency changes
+------------------
+
+ * Bump ``python-pkcs11`` to ``0.8.0``.
+ * Relax ``aiohttp`` upper bound to allow ``3.12.x`` and make
+   sure we test against the most recent version.
+
+
+Bugs fixed
+----------
+
+ * Correct buggy behaviour when reauthenticating with a security handler.
+ * Fix registration of multiple extensions in encrypted files.
+ * Tolerate key usage violations when the signer is a trust anchor.
+ * Remove unnecessary 3.8 compatibility code.
+ * Make it easier to customise PKCS#11 queries
+
 
 .. _release-0.29.0:
 
