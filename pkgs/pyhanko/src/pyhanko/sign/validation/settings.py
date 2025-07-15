@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Set
 
 from asn1crypto import x509
 from pyhanko.config.api import (
@@ -99,25 +99,37 @@ class KeyUsageConstraints(ConfigurableMixin):
     If :attr:`key_usage` is empty or ``None``, this option has no effect.
     """
 
-    def validate(self, cert: x509.Certificate):
-        self._validate_key_usage(cert.key_usage_value)
-        self._validate_extd_key_usage(cert.extended_key_usage_value)
+    def validate(
+        self,
+        cert: x509.Certificate,
+        extra_asserted_key_usages: Iterable[str] = (),
+        extra_asserted_extd_key_usages: Iterable[str] = (),
+    ):
+        self._validate_key_usage_extension(
+            cert.key_usage_value, extra=set(extra_asserted_key_usages)
+        )
+        self._validate_extd_key_usage_extension(
+            cert.extended_key_usage_value,
+            extra=set(extra_asserted_extd_key_usages),
+        )
 
-    def _validate_key_usage(self, key_usage_extension_value):
-        if not self.key_usage:
-            return
-        key_usage = set(self.key_usage or ())
-        key_usage_forbidden = set(self.key_usage_forbidden or ())
-
+    def _validate_key_usage_extension(self, key_usage_extension_value, extra):
         # First, check the "regular" key usage extension
         cert_ku = (
             set(key_usage_extension_value.native)
             if key_usage_extension_value is not None
             else set()
         )
+        self.validate_asserted_key_usage(cert_ku | extra)
 
+    def validate_asserted_key_usage(self, asserted_key_usages: Set[str]):
+        if not self.key_usage:
+            return
+
+        key_usage = set(self.key_usage or ())
+        key_usage_forbidden = set(self.key_usage_forbidden or ())
         # check blacklisted key usages (ISO 32k)
-        forbidden_ku = cert_ku & key_usage_forbidden
+        forbidden_ku = asserted_key_usages & key_usage_forbidden
         if forbidden_ku:
             rephrased = map(lambda s: s.replace('_', ' '), forbidden_ku)
             raise InvalidCertificateError(
@@ -127,7 +139,7 @@ class KeyUsageConstraints(ConfigurableMixin):
 
         # check required key usage extension values
         need_all_ku = self.match_all_key_usages
-        if not _match_usages(key_usage, cert_ku, need_all_ku):
+        if not _match_usages(key_usage, asserted_key_usages, need_all_ku):
             rephrased = map(lambda s: s.replace('_', ' '), key_usage)
             raise InvalidCertificateError(
                 "The active key usage policy requires "
@@ -135,23 +147,21 @@ class KeyUsageConstraints(ConfigurableMixin):
                 f"usage extensions {', '.join(rephrased)} to be present."
             )
 
-    def _validate_extd_key_usage(self, eku_extension_value):
-        if self.extd_key_usage is None:
-            return
+    def _validate_extd_key_usage_extension(self, eku_extension_value, extra):
         # check extended key usage
         has_extd_key_usage_ext = eku_extension_value is not None
         cert_eku = (
             set(eku_extension_value.native) if has_extd_key_usage_ext else set()
         )
+        self.validate_asserted_extended_key_usage(cert_eku | extra)
 
-        if (
-            'any_extended_key_usage' in cert_eku
-            and not self.explicit_extd_key_usage_required
-        ):
-            return  # early out, cert is valid for all EKUs
+    def validate_asserted_extended_key_usage(
+        self, asserted_key_usages: Set[str]
+    ):
+        if self.extd_key_usage is None:
+            return
 
-        extd_key_usage = self.extd_key_usage or set()
-        if not has_extd_key_usage_ext:
+        if not asserted_key_usages:
             if self.explicit_extd_key_usage_required:
                 raise InvalidCertificateError(
                     "The active key usage policy requires an extended "
@@ -159,7 +169,17 @@ class KeyUsageConstraints(ConfigurableMixin):
                 )
             return  # early out, cert is (presumably?) valid for all EKUs
 
-        if not _match_usages(extd_key_usage, cert_eku, need_all=False):
+        if (
+            'any_extended_key_usage' in asserted_key_usages
+            and not self.explicit_extd_key_usage_required
+        ):
+            return  # early out, cert is valid for all EKUs
+
+        extd_key_usage = set(self.extd_key_usage or ())
+
+        if not _match_usages(
+            extd_key_usage, asserted_key_usages, need_all=False
+        ):
             if extd_key_usage:
                 rephrased = map(lambda s: s.replace('_', ' '), extd_key_usage)
                 ok_list = f"Relevant key purposes are {', '.join(rephrased)}."

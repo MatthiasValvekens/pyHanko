@@ -97,8 +97,10 @@ class ValidationPath:
         """
         if self._leaf is not None:
             return self._leaf
-        elif not self._interm and isinstance(self._root, CertTrustAnchor):
-            return self._root.certificate
+        elif not self._interm:
+            root_authority = self.trust_anchor.authority
+            if isinstance(root_authority, AuthorityWithCert):
+                return root_authority.certificate
         # __init__ ensures that leaf None -> there are no intermediate certs
         return None
 
@@ -199,8 +201,9 @@ class ValidationPath:
             The current ValidationPath object, for chaining
         """
 
-        if isinstance(self._root, CertTrustAnchor):
-            if self._root.certificate.issuer_serial == cert.issuer_serial:
+        root_authority = self._root.authority
+        if isinstance(root_authority, AuthorityWithCert):
+            if root_authority.certificate.issuer_serial == cert.issuer_serial:
                 return ValidationPath(self._root, interm=[], leaf=new_leaf)
 
         certs = self._interm
@@ -211,7 +214,9 @@ class ValidationPath:
                 break
 
         if cert_index is None:
-            raise LookupError('Unable to find the certificate specified')
+            raise LookupError(
+                f'Unable to find the specified certificate in the path: {cert.subject.human_friendly}'
+            )
         return ValidationPath(
             self._root, interm=certs[: cert_index + 1], leaf=new_leaf
         )
@@ -324,14 +329,15 @@ class ValidationPath:
 
     def __getitem__(self, key):
         # convoluted because of compatibility issues...
+        authority = self._root.authority
         if key > 0:
             leaf_ix = len(self._interm) + 1
             if key == leaf_ix and self._leaf is not None:
                 return self._leaf
             return self._interm[key - 1]
-        elif isinstance(self._root, CertTrustAnchor):
+        elif isinstance(authority, AuthorityWithCert):
             # backwards compat
-            return self._root.certificate
+            return authority.certificate
         else:
             # Throw an error instead of returning None, because we want this
             # to fail loudly.

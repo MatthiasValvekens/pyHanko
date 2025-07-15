@@ -8,7 +8,13 @@ from typing import AsyncGenerator, Iterable, Iterator, List, Optional, Union
 from asn1crypto import x509
 from oscrypto import trust_list
 
-from .authority import CertTrustAnchor, TrustAnchor
+from .authority import (
+    CertTrustAnchor,
+    TrustAnchor,
+    AuthorityWithCert,
+    Authority,
+    TrustedServiceType,
+)
 from .errors import PathBuildingError
 from .fetchers import CertificateFetcher
 from .path import ValidationPath
@@ -182,6 +188,19 @@ class TrustManager:
         :return:
             A boolean - if the certificate is in the CA list
         """
+        return self.as_trust_anchor(AuthorityWithCert(cert)) is not None
+
+    def as_trust_anchor(self, authority: Authority) -> Optional[TrustAnchor]:
+        """
+        If the authority is a trust anchor, return its identity as such
+        (with qualifications as applicable).
+
+        If the authority is not a trust anchor, return None.
+
+
+        :param authority:
+            An authority object.
+        """
         raise NotImplementedError
 
     def find_potential_issuers(
@@ -264,11 +283,23 @@ class SimpleTrustManager(TrustManager):
 
         return CertTrustAnchor(cert) in self._roots
 
+    def as_trust_anchor(self, authority: Authority):
+        # Take into account 'moment'?
+        try:
+            possible_matches = self._root_subject_map[authority.name.hashable]
+            return next(
+                anchor
+                for anchor in possible_matches
+                if anchor.authority == authority
+            )
+        except (KeyError, StopIteration):
+            return None
+
     def iter_certs(self) -> Iterator[x509.Certificate]:
         return (
-            root.certificate
+            root.authority.certificate
             for root in self._roots
-            if isinstance(root, CertTrustAnchor)
+            if isinstance(root.authority, AuthorityWithCert)
         )
 
     def find_potential_issuers(
@@ -277,6 +308,12 @@ class SimpleTrustManager(TrustManager):
         issuer_hashable = cert.issuer.hashable
         root: TrustAnchor
         for root in self._root_subject_map[issuer_hashable]:
+            svc_type = root.trust_qualifiers.trusted_service_type
+            if svc_type not in (
+                TrustedServiceType.UNSPECIFIED,
+                TrustedServiceType.CERTIFICATE_AUTHORITY,
+            ):
+                continue
             if root.authority.is_potential_issuer_of(cert):
                 yield root
 
@@ -613,8 +650,11 @@ class LazyPathIterator(CancelableAsyncIterator[ValidationPath]):
 
     def __init__(self, walker: _PathWalker, cert: x509.Certificate):
         # special case for root certs
-        if walker.path_builder.trust_manager.is_root(cert):
-            self._as_root = ValidationPath(CertTrustAnchor(cert), [], None)
+        maybe_trust_anchor = walker.path_builder.trust_manager.as_trust_anchor(
+            AuthorityWithCert(cert)
+        )
+        if maybe_trust_anchor:
+            self._as_root = ValidationPath(maybe_trust_anchor, [], None)
         self._walker: Optional[_PathWalker] = walker
         self.emitted_count = 0
         self._name = cert.subject.human_friendly

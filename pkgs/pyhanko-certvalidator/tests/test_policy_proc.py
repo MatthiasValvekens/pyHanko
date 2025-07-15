@@ -3,6 +3,7 @@ from asn1crypto import x509
 from freezegun import freeze_time
 
 from pyhanko_certvalidator.authority import (
+    AuthorityWithCert,
     CertTrustAnchor,
     NamedKeyAuthority,
     TrustAnchor,
@@ -205,3 +206,13 @@ async def test_validate_empty_path_certless_root():
 
     trivial_path = ValidationPath(trust_anchor=anchor, interm=[], leaf=None)
     await async_validate_path(context, trivial_path)
+
+
+def test_trust_anchor_authority_consistency():
+    anchor = CertTrustAnchor(load_nist_cert('nameConstraintsDN1CACert.crt'))
+
+    without_cert = NamedKeyAuthority(
+        anchor.certificate.subject, anchor.certificate.public_key
+    )
+
+    assert anchor.authority == without_cert

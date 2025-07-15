@@ -75,7 +75,11 @@ from pyhanko.sign.validation.status import (
 )
 
 from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.authority import CertTrustAnchor, TrustAnchor
+from pyhanko_certvalidator.authority import (
+    Authority,
+    CertTrustAnchor,
+    TrustAnchor,
+)
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
@@ -930,7 +934,7 @@ async def ades_with_time_validation(
             validation_objects=vos,
         )
     sig_ts_result = await _ades_process_attached_ts(
-        signer_info, validation_context, signed=False, tst_digest=tst_digest
+        signer_info, ts_validation_context, signed=False, tst_digest=tst_digest
     )
     vos = ValidationObjectSet(
         _enumerate_validation_objects(validation_context),
@@ -1031,13 +1035,13 @@ async def ades_with_time_validation(
 
 
 class _TrustNoOne(TrustManager):
-    def is_root(self, cert: x509.Certificate) -> bool:
-        return False
-
     def find_potential_issuers(
         self, cert: x509.Certificate
     ) -> Iterator[TrustAnchor]:
         return iter(())
+
+    def as_trust_anchor(self, authority: Authority) -> Optional[TrustAnchor]:
+        return None
 
 
 def _crl_issuer_cert_poe_boundary(

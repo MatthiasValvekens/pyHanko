@@ -1,4 +1,5 @@
 import abc
+import enum
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -7,6 +8,39 @@ from asn1crypto import keys, x509
 
 from .name_trees import process_general_subtrees
 from .policy_decl import PKIXValidationParams
+
+
+class TrustedServiceType(enum.Enum):
+    UNSPECIFIED = 0
+    """
+    Unspecified.
+
+    If a trust manager designates a trust anchor with this
+    service type, it will be considered trusted for any purpose.
+    """
+
+    UNSUPPORTED = 1
+    """
+    Unsupported.
+
+    If a trust manager designates a trust anchor with this
+    service type, it will not be considered trusted for any
+    purpose other than identifying itself.
+    """
+
+    CERTIFICATE_AUTHORITY = 2
+    """
+    Certificate authority (CA).
+
+    Only trust anchors with this designation can appear
+    in a PKIX validation path as the issuer of
+    another certificate.
+    """
+
+    TIME_STAMPING_AUTHORITY = 3
+    """
+    Time stamping authority (TSA).
+    """
 
 
 @dataclass(frozen=True)
@@ -43,6 +77,11 @@ class TrustQualifiers:
     valid_until: Optional[datetime] = None
     """
     Upper bound of the trust anchor's validity period, if any.
+    """
+
+    trusted_service_type: TrustedServiceType = TrustedServiceType.UNSPECIFIED
+    """
+    Indicates the service provided by the trust root.
     """
 
 
@@ -204,6 +243,11 @@ def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
         standard_parameters=params,
         valid_from=cert.not_valid_before,
         valid_until=cert.not_valid_after,
+        trusted_service_type=(
+            TrustedServiceType.CERTIFICATE_AUTHORITY
+            if cert.ca
+            else TrustedServiceType.UNSUPPORTED
+        ),
     )
 
 

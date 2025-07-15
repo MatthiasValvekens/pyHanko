@@ -13,7 +13,7 @@ from cryptography.exceptions import InvalidSignature
 
 from ._state import ValProcState
 from .asn1_types import AAControls, Target
-from .authority import CertTrustAnchor, TrustAnchor
+from .authority import TrustAnchor, AuthorityWithCert
 from .context import ACTargetDescription, ValidationContext
 from .errors import (
     CRLFetchError,
@@ -1101,12 +1101,13 @@ async def intl_validate_path(
     )
 
     cert: Optional[x509.Certificate]
-    if isinstance(trust_anchor, CertTrustAnchor):
+    authority = trust_anchor.authority
+    if isinstance(authority, AuthorityWithCert):
         # if the trust root has a cert, record it as validated.
         validation_context.record_validation(
-            trust_anchor.certificate, completed_path
+            authority.certificate, completed_path
         )
-        cert = trust_anchor.certificate
+        cert = authority.certificate
     else:
         cert = None
 

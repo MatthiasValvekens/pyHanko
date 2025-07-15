@@ -73,8 +73,16 @@ from test_utils.signing_commons import (
 )
 
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.authority import (
+    CertTrustAnchor,
+    TrustedServiceType,
+    TrustQualifiers,
+)
 from pyhanko_certvalidator.errors import PathValidationError
-from pyhanko_certvalidator.registry import SimpleCertificateStore
+from pyhanko_certvalidator.registry import (
+    SimpleCertificateStore,
+    SimpleTrustManager,
+)
 
 DUMMY_TS_NO_NONCE = timestamps.DummyTimeStamper(
     tsa_cert=TSA_CERT,
@@ -854,6 +862,121 @@ def test_timestamp_with_different_digest():
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
     validity = val_trusted(s)
+    assert validity.timestamp_validity is not None
+    assert validity.timestamp_validity.trusted
+
+
+BOGUS_TSA_CERT = TESTING_CA.get_cert('interm-ocsp')
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize(
+    '_descr,roots',
+    [
+        ('non-root', []),
+        (
+            'qualified root, unsupported service type',
+            [
+                CertTrustAnchor(
+                    BOGUS_TSA_CERT,
+                    TrustQualifiers(
+                        trusted_service_type=TrustedServiceType.UNSUPPORTED
+                    ),
+                )
+            ],
+        ),
+        (
+            'qualified root, mismatching service type',
+            [
+                CertTrustAnchor(
+                    BOGUS_TSA_CERT,
+                    TrustQualifiers(
+                        trusted_service_type=TrustedServiceType.CERTIFICATE_AUTHORITY
+                    ),
+                )
+            ],
+        ),
+    ],
+)
+def test_timestamp_with_nonsense_key_usage_rejection_scenarios(_descr, roots):
+    ts = timestamps.DummyTimeStamper(
+        tsa_cert=BOGUS_TSA_CERT,
+        tsa_key=TESTING_CA.key_set.get_private_key('interm-ocsp'),
+        certs_to_embed=FROM_CA.cert_registry,
+    )
+
+    manager = SimpleTrustManager.build(TRUST_ROOTS + roots)
+    vc = ValidationContext(trust_manager=manager)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(md_algorithm='sha256'),
+        signer=FROM_CA,
+        timestamper=ts,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+
+    validity = validate_pdf_signature(s, vc, skip_diff=True)
+    assert validity.timestamp_validity is not None
+    assert not validity.timestamp_validity.trusted
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize(
+    '_descr,roots',
+    [
+        (
+            'qualified root, matching service type',
+            [
+                CertTrustAnchor(
+                    BOGUS_TSA_CERT,
+                    TrustQualifiers(
+                        trusted_service_type=TrustedServiceType.TIME_STAMPING_AUTHORITY
+                    ),
+                )
+            ],
+        ),
+        (
+            'qualified root, unspecified service type',
+            [
+                CertTrustAnchor(
+                    BOGUS_TSA_CERT,
+                    TrustQualifiers(
+                        trusted_service_type=TrustedServiceType.UNSPECIFIED
+                    ),
+                )
+            ],
+        ),
+        ('unqualified root', [BOGUS_TSA_CERT]),
+    ],
+)
+def test_timestamp_with_nonsense_key_usage_acceptance_scenarios(_descr, roots):
+    ts = timestamps.DummyTimeStamper(
+        tsa_cert=BOGUS_TSA_CERT,
+        tsa_key=TESTING_CA.key_set.get_private_key('interm-ocsp'),
+        certs_to_embed=FROM_CA.cert_registry,
+    )
+
+    manager = SimpleTrustManager.build(TRUST_ROOTS + roots)
+    vc = ValidationContext(trust_manager=manager)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(md_algorithm='sha256'),
+        signer=FROM_CA,
+        timestamper=ts,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+
+    validity = validate_pdf_signature(s, vc, skip_diff=True)
     assert validity.timestamp_validity is not None
     assert validity.timestamp_validity.trusted
 

@@ -5,11 +5,18 @@ from pathlib import Path
 import pytest
 from certomancer.registry import ArchLabel
 from freezegun import freeze_time
-from pyhanko.generated.etsi import ts_119612
+from pyhanko.generated.etsi import ServiceTypeIdentifier, ts_119612
+from pyhanko.keys import load_cert_from_pemder
 from pyhanko.sign.validation.qualified import assess, eutl_parse, q_status, tsp
 from pyhanko.sign.validation.qualified.eutl_parse import (
-    CA_QC_URI,
     STATUS_GRANTED,
+    _interpret_historical_service_info_for_ca,
+)
+from pyhanko.sign.validation.qualified.tsp import (
+    CA_QC_URI,
+    CAServiceInformation,
+    QcCertType,
+    QTSTServiceInformation,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from test_data.samples import CERTOMANCER, TEST_DIR
@@ -19,7 +26,10 @@ from xsdata.formats.dataclass.parsers.config import ParserConfig
 
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.authority import AuthorityWithCert, NamedKeyAuthority
+from pyhanko_certvalidator.context import CertValidationPolicySpec
+from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.policy_decl import (
+    NO_REVOCATION,
     CertRevTrustPolicy,
     RevocationCheckingPolicy,
     RevocationCheckingRule,
@@ -33,7 +43,28 @@ TESTING_CA_QUALIFIED = CERTOMANCER.get_pki_arch(
 def _read_cas_from_file(path: Path):
     with path.open('r', encoding='utf8') as inf:
         tl_str = inf.read()
-        return list(eutl_parse.read_qualified_certificate_authorities(tl_str))
+        return [
+            x
+            for x in eutl_parse.read_qualified_service_definitions(tl_str)
+            if isinstance(x, CAServiceInformation)
+        ]
+
+
+def _read_qtsts_from_file(path: Path):
+    with path.open('r', encoding='utf8') as inf:
+        tl_str = inf.read()
+        return [
+            x
+            for x in eutl_parse.read_qualified_service_definitions(tl_str)
+            if isinstance(x, QTSTServiceInformation)
+        ]
+
+
+def _read_registry_from_file(path: Path):
+    with path.open('r', encoding='utf8') as inf:
+        tl_str = inf.read()
+        registry, _ = eutl_parse.trust_list_as_registry(tl_str)
+    return registry
 
 
 def _raw_tlservice_parse(xml: str) -> ts_119612.TSPService:
@@ -49,14 +80,33 @@ def _raw_tlservice_parse(xml: str) -> ts_119612.TSPService:
 
 
 TEST_DATA_DIR = Path(TEST_DIR) / 'data' / 'tl'
-TEST_REAL_TL = TEST_DATA_DIR / 'tsl-be.xml'
+CRYPTO_DIR = Path(TEST_DIR) / 'data' / 'crypto'
+TEST_REAL_TL_BE = TEST_DATA_DIR / 'tsl-be.xml'
+TEST_REAL_TL_EE = TEST_DATA_DIR / 'tsl-ee.xml'
 
 
 def test_parse_cas_from_real_tl_smoke_test():
-    cas_read = _read_cas_from_file(TEST_REAL_TL)
+    cas_read = _read_cas_from_file(TEST_REAL_TL_BE)
     current_cas = [ca for ca in cas_read if not ca.base_info.valid_until]
+    # note: this double-counts CAs with more than one service definition
     assert len(current_cas) == 28
     assert len(cas_read) == 74
+
+
+def test_parse_qtsts_from_real_tl_smoke_test():
+    qtsts_read = _read_qtsts_from_file(TEST_REAL_TL_BE)
+    current_qtsts = [tst for tst in qtsts_read if not tst.base_info.valid_until]
+    assert len(current_qtsts) == 17
+    assert len(qtsts_read) == 18
+
+
+def test_parse_services_from_real_tl_smoke_test():
+    with TEST_REAL_TL_BE.open('r', encoding='utf8') as inf:
+        tl_str = inf.read()
+        registry, errors = eutl_parse.trust_list_as_registry(tl_str)
+        assert len(errors) == 0
+        assert len(list(registry.known_timestamp_authorities)) == 17
+        assert len(list(registry.known_certificate_authorities)) == 20
 
 
 ETSI_NS = 'http://uri.etsi.org'
@@ -544,7 +594,9 @@ def test_tsp_registry():
     registry.register_ca(_dummy_service_definition())
 
     result = list(
-        registry.applicable_service_definitions(AuthorityWithCert(INTERM_CERT))
+        registry.applicable_service_definitions(
+            AuthorityWithCert(INTERM_CERT), moment=None
+        )
     )
     assert len(result) == 1
     assert result[0].base_info.service_name == 'test1'
@@ -556,7 +608,8 @@ def test_tsp_registry_by_name():
 
     result = list(
         registry.applicable_service_definitions(
-            NamedKeyAuthority(INTERM_CERT.subject, INTERM_CERT.public_key)
+            NamedKeyAuthority(INTERM_CERT.subject, INTERM_CERT.public_key),
+            moment=None,
         )
     )
     assert len(result) == 1
@@ -568,12 +621,14 @@ def test_tsp_registry_alternative_cert():
     registry.register_ca(_dummy_service_definition(ECC_INTERM_CERT))
 
     result = list(
-        registry.applicable_service_definitions(AuthorityWithCert(INTERM_CERT))
+        registry.applicable_service_definitions(
+            AuthorityWithCert(INTERM_CERT), moment=None
+        )
     )
 
     result2 = list(
         registry.applicable_service_definitions(
-            AuthorityWithCert(ECC_INTERM_CERT)
+            AuthorityWithCert(ECC_INTERM_CERT), moment=None
         )
     )
     assert result == result2
@@ -617,7 +672,9 @@ def test_tsp_registry_multiple_sds():
     )
 
     result = list(
-        registry.applicable_service_definitions(AuthorityWithCert(INTERM_CERT))
+        registry.applicable_service_definitions(
+            AuthorityWithCert(INTERM_CERT), moment=None
+        )
     )
     assert len(result) == 2
     assert set(r.base_info.service_name for r in result) == {'test1', 'test2'}
@@ -823,7 +880,7 @@ def test_tl_override_processing(
 
 
 DUMMY_BASE_INFO = tsp.BaseServiceInformation(
-    service_type=eutl_parse.CA_QC_URI,
+    service_type=CA_QC_URI,
     service_name='Dummy',
     valid_from=datetime(2015, 11, 1, tzinfo=timezone.utc),
     valid_until=None,
@@ -989,7 +1046,7 @@ async def test_conclude_qualified_qcsd(cert_name, sd):
     registry = tsp.TSPRegistry()
     registry.register_ca(sd)
     assessor = assess.QualificationAssessor(tsp_registry=registry)
-    status = assessor.check_entity_cert_qualified(path)
+    status = assessor.check_entity_cert_qualified(path).status
     assert status.qualified
     assert status.qc_key_security == q_status.QcPrivateKeyManagementType.QCSD
 
@@ -1021,7 +1078,7 @@ async def test_conclude_qualified_pre_eidas(cert_name, expect_qscd):
     registry = tsp.TSPRegistry()
     registry.register_ca(sd)
     assessor = assess.QualificationAssessor(tsp_registry=registry)
-    status = assessor.check_entity_cert_qualified(path)
+    status = assessor.check_entity_cert_qualified(path).status
     assert status.qualified
     if expect_qscd:
         assert (
@@ -1033,6 +1090,30 @@ async def test_conclude_qualified_pre_eidas(cert_name, expect_qscd):
             status.qc_key_security
             == q_status.QcPrivateKeyManagementType.UNKNOWN
         )
+
+
+@pytest.mark.asyncio
+@freeze_time('2015-11-01')
+async def test_conclude_not_qualified_pre_eidas():
+    sd = tsp.CAServiceInformation(
+        base_info=DUMMY_BASE_INFO,
+        qualifications=frozenset(),
+        expired_certs_revocation_info=None,
+    )
+    ee_cert = TESTING_CA_QUALIFIED.get_cert('not-qualified-legacy')
+    vc = ValidationContext(
+        trust_roots=[TESTING_CA_QUALIFIED.get_cert('root')],
+        allow_fetching=False,
+        revinfo_policy=_SKIP_REVOCATION,
+        other_certs=[TESTING_CA_QUALIFIED.get_cert('interm-qualified')],
+    )
+    cv = CertificateValidator(end_entity_cert=ee_cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    registry = tsp.TSPRegistry()
+    registry.register_ca(sd)
+    assessor = assess.QualificationAssessor(tsp_registry=registry)
+    status = assessor.check_entity_cert_qualified(path).status
+    assert not status.qualified
 
 
 @pytest.mark.asyncio
@@ -1095,7 +1176,7 @@ async def test_conclude_not_qualified(cert_name, sd):
     registry = tsp.TSPRegistry()
     registry.register_ca(sd)
     assessor = assess.QualificationAssessor(tsp_registry=registry)
-    status = assessor.check_entity_cert_qualified(path)
+    status = assessor.check_entity_cert_qualified(path).status
     assert not status.qualified
 
 
@@ -1132,7 +1213,7 @@ async def test_conclude_not_qualified_contradictory():
     registry.register_ca(sd1)
     registry.register_ca(sd2)
     assessor = assess.QualificationAssessor(tsp_registry=registry)
-    status = assessor.check_entity_cert_qualified(path)
+    status = assessor.check_entity_cert_qualified(path).status
     assert not status.qualified
 
 
@@ -1162,7 +1243,7 @@ async def test_conclude_qualified_convergence():
     registry.register_ca(sd1)
     registry.register_ca(sd2)
     assessor = assess.QualificationAssessor(tsp_registry=registry)
-    status = assessor.check_entity_cert_qualified(path)
+    status = assessor.check_entity_cert_qualified(path).status
     assert status.qualified
 
 
@@ -1202,7 +1283,11 @@ def test_parse_service_history_intervals():
     """
 
     parse_result = _raw_tlservice_parse(xml)
-    result = eutl_parse._interpret_service_info_for_cas([parse_result])
+    result = eutl_parse._interpret_service_info_for_tsps(
+        [parse_result],
+        service_type=ServiceTypeIdentifier(CA_QC_URI),
+        interpreter=_interpret_historical_service_info_for_ca,
+    )
     date1 = datetime(2017, 11, 1, tzinfo=timezone.utc)
     date2 = datetime(2019, 11, 1, tzinfo=timezone.utc)
     date3 = datetime(2020, 11, 1, tzinfo=timezone.utc)
@@ -1248,7 +1333,11 @@ def test_parse_service_history_intervals_skip_not_granted():
     """
 
     parse_result = _raw_tlservice_parse(xml)
-    result = eutl_parse._interpret_service_info_for_cas([parse_result])
+    result = eutl_parse._interpret_service_info_for_tsps(
+        [parse_result],
+        service_type=ServiceTypeIdentifier(CA_QC_URI),
+        interpreter=_interpret_historical_service_info_for_ca,
+    )
     date1 = datetime(2017, 11, 1, tzinfo=timezone.utc)
     date2 = datetime(2019, 11, 1, tzinfo=timezone.utc)
     date3 = datetime(2020, 11, 1, tzinfo=timezone.utc)
@@ -1294,7 +1383,11 @@ def test_parse_service_history_intervals_skip_invalid_entries():
     """
 
     parse_result = _raw_tlservice_parse(xml)
-    result = eutl_parse._interpret_service_info_for_cas([parse_result])
+    result = eutl_parse._interpret_service_info_for_tsps(
+        [parse_result],
+        service_type=ServiceTypeIdentifier(CA_QC_URI),
+        interpreter=_interpret_historical_service_info_for_ca,
+    )
     date2 = datetime(2020, 11, 1, tzinfo=timezone.utc)
     intervals = [
         (r.base_info.valid_from, r.base_info.valid_until) for r in result
@@ -1303,3 +1396,80 @@ def test_parse_service_history_intervals_skip_invalid_entries():
     assert intervals[0] == (date2, None)
     # don't assert on second interval for now; let's call
     # that one undefined behaviour
+
+
+def _validation_context_from_file(path: Path):
+    registry = _read_registry_from_file(path)
+
+    policy = CertValidationPolicySpec(
+        trust_manager=tsp.TSPTrustManager(registry),
+        revinfo_policy=CertRevTrustPolicy(NO_REVOCATION),
+    )
+
+    vc = policy.build_validation_context(
+        timing_info=ValidationTimingInfo.now(timezone.utc), handlers=None
+    )
+    assessor = assess.QualificationAssessor(tsp_registry=registry)
+    return vc, assessor
+
+
+@freeze_time('2025-08-06')
+@pytest.mark.asyncio
+async def test_validate_real_qcert_no_revo():
+    cert = load_cert_from_pemder(CRYPTO_DIR / 'real-qcert.cer')
+
+    vc, assessor = _validation_context_from_file(TEST_REAL_TL_BE)
+    cv = CertificateValidator(end_entity_cert=cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    result = assessor.check_entity_cert_qualified(path)
+    assert 'itsme' in path.first.subject.human_friendly
+    assert path.pkix_len == 1
+    assert result.status.qualified
+    assert result.service_definition.base_info.service_type == CA_QC_URI
+    assert result.status.qc_type == QcCertType.QC_ESIGN
+    assert (
+        result.status.qc_key_security
+        == q_status.QcPrivateKeyManagementType.QCSD
+    )
+
+
+@freeze_time('2025-08-06')
+@pytest.mark.asyncio
+async def test_validate_real_qtst_cert_no_revo():
+    cert = load_cert_from_pemder(CRYPTO_DIR / 'real-qtst-cert.cer')
+
+    vc, assessor = _validation_context_from_file(TEST_REAL_TL_BE)
+    cv = CertificateValidator(end_entity_cert=cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    result = assessor.check_entity_cert_qualified(path)
+    assert (
+        'QTSP: FPS Policy and Support - BOSA'
+        in path.first.subject.human_friendly
+    )
+    assert path.pkix_len == 0
+    assert result.status.qualified
+    assert (
+        result.service_definition.base_info.service_type == eutl_parse.QTST_URI
+    )
+    assert result.status.qc_type == QcCertType.QC_ESEAL
+    assert (
+        result.status.qc_key_security
+        == q_status.QcPrivateKeyManagementType.UNKNOWN
+    )
+
+
+@freeze_time('2025-08-06')
+@pytest.mark.asyncio
+async def test_conclude_not_qualified_qtst_lacking_qc_statements():
+    cert = load_cert_from_pemder(CRYPTO_DIR / 'real-misissued-qtst-cert.cer')
+
+    vc, assessor = _validation_context_from_file(TEST_REAL_TL_EE)
+    cv = CertificateValidator(end_entity_cert=cert, validation_context=vc)
+    path = await cv.async_validate_path()
+    result = assessor.check_entity_cert_qualified(path)
+    assert 'SK TIMESTAMPING UNIT 2025E' in path.first.subject.human_friendly
+    assert path.pkix_len == 0
+    assert not result.status.qualified
+    assert (
+        result.service_definition.base_info.service_type == eutl_parse.QTST_URI
+    )
