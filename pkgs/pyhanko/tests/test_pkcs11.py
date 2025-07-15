@@ -686,36 +686,28 @@ DUMMY_ARGS = dict(
 
 
 class DummyToken(p11_types.Token):
-    def open(self, rw=False, user_pin=None, so_pin=None):
+    label = None
+    serial = None
+
+    def __init__(self, label, serial):
+        self.label = label
+        self.serial = serial
+        super().__init__()
+
+    def open(self, **kwargs):
         raise NotImplementedError
 
 
 class DummySlot(p11_types.Slot):
     def __init__(self, lbl: Optional[str]):
         self.lbl = lbl
-
-        super().__init__(
-            "dummy.so.0",
-            slot_id=0xDEADBEEF,
-            flags=(
-                p11_types.SlotFlag(0)
-                if lbl is None
-                else p11_types.SlotFlag.TOKEN_PRESENT
-            ),
-            **DUMMY_ARGS,
-        )
+        super().__init__()
 
     def get_token(self):
         if self.lbl is not None:
-            lbl = self.lbl.encode('utf8')
-            return DummyToken(
-                self,
-                label=lbl,
-                model=b'DummyToken',
-                flags=p11_types.TokenFlag(0),
-                serialNumber=lbl + b'-\xde\xad\xbe\xef',
-                **DUMMY_ARGS,
-            )
+            lbl = self.lbl
+            serial = b"-".join((lbl.encode('utf8'), b"\xde\xad\xbe\xef"))
+            return DummyToken(lbl, serial)
         else:
             raise PKCS11Error("No token in slot")
 
