@@ -67,7 +67,7 @@ image-support = [
     "Pillow>=7.2.0",
     "python-barcode==0.15.1"
 ]
-pkcs11 = ["python-pkcs11~=0.8.0"]
+pkcs11 = ["python-pkcs11~=0.9.0"]
 async-http = ["aiohttp>=3.9,<3.13"]
 etsi = ["xsdata>=24.4,<26.0"]
 
@@ -78,10 +78,8 @@ testing-base = [
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
     "certomancer>=0.13.0,<0.14",
-    "pytest-cov>=4.0,<6.2",
-    "pytest-asyncio==0.24.0;python_version<\"3.9\"",
-    "pytest-asyncio==0.26.0;python_version>=\"3.9\"",
-    "backports.zoneinfo[tzdata];python_version<\"3.9\"",
+    "pytest-cov>=4.0,<6.3",
+    "pytest-asyncio==0.26.0",
 ]
 testing-aiohttp = [
     "aiohttp>=3.9,<3.13",
