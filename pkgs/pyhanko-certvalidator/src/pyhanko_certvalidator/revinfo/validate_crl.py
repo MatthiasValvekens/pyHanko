@@ -261,6 +261,10 @@ async def _find_crl_issuer(
     )
 
     for candidate_crl_issuer_path in candidate_paths:
+        # TODO technically speaking this doesn't deal with the case where
+        #  the candidate CRL issuer is a TrustAnchor that does _not_ have
+        #  a cert (e.g. only a key / name pair).
+        #  This is probably not a big concern in practice.
         candidate_crl_issuer = candidate_crl_issuer_path.last
 
         # Skip path validation step if we're recursing
@@ -287,6 +291,7 @@ async def _find_crl_issuer(
             # certificate issuance, but with the same name on both certs)
             issuing_authority_identical = not is_indirect and (
                 cert_issuer_auth is not None
+                and candidate_crl_issuer is not None
                 and cert_issuer_auth.public_key.dump()
                 == candidate_crl_issuer.public_key.dump()
             )

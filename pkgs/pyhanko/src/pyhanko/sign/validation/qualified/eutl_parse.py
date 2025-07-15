@@ -27,8 +27,9 @@ from pyhanko.generated.etsi import (
 from pyhanko.sign.validation import KeyUsageConstraints
 from pyhanko.sign.validation.qualified.tsp import (
     _SVCINFOEXT_URI_BASE,
-    _TRSTSVC_URI_BASE,
     _TRUSTEDLIST_URI_BASE,
+    CA_QC_URI,
+    QTST_URI,
     AdditionalServiceInformation,
     BaseServiceInformation,
     CAServiceInformation,
@@ -39,8 +40,11 @@ from pyhanko.sign.validation.qualified.tsp import (
     KeyUsageCriterion,
     PolicySetCriterion,
     QcCertType,
+    QTSTServiceInformation,
     Qualification,
+    QualifiedServiceInformation,
     Qualifier,
+    TSPRegistry,
     TSPServiceParsingError,
 )
 from xsdata.formats.dataclass.parsers import XmlParser
@@ -48,11 +52,9 @@ from xsdata.formats.dataclass.parsers.config import ParserConfig
 from xsdata.formats.dataclass.parsers.handlers import LxmlEventHandler
 from xsdata.formats.dataclass.parsers.handlers.lxml import EVENTS
 
-__all__ = ['read_qualified_certificate_authorities']
+__all__ = ['read_qualified_service_definitions']
 
 logger = logging.getLogger(__name__)
-CA_QC_URI = f'{_TRSTSVC_URI_BASE}/Svctype/CA/QC'
-QTST_URI = f'{_TRSTSVC_URI_BASE}/Svctype/TSA/QTST'
 STATUS_GRANTED = f'{_TRUSTEDLIST_URI_BASE}/Svcstatus/granted'
 _CERTIFICATE_TYPE_BY_URI = {
     f'{_SVCINFOEXT_URI_BASE}/ForeSignatures': QcCertType.QC_ESIGN,
@@ -218,9 +220,18 @@ def _process_additional_info(
 def _interpret_service_info_for_ca(
     service: ts_119612.TSPService,
 ):
+    return _interpret_service_info_for_tsp(
+        service, _interpret_historical_service_info_for_ca
+    )
+
+
+def _interpret_service_info_for_tsp(
+    service: ts_119612.TSPService,
+    historical_interpreter,
+):
     service_info = service.service_information
     assert service_info is not None
-    return _interpret_historical_service_info_for_ca(
+    return historical_interpreter(
         service_info=ts_119612.ServiceHistoryInstance(
             service_type_identifier=service_info.service_type_identifier,
             service_name=service_info.service_name,
@@ -308,7 +319,65 @@ def _interpret_historical_service_info_for_ca(
     )
 
 
-def _read_service_history(history_items, validity_start, service_name):
+def _interpret_historical_service_info_for_qtst(
+    service_info: ts_119612.ServiceHistoryInstance,
+    next_update_at: Optional[datetime],
+):
+    # todo dedupe
+    certs = list(
+        _as_certs(
+            _required(
+                service_info.service_digital_identity,
+                "Service digital identity",
+            )
+        )
+    )
+    service_name = _service_name_from_intl_string(service_info.service_name)
+    qualifications: FrozenSet[Qualification] = frozenset()
+    additional_info: List[AdditionalServiceInformation] = []
+    extensions_xml = (
+        service_info.service_information_extensions.extension
+        if service_info.service_information_extensions
+        else ()
+    )
+    for ext in extensions_xml:
+        for ext_content in ext.content:
+            if isinstance(ext_content, ts_119612_sie.Qualifications):
+                qualifications = frozenset(_get_qualifications(ext_content))
+            elif ext.critical:
+                raise TSPServiceParsingError(
+                    f"Cannot process a critical extension "
+                    f"in service named '{service_name}'.\n"
+                    f"Content: {ext_content}"
+                )
+    valid_from_date = service_info.status_starting_time
+    if valid_from_date is None:
+        raise TSPServiceParsingError(
+            f"The validity start of the status of "
+            f"the the service named {service_name} is not known. "
+            f"This is an error."
+        )
+    base_service_info = BaseServiceInformation(
+        service_type=_required(
+            service_info.service_type_identifier, "Service type identifier"
+        ).value,
+        valid_from=valid_from_date.to_datetime(),
+        valid_until=next_update_at,
+        service_name=service_name,
+        provider_certs=tuple(certs),
+        additional_info_certificate_type=frozenset(),
+        other_additional_info=frozenset(additional_info),
+    )
+
+    return QTSTServiceInformation(
+        base_info=base_service_info,
+        qualifications=qualifications,
+    )
+
+
+def _read_service_history(
+    history_items, validity_start, service_name, interpreter
+):
     errors_encountered = []
     item_index_sorted_by_date = sorted(
         (
@@ -336,7 +405,7 @@ def _read_service_history(history_items, validity_start, service_name):
             continue
         try:
             validity_end = end_of_validity_by_orig_ix[orig_ix]
-            yield _interpret_historical_service_info_for_ca(
+            yield interpreter(
                 history_item,
                 next_update_at=validity_end,
             )
@@ -351,16 +420,17 @@ def _read_service_history(history_items, validity_start, service_name):
     return errors_encountered
 
 
-def _interpret_service_info_for_cas(
+def _interpret_service_info_for_tsps(
     services: Iterable[ts_119612.TSPService],
+    service_type: ServiceTypeIdentifier,
+    interpreter,
 ):
     errors_encountered = []
     for service in services:
         service_info = service.service_information
         if (
             not service_info
-            or service_info.service_type_identifier
-            != ServiceTypeIdentifier(CA_QC_URI)
+            or service_info.service_type_identifier != service_type
         ):
             continue
 
@@ -371,7 +441,7 @@ def _interpret_service_info_for_cas(
         #  work, store that info on the object
         if service_info.service_status == ServiceStatus(STATUS_GRANTED):
             try:
-                yield _interpret_service_info_for_ca(service)
+                yield _interpret_service_info_for_tsp(service, interpreter)
             except TSPServiceParsingError as e:
                 logger.warning(
                     f"Failed to process current status "
@@ -386,7 +456,7 @@ def _interpret_service_info_for_cas(
         if validity_start and service.service_history:
             history_items = service.service_history.service_history_instance
             history_errors = yield from _read_service_history(
-                history_items, validity_start, service_name
+                history_items, validity_start, service_name, interpreter
             )
             errors_encountered.extend(history_errors)
 
@@ -428,15 +498,52 @@ def _raw_tl_parse(tl_xml: str) -> ts_119612.TrustServiceStatusList:
 
 
 # TODO introduce a similar method for other types of service (TSAs etc)
-def read_qualified_certificate_authorities(
+def read_qualified_service_definitions(
     tl_xml: str,
-) -> Generator[CAServiceInformation, None, List[TSPServiceParsingError]]:
+) -> Generator[QualifiedServiceInformation, None, List[TSPServiceParsingError]]:
     parse_result = _raw_tl_parse(tl_xml)
     tspl = parse_result.trust_service_provider_list
     errors_encountered = []
     for tsp in _required(tspl, "TSP list").trust_service_provider:
-        tsp_errors = yield from _interpret_service_info_for_cas(
-            _required(tsp.tspservices, "TSP services").tspservice
+        tsp_errors = yield from _interpret_service_info_for_tsps(
+            _required(tsp.tspservices, "TSP services (CA)").tspservice,
+            service_type=ServiceTypeIdentifier(CA_QC_URI),
+            interpreter=_interpret_historical_service_info_for_ca,
+        )
+        errors_encountered.extend(tsp_errors)
+
+        tsp_errors = yield from _interpret_service_info_for_tsps(
+            _required(tsp.tspservices, "TSP services (QTST)").tspservice,
+            service_type=ServiceTypeIdentifier(QTST_URI),
+            interpreter=_interpret_historical_service_info_for_qtst,
         )
         errors_encountered.extend(tsp_errors)
     return errors_encountered
+
+
+def trust_list_as_registry(
+    tl_xml: str,
+) -> Tuple[TSPRegistry, List[TSPServiceParsingError]]:
+    """
+    Parse a trusted list (ETSI TS 119 612) into a :class:`TSPRegistry`.
+
+    .. warning::
+        The XML signature on the trusted list is _not_ validated as part
+        of this method. Currently, ensuring the integrity of the trusted list
+        is the caller's responsibility.
+
+    :param tl_xml:
+        XML payload describing the trusted list in the ETSI TS 119 612 format
+    :return:
+    """
+    registry = TSPRegistry()
+    g = read_qualified_service_definitions(tl_xml)
+    while True:
+        try:
+            sd = next(g)
+            if isinstance(sd, CAServiceInformation):
+                registry.register_ca(sd)
+            elif isinstance(sd, QTSTServiceInformation):
+                registry.register_tst(sd)
+        except StopIteration as e:
+            return registry, e.value

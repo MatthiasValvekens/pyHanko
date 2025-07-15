@@ -39,6 +39,7 @@ from pyhanko_certvalidator import (
     ValidationContext,
     find_valid_path,
 )
+from pyhanko_certvalidator.authority import TrustedServiceType
 from pyhanko_certvalidator.errors import (
     DisallowedAlgorithmError,
     ExpiredError,
@@ -554,6 +555,15 @@ async def cms_basic_validation(
     return status_kwargs
 
 
+def _service_type_implicit_key_usages(service_type: TrustedServiceType):
+    if service_type == TrustedServiceType.TIME_STAMPING_AUTHORITY:
+        return set(), {'time_stamping'}
+    elif service_type == TrustedServiceType.CERTIFICATE_AUTHORITY:
+        return {'crl_sign', 'key_cert_sign'}, set()
+    else:
+        return set(), set()
+
+
 async def validate_cert_usage(
     cert: x509.Certificate,
     validation_context: ValidationContext,
@@ -575,9 +585,24 @@ async def validate_cert_usage(
             pkix_validation_params=pkix_validation_params,
         )
         if path.pkix_len > 0:
-            # Corner case: if the signer's cert is a trust root,
-            # don't enforce the key usage policy
             key_usage_settings.validate(cert)
+        else:
+            service_type = (
+                path.trust_anchor.trust_qualifiers.trusted_service_type
+            )
+            if service_type != TrustedServiceType.UNSPECIFIED:
+                implicit_kus, implicit_ekus = _service_type_implicit_key_usages(
+                    service_type
+                )
+                key_usage_settings.validate(
+                    cert,
+                    extra_asserted_key_usages=implicit_kus,
+                    extra_asserted_extd_key_usages=implicit_ekus,
+                )
+            # Corner case: if the signer's cert is a trust root
+            # without relevant qualifiers, don't enforce
+            # the key usage policy at all (i.e. we assume the user
+            # intended for the trust root to be trusted unconditionally)
         return path
 
     return await handle_certvalidator_errors(cert=cert, coro=_check())

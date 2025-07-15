@@ -1,9 +1,17 @@
 import enum
 from dataclasses import dataclass
+from typing import Optional
 
-from pyhanko.sign.validation.qualified.tsp import QcCertType
+from pyhanko.sign.validation.qualified.tsp import (
+    QcCertType,
+    QualifiedServiceInformation,
+)
 
-__all__ = ['QualifiedStatus', 'QcPrivateKeyManagementType']
+__all__ = [
+    'QualificationResult',
+    'QualifiedStatus',
+    'QcPrivateKeyManagementType',
+]
 
 
 class QcPrivateKeyManagementType(enum.Enum):
@@ -44,4 +52,22 @@ class QualifiedStatus:
     .. warning::
         These terms are functionally interchangeable, the only difference is
         that "SSCD" is pre-eIDAS terminology.
+    """
+
+
+@dataclass(frozen=True)
+class QualificationResult:
+    """
+    Represents the result of a qualification evaluation.
+    """
+
+    status: QualifiedStatus
+    """
+    Status indicator.
+    """
+
+    service_definition: Optional[QualifiedServiceInformation]
+    """
+    Service definition under which the tested object was considered
+    qualified.
     """

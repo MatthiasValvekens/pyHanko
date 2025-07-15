@@ -34,7 +34,7 @@ from pyhanko_certvalidator.errors import InvalidCertificateError
     ],
 )
 def test_ku_accept(cfg: KeyUsageConstraints, cert_ku):
-    cfg._validate_key_usage(cert_ku)
+    cfg._validate_key_usage_extension(cert_ku, extra=set())
 
 
 @pytest.mark.parametrize(
@@ -62,7 +62,7 @@ def test_ku_accept(cfg: KeyUsageConstraints, cert_ku):
 )
 def test_ku_reject(cfg: KeyUsageConstraints, cert_ku):
     with pytest.raises(InvalidCertificateError):
-        cfg._validate_key_usage(cert_ku)
+        cfg._validate_key_usage_extension(cert_ku, extra=set())
 
 
 @pytest.mark.parametrize(
@@ -115,7 +115,7 @@ def test_ku_reject(cfg: KeyUsageConstraints, cert_ku):
     ],
 )
 def test_eku_accept(cfg: KeyUsageConstraints, cert_eku):
-    cfg._validate_extd_key_usage(cert_eku)
+    cfg._validate_extd_key_usage_extension(cert_eku, extra=set())
 
 
 @pytest.mark.parametrize(
@@ -153,4 +153,4 @@ def test_eku_accept(cfg: KeyUsageConstraints, cert_eku):
 )
 def test_eku_reject(cfg: KeyUsageConstraints, cert_eku, err):
     with pytest.raises(InvalidCertificateError, match=err):
-        cfg._validate_extd_key_usage(cert_eku)
+        cfg._validate_extd_key_usage_extension(cert_eku, extra=set())

@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Optional, Set, Union
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
-from .authority import AuthorityWithCert, CertTrustAnchor
+from .authority import AuthorityWithCert
 from .fetchers import FetcherBackend, Fetchers, default_fetcher_backend
 from .fetchers.requests_fetchers import RequestsFetcherBackend
 from .ltv.poe import POEManager
@@ -486,12 +486,14 @@ class ValidationContext:
             object of the validation path
         """
 
-        if (
-            self.path_builder.trust_manager.is_root(cert)
-            and cert.signature not in self._validate_map
-        ):
+        maybe_trust_anchor = self.path_builder.trust_manager.as_trust_anchor(
+            AuthorityWithCert(cert)
+        )
+        if maybe_trust_anchor and cert.signature not in self._validate_map:
             self._validate_map[cert.signature] = ValidationPath(
-                trust_anchor=CertTrustAnchor(cert), interm=[], leaf=None
+                trust_anchor=maybe_trust_anchor,
+                interm=[],
+                leaf=None,
             )
 
         return self._validate_map.get(cert.signature)

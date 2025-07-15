@@ -1,5 +1,12 @@
 # coding: utf-8
+import pytest
 
+from pyhanko_certvalidator import PathBuildingError
+from pyhanko_certvalidator.authority import (
+    CertTrustAnchor,
+    TrustedServiceType,
+    TrustQualifiers,
+)
 from pyhanko_certvalidator.registry import (
     CertificateRegistry,
     PathBuilder,
@@ -26,3 +33,25 @@ def test_build_paths_custom_ca_certs():
         b"\x10_\xa6z\x80\x08\x9d\xb5'\x9f5\xce\x83\x0bC\x88\x9e\xa3\xc7\r",
         b'I\xac\x03\xf8\xf3Km\xca)V)\xf2I\x9a\x98\xbe\x98\xdc.\x81',
     ]
+
+
+def test_build_paths_qualified_root_with_wrong_type():
+    cert = load_cert_object('mozilla.org.crt')
+    ca = load_cert_object('digicert-sha2-secure-server-ca.crt')
+    other_certs = [ca]
+
+    builder = PathBuilder(
+        trust_manager=SimpleTrustManager.build(
+            trust_roots=[
+                CertTrustAnchor(
+                    ca,
+                    TrustQualifiers(
+                        trusted_service_type=TrustedServiceType.UNSUPPORTED
+                    ),
+                )
+            ]
+        ),
+        registry=CertificateRegistry.build(certs=other_certs),
+    )
+    with pytest.raises(PathBuildingError):
+        builder.build_paths(cert)

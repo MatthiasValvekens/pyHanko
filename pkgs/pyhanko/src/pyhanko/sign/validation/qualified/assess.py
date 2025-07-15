@@ -1,18 +1,21 @@
+import logging
 import zoneinfo
 from dataclasses import replace
 from datetime import datetime
-from typing import FrozenSet, List, Optional, Set, Tuple
+from typing import FrozenSet, Iterable, List, Optional, Set, Tuple
 
 from asn1crypto import x509
 from pyhanko.sign.ades import qualified_asn1
-from pyhanko.sign.validation.qualified.eutl_parse import logger
 from pyhanko.sign.validation.qualified.q_status import (
     QcPrivateKeyManagementType,
+    QualificationResult,
     QualifiedStatus,
 )
 from pyhanko.sign.validation.qualified.tsp import (
-    CAServiceInformation,
+    BaseServiceInformation,
     QcCertType,
+    Qualification,
+    QualifiedServiceInformation,
     Qualifier,
     TSPRegistry,
 )
@@ -22,6 +25,9 @@ from pyhanko_certvalidator.path import ValidationPath
 __all__ = [
     'QualificationAssessor',
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 EIDAS_START_DATE = datetime(
@@ -79,12 +85,12 @@ class QualificationAssessor:
 
     @staticmethod
     def _check_cd_applicable(
-        sd: CAServiceInformation, putative_status: QualifiedStatus
+        sd: BaseServiceInformation, putative_status: QualifiedStatus
     ):
-        sd_declared_type = sd.base_info.additional_info_certificate_type
+        sd_declared_type = sd.additional_info_certificate_type
         if sd_declared_type and putative_status.qc_type not in sd_declared_type:
             logger.info(
-                f"Found matching SDI {sd.base_info.service_name} on path; "
+                f"Found matching SDI {sd.service_name} on path; "
                 f"skipping because QC type does not match"
             )
             return False
@@ -94,10 +100,10 @@ class QualificationAssessor:
     def _apply_sd_qualifications(
         cert: x509.Certificate,
         prelim_status: QualifiedStatus,
-        sd: CAServiceInformation,
+        qualifications: Iterable[Qualification],
     ):
         applicable_qualifiers: Set[Qualifier] = set()
-        for qualification in sd.qualifications:
+        for qualification in qualifications:
             if not qualification.criteria_list.matches(cert):
                 continue
             applicable_qualifiers.update(qualification.qualifiers)
@@ -158,7 +164,7 @@ class QualificationAssessor:
 
     def check_entity_cert_qualified(
         self, path: ValidationPath, moment: Optional[datetime] = None
-    ) -> QualifiedStatus:
+    ) -> QualificationResult:
         cert = path.leaf
         if not isinstance(cert, x509.Certificate):
             raise NotImplementedError(
@@ -183,20 +189,26 @@ class QualificationAssessor:
             elif PRE_EIDAS_QCP_POLICY in policy_oids:
                 prelim_status = replace(prelim_status, qualified=True)
 
-        statuses_found: List[Tuple[CAServiceInformation, QualifiedStatus]] = []
+        statuses_found: List[
+            Tuple[QualifiedServiceInformation, QualifiedStatus]
+        ] = []
         for sd in self._registry.applicable_tsps_on_path(path, reference_time):
             # For this subtlety, see the hanging para in the beginning of
             # section 4 in the CEF eSignature DSS validation algorithm doc
             putative_status = QualificationAssessor._apply_sd_qualifications(
-                cert, prelim_status, sd
+                cert, prelim_status, sd.qualifications
             )
-            if QualificationAssessor._check_cd_applicable(sd, putative_status):
+            if QualificationAssessor._check_cd_applicable(
+                sd.base_info, putative_status
+            ):
                 statuses_found.append((sd, putative_status))
 
         uniq_statuses = set(st for _, st in statuses_found)
         if len(statuses_found) == 1:
             # happy path
-            return statuses_found[0][1]
+            return QualificationResult(
+                statuses_found[0][1], service_definition=statuses_found[0][0]
+            )
         elif len(uniq_statuses) == 1:
             # TODO gather these warnings somewhere so they can be added
             #  to the validation report
@@ -208,9 +220,11 @@ class QualificationAssessor:
                 f"reached a consistent conclusion, but through several "
                 f"different service definitions: {service_info}"
             )
-            return statuses_found[0][1]
+            return QualificationResult(
+                statuses_found[0][1], service_definition=statuses_found[0][0]
+            )
         elif not uniq_statuses:
-            return UNQUALIFIED
+            return QualificationResult(UNQUALIFIED, service_definition=None)
         else:
             service_info = ', '.join(
                 sd.base_info.service_name for sd, _ in statuses_found
@@ -222,4 +236,4 @@ class QualificationAssessor:
                 f"{service_info}. This certificate will not be considered "
                 f"qualified."
             )
-            return UNQUALIFIED
+            return QualificationResult(UNQUALIFIED, service_definition=None)
