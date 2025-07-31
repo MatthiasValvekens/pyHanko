@@ -562,7 +562,30 @@ def test_cli_addsig_p12_passfile(cli_runner, p12_keys):
     assert not result.exception, result.output
 
 
-def test_cli_sign_visible_no_style(cli_runner, cert_chain, user_key):
+def test_cli_sign_pkcs12_visible_while_creating_field(
+    cli_runner, monkeypatch, p12_keys, post_validate
+):
+
+    monkeypatch.setattr(getpass, 'getpass', value=_const(DUMMY_PASSPHRASE))
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            'pkcs12',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            p12_keys,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+def test_cli_sign_visible_no_style(
+    cli_runner, cert_chain, user_key, post_validate
+):
     root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
@@ -586,7 +609,9 @@ def test_cli_sign_visible_no_style(cli_runner, cert_chain, user_key):
     assert not result.exception, result.output
 
 
-def test_cli_sign_visible_with_style(cli_runner, cert_chain, user_key):
+def test_cli_sign_visible_with_style(
+    cli_runner, cert_chain, user_key, post_validate
+):
     cfg = {
         'stamp-styles': {'test': {'type': 'text', 'background': '__stamp__'}}
     }
