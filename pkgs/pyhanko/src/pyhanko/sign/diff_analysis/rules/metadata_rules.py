@@ -1,4 +1,3 @@
-from io import BytesIO
 from typing import Iterable
 
 from pyhanko.pdf_utils import generic, misc
