@@ -1,7 +1,7 @@
 """Utilities related to text rendering & layout."""
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Tuple
 
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
@@ -82,6 +82,14 @@ class TextBoxStyle(TextStyle):
     vertical_text: bool = False
     """
     Switch layout code to vertical mode instead of horizontal mode.
+    """
+
+    text_color: Optional[Tuple[float, float, float]] = None
+    """
+    Text color specified as an RGB tuple taking values between 0.0 and 1.0.
+
+    .. warning::
+       There is currently no direct support for non-RGB color spaces.
     """
 
 
@@ -230,11 +238,17 @@ class TextBox(PdfContent):
         # reposition cursor
         command_stream.append(positioning.as_cm())
 
-        command_stream += [
-            b'BT',
+        if self.style.text_color:
+            command_stream.append(
+                b'%g %g %g rg' % self.style.text_color,
+            )
+
+        command_stream.append(b'BT')
+
+        command_stream.append(
             b'/%s %d Tf %d TL'
             % (self.font_name.encode('latin1'), style.font_size, leading),
-        ]
+        )
 
         # start by moving the cursor to the starting position.
         # In horizontal mode, that's the top left, accounting for leading.

@@ -135,6 +135,29 @@ def _arabic_text_page(stream_xrefs):
 
 
 @with_layout_comparison
+def test_text_stamp_color():
+    w = empty_page()
+
+    border_color = (0.29, 0.404, 0.839)
+    text_color = (0.5, 0.43, 0.1)
+
+    style = TextStampStyle(
+        stamp_text='some text',
+        text_box_style=TextBoxStyle(text_color=text_color),
+        border_color=border_color,
+    )
+    ts = TextStamp(writer=w, style=style)
+
+    x, y = (10, 800)
+    ts.apply(0, x, y)
+
+    compare_output(
+        writer=w,
+        expected_output_path=f'{EXPECTED_OUTPUT_DIR}/text-stamp-color.pdf',
+    )
+
+
+@with_layout_comparison
 def test_arabic_box():
     w = _arabic_text_page(stream_xrefs=False)
     compare_output(

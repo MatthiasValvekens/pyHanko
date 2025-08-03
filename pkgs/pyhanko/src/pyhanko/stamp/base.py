@@ -1,7 +1,7 @@
 import uuid
 from binascii import hexlify
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
@@ -42,6 +42,14 @@ class BaseStampStyle(ConfigurableMixin):
     border_width: int = 3
     """
     Border width in user units (for the stamp, not the text box).
+    """
+
+    border_color: Optional[Tuple[float, float, float]] = None
+    """
+    Border color specified as an RGB tuple taking values between 0.0 and 1.0.
+
+    .. warning::
+        There is currently no direct support for non-RGB color spaces.
     """
 
     background: Optional[content.PdfContent] = None
@@ -170,10 +178,16 @@ class BaseStamp(content.PdfContent):
         # draw the border around the stamp
         bbox = self.box
         border_width = self.style.border_width
+        border_color = self.style.border_color
         if border_width:
+            if border_color:
+                command_stream.append(b'%g %g %g RG' % border_color)
+
             command_stream.append(
-                b'%g w 0 0 %g %g re S' % (border_width, bbox.width, bbox.height)
+                b'%g w 0 0 %g %g re S'
+                % (border_width, bbox.width, bbox.height),
             )
+
         command_stream.append(b'Q')
         return b' '.join(command_stream)
 

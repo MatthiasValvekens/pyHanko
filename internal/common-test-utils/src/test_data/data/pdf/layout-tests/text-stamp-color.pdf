@@ -1,0 +1,155 @@
+%PDF-1.7
+%¥±ë
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 4 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Length 0
+>>
+stream
+
+endstream
+endobj
+4 0 obj
+<<
+/Type /Page
+/MediaBox [ 0 0 595 842 ]
+/Resources 12 0 R
+/Contents 9 0 R
+/Parent 2 0 R
+>>
+endobj
+5 0 obj
+<<
+/Type /FontDescriptor
+/FontName /Courier
+/Flags 35
+/FontBBox [ -23 -250 715 805 ]
+/Ascent 629
+/Descent -157
+/CapHeight 629
+/ItalicAngle 0
+/StemV 51
+/MissingWidth 600
+/AvgWidth 600
+/MaxWidth 600
+>>
+endobj
+6 0 obj
+<<
+/Type /FontDescriptor
+/FontName /Courier
+/Flags 35
+/FontBBox [ -23 -250 715 805 ]
+/Ascent 629
+/Descent -157
+/CapHeight 629
+/ItalicAngle 0
+/StemV 51
+/MissingWidth 600
+/AvgWidth 600
+/MaxWidth 600
+>>
+endobj
+7 0 obj
+<<
+/BBox [ 0 30 74 0 ]
+/Resources <<
+/Font <<
+/F1 <<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 32
+/Widths [ 600 ]
+/FontDescriptor 6 0 R
+>>
+>>
+>>
+/Type /XObject
+/Subtype /Form
+/Length 141
+>>
+stream
+q q 1 0 0 1 0 0 cm 1 0 0 1 10 10 cm 0.5 0.43 0.1 rg BT /F1 10 Tf 10 TL 0 0 Td (some text) Tj T* ET Q 0.29 0.404 0.839 RG 3 w 0 0 74 30 re S Q
+endstream
+endobj
+8 0 obj
+<<
+/Length 1
+>>
+stream
+q
+endstream
+endobj
+9 0 obj
+[ 8 0 R 3 0 R 10 0 R 11 0 R ]
+endobj
+10 0 obj
+<<
+/Length 1
+>>
+stream
+Q
+endstream
+endobj
+11 0 obj
+<<
+/Length 63
+>>
+stream
+q 1 0 0 1 10 800 cm /Stampec2be955a6004f29878ca838aa3760db Do Q
+endstream
+endobj
+12 0 obj
+<<
+/XObject <<
+/Stampec2be955a6004f29878ca838aa3760db 7 0 R
+>>
+>>
+endobj
+13 0 obj
+<<
+/ModDate (D\07220250807194408\05303\04700\047)
+/Producer (pyHanko 0\0560\0560\056dev1)
+>>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000017 00000 n 
+0000000066 00000 n 
+0000000125 00000 n 
+0000000174 00000 n 
+0000000281 00000 n 
+0000000496 00000 n 
+0000000711 00000 n 
+0000001131 00000 n 
+0000001181 00000 n 
+0000001226 00000 n 
+0000001277 00000 n 
+0000001391 00000 n 
+0000001473 00000 n 
+trailer
+<<
+/Root 1 0 R
+/Info 13 0 R
+/ID [ <2f169e2f77c98719292a4718b5e02c24> <37a33331cc774bdb2d6a468fb44b5fc8> ]
+/Size 14
+>>
+startxref
+1582
+%%EOF

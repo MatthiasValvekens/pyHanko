@@ -30,6 +30,18 @@ def test_simple_textbox_render(with_border, natural_size):
         assert abs(y1 - y2) == 900
 
 
+def test_simple_textbox_color():
+    tbs = text.TextBoxStyle(border_width=0, text_color=(0.5, 0.5, 0.5))
+
+    textbox = text.TextBox(
+        style=tbs, writer=IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    )
+    textbox.content = 'This is a textbox with some text.\nAnd multiple lines'
+    command_stream = textbox.render()
+
+    assert b'0.5 0.5 0.5 rg' in command_stream
+
+
 NOTO_SERIF_JP = f'{TEST_DIR}/data/fonts/NotoSerifJP-Regular.otf'
 
 
