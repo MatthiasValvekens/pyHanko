@@ -1456,7 +1456,8 @@ async def _check_revocation(
         if expected_revinfo_not_found:
             raise InsufficientRevinfoError.from_state(
                 f"The path could not be validated because no revocation "
-                f"information could be found for {proc_state.describe_cert()}",
+                f"information could be found for {proc_state.describe_cert()} "
+                f"{cert.subject.human_friendly}",
                 proc_state,
             )
 
