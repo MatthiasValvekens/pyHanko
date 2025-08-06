@@ -452,7 +452,11 @@ async def _handle_single_ocsp_resp(
     rating = freshness_result.rating
     if rating != RevinfoUsabilityRating.OK:
         if rating == RevinfoUsabilityRating.STALE:
-            msg = 'OCSP response is not recent enough'
+            msg = (
+                f'OCSP response is not recent enough '
+                f'({freshness_result.compared_to} > '
+                f'{freshness_result.last_usable_at})'
+            )
             errs.update_stale(freshness_result.last_usable_at)
         elif rating == RevinfoUsabilityRating.TOO_NEW:
             msg = 'OCSP response is too recent'

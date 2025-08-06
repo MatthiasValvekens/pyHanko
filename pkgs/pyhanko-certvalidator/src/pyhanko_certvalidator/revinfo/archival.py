@@ -88,6 +88,11 @@ class RevinfoUsability:
     considered usable, if applicable.
     """
 
+    compared_to: Optional[datetime] = None
+    """
+    Time to which the ``last_usable_at`` time was compared.
+    """
+
 
 class RevinfoContainer(IssuedItemContainer, abc.ABC):
     """
@@ -187,10 +192,11 @@ def _judge_revinfo(
         if freshness_delta is None:
             return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
         signature_poe_time = timing_params.best_signature_time
-        if this_update - signature_poe_time < freshness_delta:
+        if this_update < freshness_delta + signature_poe_time - time_tolerance:
             return RevinfoUsability(
                 RevinfoUsabilityRating.STALE,
-                last_usable_at=this_update + freshness_delta,
+                compared_to=signature_poe_time,
+                last_usable_at=this_update - freshness_delta + time_tolerance,
             )
     elif (
         policy.freshness_req_type
@@ -209,10 +215,12 @@ def _judge_revinfo(
         # See ETSI EN 319 102-1, § 5.2.5.4, item 2)
         #  in particular, "too recent" doesn't seem to apply;
         #  the result is pass/fail
-        if this_update < validation_time - freshness_delta:
+        cutoff = this_update + freshness_delta + time_tolerance
+        if validation_time > cutoff:
             return RevinfoUsability(
                 RevinfoUsabilityRating.STALE,
-                last_usable_at=this_update + freshness_delta,
+                compared_to=validation_time,
+                last_usable_at=cutoff,
             )
     elif policy.freshness_req_type == FreshnessReqType.DEFAULT:
         # check whether the validation time falls within the
@@ -232,6 +240,7 @@ def _judge_revinfo(
         if validation_time > next_update + time_tolerance:
             return RevinfoUsability(
                 RevinfoUsabilityRating.STALE,
+                compared_to=validation_time,
                 last_usable_at=next_update + time_tolerance,
             )
     else:  # pragma: nocover

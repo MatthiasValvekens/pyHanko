@@ -525,7 +525,11 @@ def _check_crl_freshness(
     rating = freshness_result.rating
     if rating != RevinfoUsabilityRating.OK:
         if rating == RevinfoUsabilityRating.STALE:
-            msg = f'{prefix} is not recent enough'
+            msg = (
+                f'{prefix} is not recent enough '
+                f'({freshness_result.compared_to} > '
+                f'{freshness_result.last_usable_at})'
+            )
             errs.update_stale(freshness_result.last_usable_at)
         elif rating == RevinfoUsabilityRating.TOO_NEW:
             msg = f'{prefix} is too recent'
