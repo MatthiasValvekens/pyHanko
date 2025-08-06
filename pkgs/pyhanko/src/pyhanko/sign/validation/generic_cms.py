@@ -580,7 +580,7 @@ async def validate_cert_usage(
             key_usage_settings.validate(cert)
         return path
 
-    return await handle_certvalidator_errors(_check())
+    return await handle_certvalidator_errors(cert=cert, coro=_check())
 
 
 @overload
@@ -1111,34 +1111,41 @@ class CertvalidatorOperationResult(Generic[ResultType]):
 
 
 async def handle_certvalidator_errors(
+    cert: x509.Certificate,
     coro: Awaitable[ResultType],
 ) -> CertvalidatorOperationResult[ResultType]:
     """
     Internal error handling function that maps certvalidator errors
     to AdES status indications.
-
-    :param coro:
-    :return:
     """
+
+    def _warn(e: ValidationError):
+        msg = (
+            f"Validation error [cert context: "
+            f"{cert.subject.human_friendly}]: "
+            f"{e.failure_msg}"
+        )
+        logger.warning(msg, exc_info=e)
+
     time_horizon: Optional[datetime] = None
     revo_details = path = None
     try:
         return CertvalidatorOperationResult(success_result=await coro)
     except InvalidCertificateError as e:
-        logger.warning(e.failure_msg, exc_info=e)
+        _warn(e)
         ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
     except TimeSlideFailure as e:
-        logger.warning(e.failure_msg, exc_info=e)
+        _warn(e)
         ades_status = AdESIndeterminate.NO_POE
     except StaleRevinfoError as e:
-        logger.warning(e.failure_msg, exc_info=e)
+        _warn(e)
         # note: the way pyhanko-certvalidator handles revinfo freshness
         # is not strictly compliant with AdES rules, but this mapping
         # should be roughly appropriate in most cases
         ades_status = AdESIndeterminate.TRY_LATER
         time_horizon = e.time_cutoff
     except DisallowedAlgorithmError as e:
-        logger.warning(e.failure_msg, exc_info=e)
+        _warn(e)
         # note: this is the one from the certvalidator hierarchy, which is
         # similar but not quite the same as the one for pyhanko itself
         # (conceptually identical, but the contextual data is different)
@@ -1152,7 +1159,7 @@ async def handle_certvalidator_errors(
             time_horizon = e.banned_since
     except RevokedError as e:
         path = e.original_path
-        logger.warning(e.failure_msg)
+        _warn(e)
         time_horizon = e.revocation_dt
         if e.is_side_validation:
             # don't report this as a revocation event
@@ -1172,11 +1179,14 @@ async def handle_certvalidator_errors(
                 revocation_reason=e.reason,
             )
     except PathBuildingError as e:
-        logger.warning("Failed to build path", exc_info=e)
+        logger.warning(
+            f"Failed to build path for {cert.subject.human_friendly}",
+            exc_info=e,
+        )
         ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
     except ExpiredError as e:
         path = e.original_path
-        logger.warning(e.failure_msg)
+        _warn(e)
         time_horizon = e.expired_dt
         if not e.is_side_validation and e.is_ee_cert:
             # TODO modify certvalidator to perform revinfo checks on
@@ -1188,10 +1198,10 @@ async def handle_certvalidator_errors(
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
     except PathValidationError as e:
         path = e.original_path
-        logger.warning(e.failure_msg, exc_info=e)
+        _warn(e)
         ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
     except ValidationError as e:
-        logger.warning(e.failure_msg, exc_info=e)
+        _warn(e)
         ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
     return CertvalidatorOperationResult(

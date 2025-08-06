@@ -993,15 +993,14 @@ async def ades_with_time_validation(
     ):
         # in this case error_time_horizon is set to the point where the
         # constraint was triggered
-        if signature_poe_time >= temp_status.error_time_horizon:
-            return AdESWithTimeValidationResult(
-                ades_subindic=interm_result.ades_subindic,
-                api_status=temp_status,
-                failure_msg=None,
-                best_signature_time=signature_poe_time,
-                signature_not_before_time=signature_not_before_time,
-                validation_objects=vos,
-            )
+        return AdESWithTimeValidationResult(
+            ades_subindic=interm_result.ades_subindic,
+            api_status=temp_status,
+            failure_msg=None,
+            best_signature_time=signature_poe_time,
+            signature_not_before_time=signature_not_before_time,
+            validation_objects=vos,
+        )
 
     # TODO TSTInfo ordering/comparison check
     if (
@@ -1143,12 +1142,13 @@ async def _build_and_past_validate_cert(
         async for cand_path in paths:
             past_result: generic_cms.CertvalidatorOperationResult[datetime]
             past_result = await generic_cms.handle_certvalidator_errors(
-                past_validate(
+                cert=cert,
+                coro=past_validate(
                     path=cand_path,
                     validation_policy_spec=validation_policy_spec,
                     validation_data_handlers=validation_data_handlers,
                     init_control_time=None,
-                )
+                ),
             )
             current_subindication = past_result.error_subindic
             validation_time = past_result.success_result
@@ -2008,6 +2008,15 @@ async def ades_lta_validation(
         poe_manager=copy(updated_poe_manager),
         timing_info=timing_info,
     )
+    updated_api_status: Optional[PdfSignatureStatus] = (
+        signature_prelim_result.api_status
+    )
+
+    if updated_api_status and signature_ts_result:
+        updated_api_status = dataclasses.replace(
+            updated_api_status,
+            timestamp_validity=signature_ts_result.api_status,
+        )
 
     # (6) past signature validation
     if isinstance(current_time_sub_indic, AdESIndeterminate):
@@ -2015,7 +2024,7 @@ async def ades_lta_validation(
         #  already. Ensure that that is possible.
         past_sig_poe_manager = copy(updated_poe_manager)
         try:
-            await _ades_past_signature_validation(
+            past_validation_path = await _ades_past_signature_validation(
                 signed_data=embedded_sig.signed_data,
                 validation_spec=augmented_validation_spec,
                 poe_manager=past_sig_poe_manager,
@@ -2023,6 +2032,15 @@ async def ades_lta_validation(
                 init_control_time=timing_info.validation_time,
                 is_timestamp=False,
             )
+            if (
+                updated_api_status is not None
+                and not updated_api_status.validation_path
+            ):
+                updated_api_status = dataclasses.replace(
+                    updated_api_status,
+                    validation_path=past_validation_path,
+                    trust_problem_indic=None,
+                )
             updated_poe_manager = past_sig_poe_manager
         except errors.SignatureValidationError as e:
             sig_poe = past_sig_poe_manager[signature_bytes]
@@ -2030,7 +2048,7 @@ async def ades_lta_validation(
                 ades_subindic=e.ades_subindication or current_time_sub_indic,
                 failure_msg=e.failure_message,
                 # FIXME rewrite api_status!
-                api_status=signature_prelim_result.api_status,
+                api_status=updated_api_status,
                 best_signature_time=sig_poe,
                 signature_not_before_time=(
                     signature_prelim_result.signature_not_before_time
@@ -2067,7 +2085,7 @@ async def ades_lta_validation(
 
     return AdESLTAValidationResult(
         ades_subindic=ades_subindic,
-        api_status=signature_prelim_result.api_status,
+        api_status=updated_api_status,
         failure_msg=failure_msg,
         best_signature_time=signature_poe_time,
         signature_not_before_time=(
