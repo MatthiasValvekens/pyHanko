@@ -1,13 +1,27 @@
+import base64
 import dataclasses
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
+from aiohttp import web
+from aiohttp.test_utils import TestClient
+from aiohttp.typedefs import StrOrURL
+from asn1crypto import x509
 from certomancer.registry import ArchLabel
 from freezegun import freeze_time
 from pyhanko.generated.etsi import ServiceTypeIdentifier, ts_119612
 from pyhanko.keys import load_cert_from_pemder
-from pyhanko.sign.validation.qualified import assess, eutl_parse, q_status, tsp
+from pyhanko.sign.validation.errors import SignatureValidationError
+from pyhanko.sign.validation.qualified import (
+    assess,
+    eutl_fetch,
+    eutl_parse,
+    q_status,
+    tsp,
+)
+from pyhanko.sign.validation.qualified.eutl_fetch import TLCache
 from pyhanko.sign.validation.qualified.eutl_parse import (
     STATUS_GRANTED,
     _interpret_historical_service_info_for_ca,
@@ -17,12 +31,14 @@ from pyhanko.sign.validation.qualified.tsp import (
     CAServiceInformation,
     QcCertType,
     QTSTServiceInformation,
+    TSPServiceParsingError,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from test_data.samples import CERTOMANCER, TEST_DIR
 from test_utils.signing_commons import ECC_INTERM_CERT, FROM_CA, INTERM_CERT
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
+from yarl import URL
 
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.authority import AuthorityWithCert, NamedKeyAuthority
@@ -63,7 +79,7 @@ def _read_qtsts_from_file(path: Path):
 def _read_registry_from_file(path: Path):
     with path.open('r', encoding='utf8') as inf:
         tl_str = inf.read()
-        registry, _ = eutl_parse.trust_list_as_registry(tl_str)
+        registry, _ = eutl_parse.trust_list_to_registry_unsafe(tl_str)
     return registry
 
 
@@ -83,6 +99,7 @@ TEST_DATA_DIR = Path(TEST_DIR) / 'data' / 'tl'
 CRYPTO_DIR = Path(TEST_DIR) / 'data' / 'crypto'
 TEST_REAL_TL_BE = TEST_DATA_DIR / 'tsl-be.xml'
 TEST_REAL_TL_EE = TEST_DATA_DIR / 'tsl-ee.xml'
+TEST_REAL_LOTL = TEST_DATA_DIR / 'eu-lotl.xml'
 
 
 def test_parse_cas_from_real_tl_smoke_test():
@@ -103,10 +120,224 @@ def test_parse_qtsts_from_real_tl_smoke_test():
 def test_parse_services_from_real_tl_smoke_test():
     with TEST_REAL_TL_BE.open('r', encoding='utf8') as inf:
         tl_str = inf.read()
-        registry, errors = eutl_parse.trust_list_as_registry(tl_str)
+        registry, errors = eutl_parse.trust_list_to_registry_unsafe(tl_str)
         assert len(errors) == 0
         assert len(list(registry.known_timestamp_authorities)) == 17
         assert len(list(registry.known_certificate_authorities)) == 20
+
+
+BE_TLSO_CERT_B64 = """
+MIID3zCCAsegAwIBAgIJAOv7FV6q0Or/MA0GCSqGSIb3DQ
+EBBQUAMIGHMS0wKwYDVQQDEyRCZWxnaWFuIFRydXN0ZWQg
+TGlzdCBTY2hlbWUgT3BlcmF0b3IxSTBHBgNVBAoTQEZQUy
+BFY29ub215LCBTTUVzLCBTZWxmLWVtcGxveWVkIGFuZCBF
+bmVyZ3kgLSBRdWFsaXR5IGFuZCBTYWZldHkxCzAJBgNVBA
+YTAkJFMB4XDTE0MDIxOTEzMzgwNFoXDTI1MDYxMTEzMzgw
+NFowgYcxLTArBgNVBAMTJEJlbGdpYW4gVHJ1c3RlZCBMaX
+N0IFNjaGVtZSBPcGVyYXRvcjFJMEcGA1UEChNARlBTIEVj
+b25vbXksIFNNRXMsIFNlbGYtZW1wbG95ZWQgYW5kIEVuZX
+JneSAtIFF1YWxpdHkgYW5kIFNhZmV0eTELMAkGA1UEBhMC
+QkUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQ
+DAgEFkoDPTYDvGk+/IPnGSPm58NRE7mpzLHk8lxpYnTAtb
+Mhn7FWru9GlNi+blYYNOEmzN2E5KO9+7AAAMmx2x8zmEMw
+c3oUQ7E0WN5Gl+Y+7n6NtX50D/4Sbw4IjVvwwRRru8Coj5
+vq5Hz3JKTgft8teEpwb5vSFZh6+o9irdX342RJU4AtG78s
+xZvzIqpa3WsddMf5XDyjnGK3dRgkDuOaBxWEexuUiN4LvO
++MacwoaxEqLhEZ6TALGWS2WmNEW3OlUdf7nc0Tz/lnyQsu
+Fn01c4pg56hjyxLtpjyHwNwbTDx+cjBpBveOT9Nb6UfKFH
+knC5AfrIOWnFLXUmyKD/AgMBAAGjTDBKMAkGA1UdEwQCMA
+AwCwYDVR0PBAQDAgbAMB0GA1UdDgQWBBRf745pXfv0l1rx
+BwgOUhlQqteQUTARBgNVHSUECjAIBgYEAJE3AwAwDQYJKo
+ZIhvcNAQEFBQADggEBAJQt17IzKeqnxakdgysT1FlymocZ
+UUHGhfbQAfr4OEm48LMoN4M5ZeeRMVIwk4jODURuhawtKJ
+3hRdGB+zTzIMLheOmAGGRDUNrDwctpn8G+RqEFjlgc5yi1
+ICHBZJrvyud7cPwz8AwMtV+K1iFmbEWqsGASZ96J9uilJJ
++RkPcV3Olwtgi3+IxOxHfhmq0PCdRk1k8+c7frdT935Z8S
+fFgnaPy4RFg2eKdvC2qsvsF3J19eP/BKlGdVVe44yTB3UC
+E3KSLiySvgM/JXIQN5VE+lGPeURKnoXsW5E71IdUEi30Pt
+d0YBxTjEairZKyzhgGbZEnBUWSkn6n9uZ5Ai2lo=
+"""
+
+
+def test_parse_services_from_real_tl_with_validation_smoke_test():
+    tlso_cert = x509.Certificate.load(base64.b64decode(BE_TLSO_CERT_B64))
+    with TEST_REAL_TL_BE.open('r', encoding='utf8') as inf:
+        tl_str = inf.read()
+        registry, errors = eutl_parse.trust_list_to_registry(
+            tl_str, [tlso_cert]
+        )
+        assert len(errors) == 0
+        assert len(list(registry.known_timestamp_authorities)) == 17
+        assert len(list(registry.known_certificate_authorities)) == 20
+
+
+def test_validate_tl_wrong_signature():
+    tlso_cert = x509.Certificate.load(base64.b64decode(BE_TLSO_CERT_B64))
+    with TEST_REAL_TL_EE.open('r', encoding='utf8') as inf:
+        tl_str = inf.read()
+        with pytest.raises(SignatureValidationError):
+            eutl_parse.trust_list_to_registry(tl_str, [tlso_cert])
+
+
+def test_parse_lotl():
+    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+        tl_str = inf.read()
+        eutl_parse.parse_lotl_unsafe(tl_str)
+
+
+LOTL_PIVOTS = [
+    "eu-lotl-pivot-282.xml",
+    "eu-lotl-pivot-300.xml",
+    "eu-lotl-pivot-335.xml",
+    "eu-lotl-pivot-341.xml",
+]
+
+
+async def serve_tl_file(request: web.Request):
+    components = request.path.split('/')
+    path = TEST_DATA_DIR / components[-1]
+    with path.open('r', encoding='utf8') as inf:
+        return web.Response(text=inf.read(), content_type='text/xml')
+
+
+class PathRetainingClient(TestClient):
+
+    def make_url(self, path: StrOrURL) -> URL:
+        components = urlparse(path)
+        # only remember the path part, forget about the host etc.
+        # (this is so we can test with real EUTL files using aiohttp
+        # testing utils)
+        return super().make_url(components.path)
+
+
+@pytest.fixture
+def aiohttp_client_cls():
+    return PathRetainingClient
+
+
+def _check_lotl_signers(results):
+    result_set = {r.sha256_fingerprint for r in results}
+    expected_result_set = {
+        r.sha256_fingerprint for r in eutl_parse.latest_known_lotl_tlso_certs()
+    }
+    assert result_set == expected_result_set
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pass_empty_cache', [True, False])
+async def test_bootstrap_signers(aiohttp_client, pass_empty_cache):
+    app = web.Application()
+    for pivot in LOTL_PIVOTS:
+        app.router.add_get(f"/tools/lotl/{pivot}", serve_tl_file)
+    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+        client = await aiohttp_client(app)
+        results = await eutl_fetch.bootstrap_lotl_signers(
+            inf.read(), client, cache=TLCache() if pass_empty_cache else None
+        )
+        _check_lotl_signers(results)
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_signers_with_populated_cache(aiohttp_client):
+    app = web.Application()
+    cache = TLCache()
+
+    for pivot in LOTL_PIVOTS:
+        url = f"https://ec.europa.eu/tools/lotl/{pivot}"
+        path = TEST_DATA_DIR / pivot
+        with path.open('r', encoding='utf8') as inf:
+            cache[url] = inf.read()
+
+    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+        client = await aiohttp_client(app)
+        results = await eutl_fetch.bootstrap_lotl_signers(
+            inf.read(), client, cache=cache
+        )
+        _check_lotl_signers(results)
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_signers_request_retry(aiohttp_client):
+    seen = set()
+
+    async def serve_after_one_try(request):
+        nonlocal seen
+
+        if request.path in seen:
+            return await serve_tl_file(request)
+        else:
+            seen.add(request.path)
+            return web.Response(status=503)
+
+    app = web.Application()
+    for pivot in LOTL_PIVOTS:
+        app.router.add_get(f"/tools/lotl/{pivot}", serve_after_one_try)
+    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+        client = await aiohttp_client(app)
+        results = await eutl_fetch.bootstrap_lotl_signers(inf.read(), client)
+        _check_lotl_signers(results)
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_signers_request_fail(aiohttp_client):
+    app = web.Application()
+    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+        client = await aiohttp_client(app)
+        with pytest.raises(TSPServiceParsingError):
+            await eutl_fetch.bootstrap_lotl_signers(inf.read(), client)
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_signers_request_outage(aiohttp_client):
+    app = web.Application()
+
+    async def serve_fail(_request):
+        return web.Response(status=503)
+
+    for pivot in LOTL_PIVOTS:
+        app.router.add_get(f"/tools/lotl/{pivot}", serve_fail)
+    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+        client = await aiohttp_client(app)
+        with pytest.raises(TSPServiceParsingError):
+            await eutl_fetch.bootstrap_lotl_signers(inf.read(), client)
+
+
+def test_validate_and_parse_lotl_default_certs():
+    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+        tl_str = inf.read()
+        eutl_parse.validate_and_parse_lotl(tl_str)
+
+
+@pytest.mark.asyncio
+async def test_parse_services_from_real_tl_via_lotl(aiohttp_client):
+    app = web.Application()
+    app.router.add_get(f"/tools/lotl/eu-lotl.xml", serve_tl_file)
+    app.router.add_get(f"/tsl-be.xml", serve_tl_file)
+
+    client = await aiohttp_client(app)
+    registry, errors = await eutl_fetch.lotl_to_registry(
+        lotl_xml=None, client=client
+    )
+    # all the others failed to download
+    assert len([e for e in errors if "Failed to download" in str(e)]) == 30
+    assert len(list(registry.known_timestamp_authorities)) == 17
+    assert len(list(registry.known_certificate_authorities)) == 20
+
+
+@pytest.mark.asyncio
+async def test_parse_services_from_real_tl_via_selective_lotl(aiohttp_client):
+    app = web.Application()
+    app.router.add_get(f"/tools/lotl/eu-lotl.xml", serve_tl_file)
+    app.router.add_get(f"/tsl-be.xml", serve_tl_file)
+
+    client = await aiohttp_client(app)
+    registry, errors = await eutl_fetch.lotl_to_registry(
+        lotl_xml=None, client=client, only_territories={'BE'}
+    )
+    # no download failures since only the BE one should've been attempted
+    assert len(errors) == 0
+    assert len(list(registry.known_timestamp_authorities)) == 17
+    assert len(list(registry.known_certificate_authorities)) == 20
 
 
 ETSI_NS = 'http://uri.etsi.org'
