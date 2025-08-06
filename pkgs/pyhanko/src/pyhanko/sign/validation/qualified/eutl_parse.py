@@ -1,6 +1,8 @@
 import itertools
 import logging
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import (
     Any,
     FrozenSet,
@@ -15,16 +17,25 @@ from typing import (
 )
 
 from asn1crypto import x509
+from cryptography.x509 import load_der_x509_certificate
 from lxml import etree
+from lxml.etree import QName
 from pyhanko.generated.etsi import (
+    MimeType,
+    OtherTSLPointer,
+    SchemeTerritory,
+    SchemeTypeCommunityRules,
     ServiceStatus,
     ServiceTypeIdentifier,
+    TrustServiceStatusList,
     ts_119612,
     ts_119612_extra,
     ts_119612_sie,
     xades,
 )
-from pyhanko.sign.validation import KeyUsageConstraints
+from pyhanko.keys import load_certs_from_pemder
+from pyhanko.sign.ades.report import AdESFailure, AdESIndeterminate
+from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.sign.validation.qualified.tsp import (
     _SVCINFOEXT_URI_BASE,
     _TRUSTEDLIST_URI_BASE,
@@ -47,15 +58,25 @@ from pyhanko.sign.validation.qualified.tsp import (
     TSPRegistry,
     TSPServiceParsingError,
 )
+from pyhanko.sign.validation.settings import KeyUsageConstraints
+from signxml.exceptions import SignXMLException as InvalidXmlSignature
+from signxml.xades import XAdESSignatureConfiguration, XAdESVerifier
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
 from xsdata.formats.dataclass.parsers.handlers import LxmlEventHandler
 from xsdata.formats.dataclass.parsers.handlers.lxml import EVENTS
 
-__all__ = ['read_qualified_service_definitions']
+__all__ = [
+    'read_qualified_service_definitions',
+    'trust_list_to_registry',
+    'trust_list_to_registry_unsafe',
+]
 
 logger = logging.getLogger(__name__)
 STATUS_GRANTED = f'{_TRUSTEDLIST_URI_BASE}/Svcstatus/granted'
+_SCHEME_RULES_URI_BASE = f'{_TRUSTEDLIST_URI_BASE}/schemerules'
+LOTL_RULE = f'{_SCHEME_RULES_URI_BASE}/EUlistofthelists'
+ETSI_TSL_MIME_TYPE = 'application/vnd.etsi.tsl+xml'
 _CERTIFICATE_TYPE_BY_URI = {
     f'{_SVCINFOEXT_URI_BASE}/ForeSignatures': QcCertType.QC_ESIGN,
     f'{_SVCINFOEXT_URI_BASE}/ForeSeals': QcCertType.QC_ESEAL,
@@ -497,7 +518,6 @@ def _raw_tl_parse(tl_xml: str) -> ts_119612.TrustServiceStatusList:
     return parser.from_string(tl_xml, clazz=ts_119612.TrustServiceStatusList)
 
 
-# TODO introduce a similar method for other types of service (TSAs etc)
 def read_qualified_service_definitions(
     tl_xml: str,
 ) -> Generator[QualifiedServiceInformation, None, List[TSPServiceParsingError]]:
@@ -521,8 +541,8 @@ def read_qualified_service_definitions(
     return errors_encountered
 
 
-def trust_list_as_registry(
-    tl_xml: str,
+def trust_list_to_registry_unsafe(
+    tl_xml: str, registry: Optional[TSPRegistry] = None
 ) -> Tuple[TSPRegistry, List[TSPServiceParsingError]]:
     """
     Parse a trusted list (ETSI TS 119 612) into a :class:`TSPRegistry`.
@@ -534,9 +554,12 @@ def trust_list_as_registry(
 
     :param tl_xml:
         XML payload describing the trusted list in the ETSI TS 119 612 format
+    :param registry:
+        Registry to which the entries should be added. If not supplied, a new
+        one will be created.
     :return:
     """
-    registry = TSPRegistry()
+    registry = registry or TSPRegistry()
     g = read_qualified_service_definitions(tl_xml)
     while True:
         try:
@@ -547,3 +570,220 @@ def trust_list_as_registry(
                 registry.register_tst(sd)
         except StopIteration as e:
             return registry, e.value
+
+
+def _validate_and_extract_tl_data(
+    tl_xml: str, tlso_cert: x509.Certificate
+) -> str:
+    verifier = XAdESVerifier()
+    try:
+        verify_results = verifier.verify(
+            tl_xml.encode('utf8'),
+            x509_cert=load_der_x509_certificate(tlso_cert.dump()),
+            expect_config=XAdESSignatureConfiguration(
+                require_x509=True,
+                # TODO is this always correct? Either way, the signxml library forces
+                #  us to specify a number here
+                #  (the arbitrary match code path seems broken for XAdES)
+                expect_references=2,
+            ),
+        )
+    except InvalidXmlSignature as e:
+        raise SignatureValidationError(
+            f"Invalid XML signature on trusted list: {e}",
+            ades_subindication=AdESIndeterminate.GENERIC,
+        ) from e
+    tl_signed_xml = None
+    for result in verify_results:
+        if result.signed_xml is None:
+            continue
+        if result.signed_xml.tag == QName(
+            TrustServiceStatusList.Meta.namespace, 'TrustServiceStatusList'
+        ):
+            tl_signed_xml = result.signed_data.decode("utf-8")
+            break
+    if not tl_signed_xml:
+        raise SignatureValidationError(
+            f"Failed to identify trusted list in signed data",
+            ades_subindication=AdESFailure.FORMAT_FAILURE,
+        )
+
+    logger.debug(
+        f"Validated TL data with TLSO certificate %s\n"
+        f"(SHA-256 fingerprint %s)",
+        tlso_cert.subject.human_friendly,
+        tlso_cert.sha256_fingerprint,
+    )
+    return tl_signed_xml
+
+
+def _validate_and_extract_tl_data_multiple_certs(
+    tl_xml: str, tlso_cert_candidates: List[x509.Certificate]
+) -> str:
+    # sort the issuer certs by newest first
+    sorted_candidates = sorted(
+        tlso_cert_candidates, key=lambda c: c.not_valid_before, reverse=True
+    )
+    errors = []
+    result = None
+    for candidate in sorted_candidates:
+        try:
+            result = _validate_and_extract_tl_data(tl_xml, candidate)
+            break
+        except SignatureValidationError as e:
+            errors.append(e)
+    if not result:
+        msg = (
+            f"None of the candidate TLSO certs could be used to validate "
+            f"the TL signature: {','.join(e.failure_message for e in errors)}"
+        )
+        raise SignatureValidationError(
+            msg,
+            ades_subindication=AdESIndeterminate.GENERIC,
+        )
+    return result
+
+
+def trust_list_to_registry(
+    tl_xml: str,
+    tlso_certs: List[x509.Certificate],
+    registry: Optional[TSPRegistry] = None,
+) -> Tuple[TSPRegistry, List[TSPServiceParsingError]]:
+    """
+    Validate and parse a trusted list (ETSI TS 119 612) into a :class:`TSPRegistry`.
+
+    .. note::
+        The TSLO certs are used in the validation of the trusted list,
+        but are not validated by this function.
+
+    :param tl_xml:
+        XML payload describing the trusted list in the ETSI TS 119 612 format
+    :param tlso_certs:
+        The certificates containing the public keys with which
+        the TL could be validated.
+    :param registry:
+        Registry to which the entries should be added. If not supplied, a new
+        one will be created.
+    :raises SignatureValidationError:
+        If the trusted list's signature cannot be validated.
+    :return:
+    """
+    tl_signed_xml = _validate_and_extract_tl_data_multiple_certs(
+        tl_xml, tlso_certs
+    )
+    return trust_list_to_registry_unsafe(tl_signed_xml, registry)
+
+
+def _parse_tsl_info(pointer: OtherTSLPointer):
+    rules = set()
+    territory = list_type = None
+    additional_info = _required(
+        pointer.additional_information, "TSL pointer additional information"
+    )
+    for other_info in additional_info.other_information:
+        for item in other_info.content:
+            if isinstance(item, SchemeTypeCommunityRules):
+                for uri in item.uri:
+                    rules.add(uri.value)
+            elif isinstance(item, SchemeTerritory):
+                territory = item.value
+            elif isinstance(item, MimeType):
+                list_type = item.value
+    return pointer.tsllocation, list_type, territory, rules
+
+
+@dataclass(frozen=True)
+class TLReference:
+    location_uri: str
+    territory: str
+    tlso_certs: List[x509.Certificate]
+    scheme_rules: FrozenSet[str]
+
+
+@dataclass(frozen=True)
+class LOTLParseResult:
+    references: List[TLReference]
+    errors: List[TSPServiceParsingError]
+    pivot_urls: List[str]
+
+
+def parse_lotl_unsafe(
+    lotl_xml: str,
+) -> LOTLParseResult:
+    parse_result = _raw_tl_parse(lotl_xml)
+
+    scheme_info = _required(
+        parse_result.scheme_information, "LOTL scheme information"
+    )
+    pointers = _required(
+        scheme_info.pointers_to_other_tsl, "pointers to other TSLs"
+    )
+    info_uris = _required(
+        scheme_info.scheme_information_uri, "scheme information URIs"
+    )
+
+    references = []
+    errors = []
+    for pointer in pointers.other_tslpointer:
+        location, list_type, territory, rules = _parse_tsl_info(pointer)
+        if (
+            list_type != ETSI_TSL_MIME_TYPE
+            or location is None
+            or territory is None
+            or pointer.service_digital_identities is None
+        ):
+            continue
+        tl_issuer_certs = []
+        for (
+            digital_identity
+        ) in pointer.service_digital_identities.service_digital_identity:
+            for sdi in digital_identity.digital_id:
+                cert_bytes = sdi.x509_certificate
+                if cert_bytes is not None:
+                    try:
+                        tl_issuer_certs.append(
+                            x509.Certificate.load(cert_bytes)
+                        )
+                    except Exception as e:
+                        errors.append(
+                            TSPServiceParsingError(
+                                f"Failed to load certificate for {territory} ({location}): {e}"
+                            )
+                        )
+        ref = TLReference(
+            location, territory, tl_issuer_certs, frozenset(rules)
+        )
+        references.append(ref)
+    pivots = [
+        info_uri.value
+        for info_uri in info_uris.uri
+        if info_uri.value.endswith(".xml")
+    ]
+    return LOTLParseResult(
+        references=references, errors=errors, pivot_urls=pivots
+    )
+
+
+def latest_known_lotl_tlso_certs():
+    return load_certs_from_pemder([Path(__file__).parent / 'lotl-certs.pem'])
+
+
+def ojeu_bootstrap_lotl_tlso_certs():
+    return load_certs_from_pemder(
+        [Path(__file__).parent / 'lotl-bootstrap-certs.pem']
+    )
+
+
+# TODO check validity time windows
+
+
+def validate_and_parse_lotl(
+    lotl_xml: str, lotl_tlso_certs: Optional[List[x509.Certificate]] = None
+) -> LOTLParseResult:
+
+    if not lotl_tlso_certs:
+        lotl_tlso_certs = latest_known_lotl_tlso_certs()
+    lotl_xml_validated = _validate_and_extract_tl_data_multiple_certs(
+        lotl_xml, lotl_tlso_certs
+    )
+    return parse_lotl_unsafe(lotl_xml_validated)

@@ -42,6 +42,7 @@ __all__ = [
     'CriteriaCombination',
     'CriteriaList',
     'Qualification',
+    'TSPServiceParsingError',
 ]
 
 
