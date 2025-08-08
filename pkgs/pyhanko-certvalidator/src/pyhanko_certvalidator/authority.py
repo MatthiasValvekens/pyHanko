@@ -1,13 +1,12 @@
 import abc
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from asn1crypto import keys, x509
 
 from .name_trees import process_general_subtrees
 from .policy_decl import PKIXValidationParams
-
-# TODO add support for roots that are limited in time?
 
 
 @dataclass(frozen=True)
@@ -34,6 +33,16 @@ class TrustQualifiers:
     """
     Maximal allowed path length for this trust root for the purposes of
     AAControls. If ``None``, any path length will be accepted.
+    """
+
+    valid_from: Optional[datetime] = None
+    """
+    Lower bound of the trust anchor's validity period, if any.
+    """
+
+    valid_until: Optional[datetime] = None
+    """
+    Upper bound of the trust anchor's validity period, if any.
     """
 
 
@@ -170,7 +179,11 @@ def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
         ext_found = True
         policies_val: x509.CertificatePolicies = cert.certificate_policies_value
         acceptable_policies = frozenset(
-            [pol_info['policy_identifier'].dotted for pol_info in policies_val]
+            [
+                pol_info['policy_identifier'].dotted
+                for pol_info in policies_val
+                if pol_info['policy_identifier'].native != 'any_policy'
+            ]
         )
 
     params = None
@@ -187,7 +200,10 @@ def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
         )
 
     return TrustQualifiers(
-        max_path_length=cert.max_path_length, standard_parameters=params
+        max_path_length=cert.max_path_length,
+        standard_parameters=params,
+        valid_from=cert.not_valid_before,
+        valid_until=cert.not_valid_after,
     )
 
 

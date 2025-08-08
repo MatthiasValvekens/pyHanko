@@ -1071,6 +1071,16 @@ async def intl_validate_path(
 
     moment = validation_context.moment
 
+    qualifiers = path.trust_anchor.trust_qualifiers
+    if qualifiers.valid_from is not None and qualifiers.valid_from > moment:
+        raise NotYetValidError.format(
+            valid_from=qualifiers.valid_from, proc_state=proc_state
+        )
+    elif qualifiers.valid_until is not None and qualifiers.valid_until < moment:
+        raise ExpiredError.format(
+            expired_dt=qualifiers.valid_until, proc_state=proc_state
+        )
+
     # Inputs
 
     trust_anchor = path.trust_anchor

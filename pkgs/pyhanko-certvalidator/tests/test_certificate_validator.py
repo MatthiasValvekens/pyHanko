@@ -11,10 +11,14 @@ from pyhanko_certvalidator import (
     PKIXValidationParams,
     ValidationContext,
 )
+from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.errors import (
+    ExpiredError,
     InvalidCertificateError,
+    NotYetValidError,
     PathValidationError,
 )
+from pyhanko_certvalidator.registry import SimpleTrustManager
 
 from .common import load_cert_object, load_nist_cert
 

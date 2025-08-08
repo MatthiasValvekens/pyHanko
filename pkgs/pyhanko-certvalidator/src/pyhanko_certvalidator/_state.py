@@ -66,9 +66,9 @@ class ValProcState:
         """
 
         prefix = not never_def
-        if self.index < 1 and self.ee_name_override is None:
-            # catchall default
-            result = "certificate"
+        if self.index == 0 and self.ee_name_override is None:
+            # can happen for trust anchors with qualifiers
+            result = "trust anchor"
         elif not self.is_ee_cert:
             prefix &= def_interm
             result = f'intermediate certificate {self.index}'

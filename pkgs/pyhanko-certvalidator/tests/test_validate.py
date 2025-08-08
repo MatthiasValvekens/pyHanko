@@ -17,7 +17,9 @@ from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.errors import (
     CertificateFetchError,
     CRLFetchError,
+    ExpiredError,
     InsufficientRevinfoError,
+    NotYetValidError,
     OCSPFetchError,
     OCSPValidationError,
     PathValidationError,
@@ -947,8 +949,6 @@ def test_do_not_fetch_crl_if_cache_sufficient():
         load_crl('ades', 'time-slide', 'root-2020-10-01.crl'),
     ]
     moment = datetime(2020, 10, 2, tzinfo=timezone.utc)
-    fetchers = MockFetcherBackend().get_fetchers()
-
     crl_fetcher = MockCRLFetcher()
     fetchers = Fetchers(
         ocsp_fetcher=MockOCSPFetcher(),
@@ -1077,3 +1077,74 @@ def test_context_retrieve_all_crls():
         crl2.dump(),
         crl3.dump(),
     }
+
+
+@pytest.mark.asyncio
+async def test_root_time_bound():
+    ca = load_cert_object('digicert-sha2-secure-server-ca.crt')
+
+    anchor = CertTrustAnchor(cert=ca, derive_default_quals_from_cert=True)
+    moment = datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    context = ValidationContext(
+        trust_manager=SimpleTrustManager.build([anchor]), moment=moment
+    )
+    path = ValidationPath(trust_anchor=anchor, interm=[], leaf=None)
+
+    await async_validate_path(context, path)
+
+
+@pytest.mark.asyncio
+async def test_root_expired():
+    ca = load_cert_object('digicert-sha2-secure-server-ca.crt')
+
+    anchor = CertTrustAnchor(cert=ca, derive_default_quals_from_cert=True)
+    moment = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    context = ValidationContext(
+        trust_manager=SimpleTrustManager.build([anchor]), moment=moment
+    )
+    path = ValidationPath(trust_anchor=anchor, interm=[], leaf=None)
+
+    with pytest.raises(ExpiredError, match='the trust anchor expired'):
+        await async_validate_path(context, path)
+
+
+@pytest.mark.asyncio
+async def test_root_not_yet_valid():
+    ca = load_cert_object('digicert-sha2-secure-server-ca.crt')
+
+    anchor = CertTrustAnchor(cert=ca, derive_default_quals_from_cert=True)
+    moment = datetime(2000, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    context = ValidationContext(
+        trust_manager=SimpleTrustManager.build([anchor]), moment=moment
+    )
+    path = ValidationPath(trust_anchor=anchor, interm=[], leaf=None)
+
+    with pytest.raises(
+        NotYetValidError, match='the trust anchor is not valid until'
+    ):
+        await async_validate_path(context, path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'moment',
+    [
+        datetime(2000, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+        datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+        datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+    ],
+)
+async def test_basic_certificate_validator_root_expiration_unquestioned(moment):
+    ca = load_cert_object('digicert-sha2-secure-server-ca.crt')
+
+    anchor = CertTrustAnchor(cert=ca, derive_default_quals_from_cert=False)
+
+    context = ValidationContext(
+        trust_manager=SimpleTrustManager.build([anchor]), moment=moment
+    )
+    path = ValidationPath(trust_anchor=anchor, interm=[], leaf=None)
+
+    await async_validate_path(context, path)
