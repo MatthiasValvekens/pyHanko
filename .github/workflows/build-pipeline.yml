@@ -232,7 +232,7 @@ jobs:
       # checkout necessary to ensure the uploaded report contains the correct paths
       - uses: actions/checkout@v4
       - name: Retrieve coverage reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: coverage-*
           path: ./reports/
