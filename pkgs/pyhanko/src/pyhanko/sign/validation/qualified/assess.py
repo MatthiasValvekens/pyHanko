@@ -2,16 +2,21 @@ import logging
 import zoneinfo
 from dataclasses import replace
 from datetime import datetime
-from typing import FrozenSet, Iterable, List, Optional, Set, Tuple
+from typing import FrozenSet, Iterable, List, Optional, Set, Tuple, Union
 
 from asn1crypto import x509
 from pyhanko.sign.ades import qualified_asn1
+from pyhanko.sign.ades.report import AdESIndeterminate
+from pyhanko.sign.validation.errors import SignatureValidationError
+from pyhanko.sign.validation.policy_decl import QualificationRequirements
 from pyhanko.sign.validation.qualified.q_status import (
     QcPrivateKeyManagementType,
     QualificationResult,
     QualifiedStatus,
 )
 from pyhanko.sign.validation.qualified.tsp import (
+    CA_QC_URI,
+    QTST_URI,
     BaseServiceInformation,
     QcCertType,
     Qualification,
@@ -20,10 +25,13 @@ from pyhanko.sign.validation.qualified.tsp import (
     TSPRegistry,
 )
 
+from pyhanko_certvalidator.authority import TrustedServiceType
 from pyhanko_certvalidator.path import ValidationPath
 
 __all__ = [
     'QualificationAssessor',
+    'QualificationPolicyError',
+    'enforce_requirements',
 ]
 
 
@@ -42,6 +50,10 @@ UNQUALIFIED = QualifiedStatus(
     qc_type=QcCertType.QC_ESIGN,
     qc_key_security=QcPrivateKeyManagementType.UNKNOWN,
 )
+
+
+class QualificationPolicyError(SignatureValidationError):
+    pass
 
 
 class QualificationAssessor:
@@ -237,3 +249,71 @@ class QualificationAssessor:
                 f"qualified."
             )
             return QualificationResult(UNQUALIFIED, service_definition=None)
+
+
+def enforce_requirements(
+    requirements: QualificationRequirements,
+    qualification_result: QualificationResult,
+    path: ValidationPath,
+):
+    cert = path.leaf
+    if not isinstance(cert, x509.Certificate):
+        raise TypeError("Qualification only makes sense for public-key certs")
+
+    status = qualification_result.status
+
+    err_strs = []
+    if not status.qualified:
+        raise QualificationPolicyError(
+            f"Certificate for {cert.subject.human_friendly} is "
+            f"not qualified",
+            ades_subindication=AdESIndeterminate.SIG_CONSTRAINTS_FAILURE,
+        )
+    assert qualification_result.service_definition is not None
+    if requirements.require_service_type is not None:
+        service_type_uri = (
+            qualification_result.service_definition.base_info.service_type
+        )
+        service_type: Union[str, TrustedServiceType]
+        if isinstance(requirements.require_service_type, str):
+            service_type = service_type_uri
+        else:
+            service_type = {
+                CA_QC_URI: TrustedServiceType.CERTIFICATE_AUTHORITY,
+                QTST_URI: TrustedServiceType.TIME_STAMPING_AUTHORITY,
+            }.get(service_type_uri, TrustedServiceType.UNSUPPORTED)
+        if (
+            service_type != requirements.require_service_type
+            or path.pkix_len > 0
+        ):
+            err_strs.append(
+                f"Certificate {cert.subject.human_friendly} "
+                f"is not directly trusted as a service of type "
+                f"{requirements.require_service_type}."
+            )
+    if (
+        requirements.permit_cert_types is not None
+        and status.qc_type not in requirements.permit_cert_types
+    ):
+        err_strs.append(
+            f"Certificate for {cert.subject.human_friendly} is qualified,"
+            f"but the type {status.qc_type.name} is not permitted "
+            f"by the requirements. Must be one of "
+            f"{', '.join(t.name for t in requirements.permit_cert_types)}."
+        )
+    if (
+        requirements.permit_key_mgmt_types is not None
+        and status.qc_key_security not in requirements.permit_key_mgmt_types
+    ):
+        err_strs.append(
+            f"Certificate for {cert.subject.human_friendly} is qualified,"
+            f"but the key management type {status.qc_key_security.name} "
+            f"is not permitted by the requirements. Must be one of "
+            f"{', '.join(t.name for t in requirements.permit_key_mgmt_types)}."
+        )
+
+    if err_strs:
+        raise QualificationPolicyError(
+            "; ".join(err_strs),
+            ades_subindication=AdESIndeterminate.SIG_CONSTRAINTS_FAILURE,
+        )

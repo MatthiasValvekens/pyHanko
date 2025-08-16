@@ -538,6 +538,10 @@ async def cms_basic_validation(
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
     status_kwargs = status_kwargs or {}
+    # qualification checks are not in scope here,
+    # but we need to supply this argument due to limitations on dataclass
+    # default params.
+    status_kwargs['qualification_result'] = None
     status_kwargs['validation_time'] = (
         None if validation_context is None else validation_context.moment
     )

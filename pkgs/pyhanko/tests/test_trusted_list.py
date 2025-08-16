@@ -34,7 +34,7 @@ from pyhanko.sign.validation.qualified.tsp import (
     TSPServiceParsingError,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
-from test_data.samples import CERTOMANCER, TEST_DIR
+from test_data.samples import CERTOMANCER, TEST_DIR, TESTING_CA_QUALIFIED
 from test_utils.signing_commons import ECC_INTERM_CERT, FROM_CA, INTERM_CERT
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
@@ -49,10 +49,6 @@ from pyhanko_certvalidator.policy_decl import (
     CertRevTrustPolicy,
     RevocationCheckingPolicy,
     RevocationCheckingRule,
-)
-
-TESTING_CA_QUALIFIED = CERTOMANCER.get_pki_arch(
-    ArchLabel('testing-ca-qualified')
 )
 
 

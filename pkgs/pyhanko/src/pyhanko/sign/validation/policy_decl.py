@@ -2,13 +2,18 @@ import dataclasses
 import enum
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Generator, List, Optional
+from typing import FrozenSet, Generator, List, Optional, Union
 
 from asn1crypto import x509
 from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
 from pyhanko.sign.validation import KeyUsageConstraints
+from pyhanko.sign.validation.qualified.q_status import (
+    QcPrivateKeyManagementType,
+)
+from pyhanko.sign.validation.qualified.tsp import QcCertType
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
 
+from pyhanko_certvalidator.authority import TrustedServiceType
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
@@ -39,6 +44,7 @@ __all__ = [
     'LocalKnowledge',
     'RevocationInfoGatheringSpec',
     'CMSAlgorithmUsagePolicy',
+    'QualificationRequirements',
     'bootstrap_validation_data_handlers',
 ]
 
@@ -126,6 +132,48 @@ class LocalKnowledge:
 
 
 @dataclass(frozen=True)
+class QualificationRequirements:
+    """
+    Impose qualification requirements on the validation process.
+
+    .. note::
+        This requires a ``TSPTrustManager``.
+    """
+
+    permit_key_mgmt_types: Optional[FrozenSet[QcPrivateKeyManagementType]] = (
+        None
+    )
+    """
+    Set of key management types that is permissible for the validation.
+
+    If ``None``, no restrictions are applied.
+    """
+
+    permit_cert_types: Optional[FrozenSet[QcCertType]] = frozenset(
+        [QcCertType.QC_ESIGN, QcCertType.QC_ESEAL]
+    )
+    """
+    Set of qualified certificate types that is permissible for the validation.
+    By default, eSign certificates and eSeal certificates are permitted.
+
+    If ``None``, no restrictions are applied.
+    """
+
+    require_service_type: Union[TrustedServiceType, str, None] = None
+    """
+    Require the end entity to be directly listed on the trust list
+    as a service of the indicated type, without going through any
+    intermediate certificate authorities.
+
+    You can also specify the required service type as an URI directly.
+
+    .. note::
+        You can use this setting to indicate that timestamps should
+        come from a QTST.
+    """
+
+
+@dataclass(frozen=True)
 class SignatureValidationSpec:
     cert_validation_policy: CertValidationPolicySpec
     revinfo_gathering_policy: RevocationInfoGatheringSpec = (
@@ -136,6 +184,8 @@ class SignatureValidationSpec:
     local_knowledge: LocalKnowledge = LocalKnowledge()
     key_usage_settings: KeyUsageConstraints = KeyUsageConstraints()
     signature_algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None
+    qualification_requirements: Optional[QualificationRequirements] = None
+    ts_qualification_requirements: Optional[QualificationRequirements] = None
 
 
 @dataclass(frozen=True)

@@ -34,6 +34,7 @@ from ..diff_analysis import (
     SuspiciousModification,
 )
 from .errors import SignatureValidationError, SigSeedValueValidationError
+from .qualified.q_status import QualificationResult
 from .settings import KeyUsageConstraints
 
 __all__ = [
@@ -163,6 +164,18 @@ class SignatureStatus:
     validation_time: Optional[datetime]
     """
     Reference time for validation purposes.
+    """
+
+    qualification_result: Optional[QualificationResult]
+    """
+    Result of the qualification check for the signing certificate,
+    if applicable.
+
+    .. note::
+        This only applies to validation processes that use a trust
+        manager based on an ETSI TS 119 612 trusted list.
+
+        See :class:`~pyhanko.sign.validation.qualified.tsp.TSPTrustManager`.
     """
 
     def summary_fields(self):

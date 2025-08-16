@@ -18,12 +18,6 @@ from pyhanko_certvalidator.errors import InvalidCertificateError
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.registry import TrustManager
 
-# noinspection HttpUrlsUsage
-_TRSTSVC_URI_BASE = 'http://uri.etsi.org/TrstSvc'
-CA_QC_URI = f'{_TRSTSVC_URI_BASE}/Svctype/CA/QC'
-QTST_URI = f'{_TRSTSVC_URI_BASE}/Svctype/TSA/QTST'
-_TRUSTEDLIST_URI_BASE = f'{_TRSTSVC_URI_BASE}/TrustedList'
-
 __all__ = [
     'QualifiedServiceInformation',
     'CAServiceInformation',
@@ -43,7 +37,15 @@ __all__ = [
     'CriteriaList',
     'Qualification',
     'TSPServiceParsingError',
+    'CA_QC_URI',
+    'QTST_URI',
 ]
+
+# noinspection HttpUrlsUsage
+_TRSTSVC_URI_BASE = 'http://uri.etsi.org/TrstSvc'
+CA_QC_URI = f'{_TRSTSVC_URI_BASE}/Svctype/CA/QC'
+QTST_URI = f'{_TRSTSVC_URI_BASE}/Svctype/TSA/QTST'
+_TRUSTEDLIST_URI_BASE = f'{_TRSTSVC_URI_BASE}/TrustedList'
 
 
 class TSPServiceParsingError(ValueError):
@@ -254,9 +256,6 @@ class TSPTrustManager(TrustManager):
             )
         except StopIteration:
             return None
-        # FIXME: other qualifiers!
-        #  - qualifiers in the TL expressed as PKIX constraints where possible
-
         service_type = {
             CA_QC_URI: TrustedServiceType.CERTIFICATE_AUTHORITY,
             QTST_URI: TrustedServiceType.TIME_STAMPING_AUTHORITY,

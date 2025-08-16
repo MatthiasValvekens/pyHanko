@@ -111,10 +111,11 @@ async def past_validate(
         valid.
     """
 
-    await _past_validate_precheck(
-        path,
-        validation_policy_spec,
-    )
+    if path.pkix_len > 0:
+        await _past_validate_precheck(
+            path,
+            validation_policy_spec,
+        )
 
     try:
         # time slide

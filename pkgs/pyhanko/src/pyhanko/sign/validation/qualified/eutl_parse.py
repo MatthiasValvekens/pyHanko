@@ -572,27 +572,33 @@ def trust_list_to_registry_unsafe(
             return registry, e.value
 
 
-def _validate_and_extract_tl_data(
-    tl_xml: str, tlso_cert: x509.Certificate
-) -> str:
+def _verify_xml(tl_xml: str, tlso_cert: x509.Certificate):
+    tl_xml_bytes = tl_xml.encode('utf8')
     verifier = XAdESVerifier()
+    cert_obj = load_der_x509_certificate(tlso_cert.dump())
+    config = XAdESSignatureConfiguration(
+        require_x509=True,
+        # HACK: work around https://github.com/XML-Security/signxml/issues/278
+        expect_references=2.0,  # type: ignore
+    )
     try:
         verify_results = verifier.verify(
-            tl_xml.encode('utf8'),
-            x509_cert=load_der_x509_certificate(tlso_cert.dump()),
-            expect_config=XAdESSignatureConfiguration(
-                require_x509=True,
-                # TODO is this always correct? Either way, the signxml library forces
-                #  us to specify a number here
-                #  (the arbitrary match code path seems broken for XAdES)
-                expect_references=2,
-            ),
+            tl_xml_bytes,
+            x509_cert=cert_obj,
+            expect_config=config,
         )
     except InvalidXmlSignature as e:
         raise SignatureValidationError(
             f"Invalid XML signature on trusted list: {e}",
             ades_subindication=AdESIndeterminate.GENERIC,
         ) from e
+    return verify_results
+
+
+def _validate_and_extract_tl_data(
+    tl_xml: str, tlso_cert: x509.Certificate
+) -> str:
+    verify_results = _verify_xml(tl_xml, tlso_cert)
     tl_signed_xml = None
     for result in verify_results:
         if result.signed_xml is None:

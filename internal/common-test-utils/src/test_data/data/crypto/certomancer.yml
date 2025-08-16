@@ -603,12 +603,41 @@ pki-architectures:
           signing-key: tsa
           signing-cert: tsa
   testing-ca-qualified:
-    template: testing-ca
     keyset: testing-ca-ecdsa
+    entities:
+      root:
+        common-name: Qualified Root CA
+      interm:
+        common-name: Qualified Intermediate CA
+      tsa:
+        common-name: Qualified Time Stamping Authority
+      interm-ocsp:
+        common-name: OCSP responder
+      signer1:
+        common-name: Alice
+        email-address: alice@example.com
+      signer2:
+        common-name: Bob
+        email-address: bob@example.com
     certs:
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        profiles:
+          - id: simple-ca
+            params:
+              crl-repo: root
       interm-qualified:
-        template: interm
+        issuer: root
         subject: interm
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
         extensions:
           - id: certificate_policies
             value:
@@ -616,8 +645,23 @@ pki-architectures:
               - policy_identifier: '2.999.31337.1'
               - policy_identifier: '0.4.0.1456.1.1'
               - policy_identifier: '0.4.0.1456.1.2'
+        profiles:
+          - id: simple-ca
+            params:
+              max-path-len: 0
+              crl-repo: interm-qualified
+              ocsp-service: interm-qualified
+      signer-base:
+        subject: signer1
+        issuer: interm
+        issuer-cert: interm-qualified
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        profiles:
+          - digsig-commitment
       esig-qualified:
-        template: signer1
+        template: signer-base
         subject: signer1
         issuer-cert: interm-qualified
         extensions:
@@ -631,7 +675,7 @@ pki-architectures:
               - statement_id: 'qc_cc_legislation'
                 statement_info: ['be']
       eseal-qualified:
-        template: signer1
+        template: signer-base
         subject: signer1
         issuer-cert: interm-qualified
         extensions:
@@ -646,8 +690,49 @@ pki-architectures:
                 statement_info: ['qct_eseal']
               - statement_id: 'qc_cc_legislation'
                 statement_info: ['be']
+      tsa-not-qualified:
+        issuer: root
+        subject: tsa
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature]
+          - id: extended_key_usage
+            critical: true
+            value: [time_stamping]
+      tsa-qualified:
+        issuer: root
+        subject: tsa
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature]
+          - id: extended_key_usage
+            critical: true
+            value: [time_stamping]
+          - id: certificate_policies
+            value:
+              - policy_identifier: '2.999.31337.7'
+          - id: qc_statements
+            value:
+              - statement_id: 'qc_compliance'
+              - statement_id: 'qc_sscd'
+              - statement_id: 'qc_type'
+                statement_info: ['qct_eseal']
+              - statement_id: 'qc_cc_legislation'
+                statement_info: ['be']
       esig-qualified-no-qscd:
-        template: signer1
+        template: signer-base
         subject: signer1
         issuer-cert: interm-qualified
         extensions:
@@ -660,7 +745,7 @@ pki-architectures:
               - statement_id: 'qc_cc_legislation'
                 statement_info: ['be']
       not-qualified:
-        template: signer1
+        template: signer-base
         subject: signer1
         issuer-cert: interm-qualified
         extensions:
@@ -668,7 +753,7 @@ pki-architectures:
             value:
               - policy_identifier: '2.999.31337.0'
       not-qualified-nonsense-qcsd:
-        template: signer1
+        template: signer-base
         subject: signer1
         issuer-cert: interm-qualified
         extensions:
@@ -679,7 +764,7 @@ pki-architectures:
             value:
               - statement_id: 'qc_sscd'
       esig-qualified-legacy-policy:
-        template: signer1
+        template: signer-base
         subject: signer1
         issuer-cert: interm-qualified
         validity:
@@ -690,7 +775,7 @@ pki-architectures:
             value:
               - policy_identifier: '0.4.0.1456.1.1'
       esig-qualified-legacy-policy-qscd:
-        template: signer1
+        template: signer-base
         subject: signer1
         issuer-cert: interm-qualified
         validity:
@@ -701,7 +786,7 @@ pki-architectures:
             value:
               - policy_identifier: '0.4.0.1456.1.2'
       not-qualified-legacy:
-        template: signer1
+        template: signer-base
         subject: signer1
         issuer-cert: interm-qualified
         validity:
@@ -711,3 +796,36 @@ pki-architectures:
           - id: certificate_policies
             value:
               - policy_identifier: '2.999.31337.0'
+      interm-qualified-ocsp:
+        subject: interm-ocsp
+        issuer: interm
+        issuer-cert: interm-qualified
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        profiles:
+          - ocsp-responder
+    services:
+      time-stamping:
+        tsa-qualified:
+          signing-key: tsa
+          signing-cert: tsa-qualified
+        tsa-not-qualified:
+          signing-key: tsa
+          signing-cert: tsa-not-qualified
+      crl-repo:
+        root:
+          for-issuer: root
+          signing-key: root
+          simulated-update-schedule: "P90D"
+        interm-qualified:
+          for-issuer: interm
+          issuer-cert: interm-qualified
+          signing-key: interm
+          simulated-update-schedule: "P30D"
+      ocsp:
+        interm-qualified:
+          for-issuer: interm
+          issuer-cert: interm-qualified
+          responder-cert: interm-qualified-ocsp
+          signing-key: interm-ocsp

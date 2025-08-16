@@ -37,7 +37,11 @@ class SignatureValidationError(ValueErrorWithMessage):
     def __init__(
         self, failure_message, ades_subindication: Optional[AdESSubIndic] = None
     ):
-        self.ades_subindication = ades_subindication
+        self.ades_subindication = (
+            ades_subindication
+            if ades_subindication is not None
+            else AdESIndeterminate.GENERIC
+        )
         if ades_subindication:
             msg = "%s [%s]" % (failure_message, ades_subindication)
         else:
