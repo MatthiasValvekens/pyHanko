@@ -53,10 +53,17 @@ UNQUALIFIED = QualifiedStatus(
 
 
 class QualificationPolicyError(SignatureValidationError):
+    """Error triggered by a qualification policy violation."""
+
     pass
 
 
 class QualificationAssessor:
+    """
+    Assesses the qualification status of certificates against a particular
+    :class:`.TSPRegistry`.
+    """
+
     def __init__(self, tsp_registry: TSPRegistry):
         self._registry = tsp_registry
 
@@ -89,7 +96,7 @@ class QualificationAssessor:
             qualified=qualified,
             qc_type=qc_type,
             qc_key_security=(
-                QcPrivateKeyManagementType.QCSD
+                QcPrivateKeyManagementType.QSCD
                 if key_secure and qualified
                 else QcPrivateKeyManagementType.UNKNOWN
             ),
@@ -160,12 +167,12 @@ class QualificationAssessor:
         ):
             key_mgmt = QcPrivateKeyManagementType.UNKNOWN
         elif Qualifier.QSCD_MANAGED_ON_BEHALF in applicable_qualifiers:
-            key_mgmt = QcPrivateKeyManagementType.QCSD_DELEGATED
+            key_mgmt = QcPrivateKeyManagementType.QSCD_DELEGATED
         elif (
             Qualifier.WITH_SSCD in applicable_qualifiers
             or Qualifier.WITH_QSCD in applicable_qualifiers
         ):
-            key_mgmt = QcPrivateKeyManagementType.QCSD
+            key_mgmt = QcPrivateKeyManagementType.QSCD
         else:
             key_mgmt = prelim_status.qc_key_security
         return QualifiedStatus(
@@ -177,6 +184,19 @@ class QualificationAssessor:
     def check_entity_cert_qualified(
         self, path: ValidationPath, moment: Optional[datetime] = None
     ) -> QualificationResult:
+        """
+        Evaluate the qualified status of a certificate (given a specific
+        validation path).
+
+        :param path:
+            Validation path to scrutinise.
+        :param moment:
+            Evaluate the status against the service definitions valid
+            at the time specified. If ``None``, take the latest
+            available service definitions.
+        :return:
+            A :class:`.QualificationResult` instance.
+        """
         cert = path.leaf
         if not isinstance(cert, x509.Certificate):
             raise NotImplementedError(
@@ -193,8 +213,8 @@ class QualificationAssessor:
                     prelim_status,
                     qualified=True,
                     qc_key_security=(
-                        QcPrivateKeyManagementType.QCSD_BY_POLICY
-                        if not prelim_status.qc_key_security.is_qcsd
+                        QcPrivateKeyManagementType.QSCD_BY_POLICY
+                        if not prelim_status.qc_key_security.is_qscd
                         else prelim_status.qc_key_security
                     ),
                 )
@@ -256,6 +276,11 @@ def enforce_requirements(
     qualification_result: QualificationResult,
     path: ValidationPath,
 ):
+    """
+    Internal method to enforce the requirements of a qualification policy
+    during validation.
+    """
+
     cert = path.leaf
     if not isinstance(cert, x509.Certificate):
         raise TypeError("Qualification only makes sense for public-key certs")

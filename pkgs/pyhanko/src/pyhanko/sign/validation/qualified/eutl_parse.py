@@ -67,9 +67,13 @@ from xsdata.formats.dataclass.parsers.handlers import LxmlEventHandler
 from xsdata.formats.dataclass.parsers.handlers.lxml import EVENTS
 
 __all__ = [
-    'read_qualified_service_definitions',
     'trust_list_to_registry',
     'trust_list_to_registry_unsafe',
+    'validate_and_parse_lotl',
+    'parse_lotl_unsafe',
+    'latest_known_lotl_tlso_certs',
+    'ojeu_bootstrap_lotl_tlso_certs',
+    'read_qualified_service_definitions',
 ]
 
 logger = logging.getLogger(__name__)

@@ -30,7 +30,7 @@ pyhanko.pdf\_utils.crypt.filter\_mixins module
    :show-inheritance:
 
 pyhanko.pdf\_utils.crypt.permissions module
------------------------------------
+-------------------------------------------
 
 .. automodule:: pyhanko.pdf_utils.crypt.permissions
    :members:

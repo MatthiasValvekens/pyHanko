@@ -251,7 +251,7 @@ async def test_pades_basic_happy_path_with_tl(requests_mock, with_requirements):
             CertLabel('esig-qualified-no-qscd'),
             QualificationRequirements(
                 permit_key_mgmt_types=frozenset(
-                    [QcPrivateKeyManagementType.QCSD]
+                    [QcPrivateKeyManagementType.QSCD]
                 )
             ),
         ),

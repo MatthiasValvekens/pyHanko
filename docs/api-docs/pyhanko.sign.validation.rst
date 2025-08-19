@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
    :maxdepth: 2
 
+   pyhanko.sign.validation.qualified
    pyhanko.sign.validation.report
 
 

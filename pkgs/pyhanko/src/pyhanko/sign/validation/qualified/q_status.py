@@ -15,13 +15,34 @@ __all__ = [
 
 
 class QcPrivateKeyManagementType(enum.Enum):
+    """
+    Description of the private key management methodology.
+    """
+
     UNKNOWN = 0
-    QCSD = 1
-    QCSD_DELEGATED = 2
-    QCSD_BY_POLICY = 3
+    """
+    Private key management methodology unknown/unspecified.
+    """
+
+    QSCD = 1
+    """
+    Declaration indicating that the private key resides in a qualified
+    signature creation device (QSCD).
+    """
+
+    QSCD_DELEGATED = 2
+    """
+    Declaration indicating that the private key resides in a QSCD managed
+    on behalf of the subject by another party.
+    """
+
+    QSCD_BY_POLICY = 3
+    """
+    QSCD declaration by pre-eIDAS certificate policy.
+    """
 
     @property
-    def is_qcsd(self) -> bool:
+    def is_qscd(self) -> bool:
         return self != QcPrivateKeyManagementType.UNKNOWN
 
 

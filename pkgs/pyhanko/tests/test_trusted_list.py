@@ -915,7 +915,7 @@ def test_tsp_registry_multiple_sds():
             q_status.QualifiedStatus(
                 qualified=True,
                 qc_type=tsp.QcCertType.QC_ESIGN,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
         ),
         (
@@ -923,7 +923,7 @@ def test_tsp_registry_multiple_sds():
             q_status.QualifiedStatus(
                 qualified=True,
                 qc_type=tsp.QcCertType.QC_ESEAL,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
         ),
         (
@@ -951,7 +951,7 @@ def test_qcstatements_processing(cert_id, expected_prelim_status):
             q_status.QualifiedStatus(
                 qualified=True,
                 qc_type=tsp.QcCertType.QC_ESIGN,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
             [tsp.Qualifier.NOT_QUALIFIED],
             {
@@ -963,19 +963,19 @@ def test_qcstatements_processing(cert_id, expected_prelim_status):
             q_status.QualifiedStatus(
                 qualified=False,
                 qc_type=tsp.QcCertType.QC_ESIGN,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
             [tsp.Qualifier.QC_STATEMENT],
             {
                 'qualified': True,
-                'qc_key_security': q_status.QcPrivateKeyManagementType.QCSD,
+                'qc_key_security': q_status.QcPrivateKeyManagementType.QSCD,
             },
         ),
         (
             q_status.QualifiedStatus(
                 qualified=False,
                 qc_type=tsp.QcCertType.QC_ESIGN,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
             [tsp.Qualifier.WITH_QSCD],
             {
@@ -992,7 +992,7 @@ def test_qcstatements_processing(cert_id, expected_prelim_status):
             [tsp.Qualifier.WITH_QSCD],
             {
                 'qualified': True,
-                'qc_key_security': q_status.QcPrivateKeyManagementType.QCSD,
+                'qc_key_security': q_status.QcPrivateKeyManagementType.QSCD,
             },
         ),
         (
@@ -1004,7 +1004,7 @@ def test_qcstatements_processing(cert_id, expected_prelim_status):
             [tsp.Qualifier.WITH_SSCD],
             {
                 'qualified': True,
-                'qc_key_security': q_status.QcPrivateKeyManagementType.QCSD,
+                'qc_key_security': q_status.QcPrivateKeyManagementType.QSCD,
             },
         ),
         (
@@ -1047,12 +1047,12 @@ def test_qcstatements_processing(cert_id, expected_prelim_status):
             q_status.QualifiedStatus(
                 qualified=True,
                 qc_type=tsp.QcCertType.QC_ESEAL,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
             [tsp.Qualifier.QSCD_MANAGED_ON_BEHALF],
             {
                 'qc_key_security': (
-                    q_status.QcPrivateKeyManagementType.QCSD_DELEGATED
+                    q_status.QcPrivateKeyManagementType.QSCD_DELEGATED
                 )
             },
         ),
@@ -1060,7 +1060,7 @@ def test_qcstatements_processing(cert_id, expected_prelim_status):
             q_status.QualifiedStatus(
                 qualified=True,
                 qc_type=tsp.QcCertType.QC_ESIGN,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
             [tsp.Qualifier.NO_QSCD],
             {
@@ -1072,7 +1072,7 @@ def test_qcstatements_processing(cert_id, expected_prelim_status):
             q_status.QualifiedStatus(
                 qualified=True,
                 qc_type=tsp.QcCertType.QC_ESIGN,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
             [tsp.Qualifier.NO_SSCD],
             {
@@ -1084,12 +1084,12 @@ def test_qcstatements_processing(cert_id, expected_prelim_status):
             q_status.QualifiedStatus(
                 qualified=True,
                 qc_type=tsp.QcCertType.QC_ESIGN,
-                qc_key_security=q_status.QcPrivateKeyManagementType.QCSD,
+                qc_key_security=q_status.QcPrivateKeyManagementType.QSCD,
             ),
             [tsp.Qualifier.QSCD_AS_IN_CERT],
             {
                 'qualified': True,
-                'qc_key_security': q_status.QcPrivateKeyManagementType.QCSD,
+                'qc_key_security': q_status.QcPrivateKeyManagementType.QSCD,
             },
         ),
     ],
@@ -1275,7 +1275,7 @@ async def test_conclude_qualified_qcsd(cert_name, sd):
     assessor = assess.QualificationAssessor(tsp_registry=registry)
     status = assessor.check_entity_cert_qualified(path).status
     assert status.qualified
-    assert status.qc_key_security == q_status.QcPrivateKeyManagementType.QCSD
+    assert status.qc_key_security == q_status.QcPrivateKeyManagementType.QSCD
 
 
 @pytest.mark.asyncio
@@ -1310,7 +1310,7 @@ async def test_conclude_qualified_pre_eidas(cert_name, expect_qscd):
     if expect_qscd:
         assert (
             status.qc_key_security
-            == q_status.QcPrivateKeyManagementType.QCSD_BY_POLICY
+            == q_status.QcPrivateKeyManagementType.QSCD_BY_POLICY
         )
     else:
         assert (
@@ -1656,7 +1656,7 @@ async def test_validate_real_qcert_no_revo():
     assert result.status.qc_type == QcCertType.QC_ESIGN
     assert (
         result.status.qc_key_security
-        == q_status.QcPrivateKeyManagementType.QCSD
+        == q_status.QcPrivateKeyManagementType.QSCD
     )
 
 
