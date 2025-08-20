@@ -582,8 +582,7 @@ def _verify_xml(tl_xml: str, tlso_cert: x509.Certificate):
     cert_obj = load_der_x509_certificate(tlso_cert.dump())
     config = XAdESSignatureConfiguration(
         require_x509=True,
-        # HACK: work around https://github.com/XML-Security/signxml/issues/278
-        expect_references=2.0,  # type: ignore
+        expect_references=True,
     )
     try:
         verify_results = verifier.verify(
