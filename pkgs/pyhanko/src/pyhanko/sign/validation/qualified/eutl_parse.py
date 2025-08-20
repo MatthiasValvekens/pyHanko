@@ -2,7 +2,7 @@ import itertools
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from importlib import resources
 from typing import (
     Any,
     FrozenSet,
@@ -33,7 +33,7 @@ from pyhanko.generated.etsi import (
     ts_119612_sie,
     xades,
 )
-from pyhanko.keys import load_certs_from_pemder
+from pyhanko.keys import load_certs_from_pemder_data
 from pyhanko.sign.ades.report import AdESFailure, AdESIndeterminate
 from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.sign.validation.qualified.tsp import (
@@ -773,14 +773,27 @@ def parse_lotl_unsafe(
     )
 
 
-def latest_known_lotl_tlso_certs():
-    return load_certs_from_pemder([Path(__file__).parent / 'lotl-certs.pem'])
+def _lotl_certs_file(fname: str) -> List[x509.Certificate]:
+    pkg_files = resources.files("pyhanko.sign.validation.qualified")
+    data = pkg_files.joinpath("lotl-certs", fname).read_bytes()
+    return list(load_certs_from_pemder_data(data))
 
 
-def ojeu_bootstrap_lotl_tlso_certs():
-    return load_certs_from_pemder(
-        [Path(__file__).parent / 'lotl-bootstrap-certs.pem']
-    )
+def latest_known_lotl_tlso_certs() -> List[x509.Certificate]:
+    """
+    Retrieve the lastest known (at the time of the most recent pyHanko release)
+    list of LOTL signer certs.
+    """
+    return _lotl_certs_file("latest.cert.pem")
+
+
+def ojeu_bootstrap_lotl_tlso_certs() -> List[x509.Certificate]:
+    """
+    Retrieve the list of certificates published
+    in `OJ C 276, 16.8.2019 <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG>`_,
+    which is bundled with this library.
+    """
+    return _lotl_certs_file("bootstrap.cert.pem")
 
 
 # TODO check validity time windows

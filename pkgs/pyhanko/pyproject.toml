@@ -99,6 +99,7 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.package-data]
 pyhanko = ["py.typed"]
+"pyhanko.sign.validation.qualified" = ["lotl-certs/*.cert.pem"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
