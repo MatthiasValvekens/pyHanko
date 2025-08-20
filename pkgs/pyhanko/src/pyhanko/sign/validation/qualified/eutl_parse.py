@@ -525,6 +525,11 @@ def _raw_tl_parse(tl_xml: str) -> ts_119612.TrustServiceStatusList:
 def read_qualified_service_definitions(
     tl_xml: str,
 ) -> Generator[QualifiedServiceInformation, None, List[TSPServiceParsingError]]:
+    """
+    Internal function to read qualified service definitions from a trusted list
+    payload (does not include signature validation).
+    """
+
     parse_result = _raw_tl_parse(tl_xml)
     tspl = parse_result.trust_service_provider_list
     errors_encountered = []
@@ -703,10 +708,30 @@ def _parse_tsl_info(pointer: OtherTSLPointer):
 
 @dataclass(frozen=True)
 class TLReference:
+    """
+    Reference to a trusted list.
+    """
+
     location_uri: str
+    """
+    URI where the trusted list can be found.
+    """
+
     territory: str
+    """
+    Territory with which the references trusted list is assocated.
+    """
+
     tlso_certs: List[x509.Certificate]
+    """
+    Certificates that can be used to validate the signature
+    on the referenced trusted list.
+    """
+
     scheme_rules: FrozenSet[str]
+    """
+    URIs for scheme rules that apply to the referenced trusted list.
+    """
 
 
 @dataclass(frozen=True)
@@ -719,6 +744,18 @@ class LOTLParseResult:
 def parse_lotl_unsafe(
     lotl_xml: str,
 ) -> LOTLParseResult:
+    """
+    Parse a list-of-the-lists (LOTL).
+
+    .. warning::
+        This function does not include validating
+        the signature on the LOTL.
+
+    :param lotl_xml:
+        XML LOTL payload
+    :return:
+        A parse result.
+    """
     parse_result = _raw_tl_parse(lotl_xml)
 
     scheme_info = _required(
@@ -802,6 +839,21 @@ def ojeu_bootstrap_lotl_tlso_certs() -> List[x509.Certificate]:
 def validate_and_parse_lotl(
     lotl_xml: str, lotl_tlso_certs: Optional[List[x509.Certificate]] = None
 ) -> LOTLParseResult:
+    """
+    Validate and parse a list-of-the-lists (LOTL).
+
+    :param lotl_xml:
+        XML LOTL payload
+    :param lotl_tlso_certs:
+        List of certificates that can be used to validate the list-of-the-lists.
+        If not specified, the list-of-the-lists will be validated against the
+        last known set of list-of-the-lists signer certs bundled with this
+        library.
+
+        See :func:`validate_and_parse_lotl`.
+    :return:
+        A parse result.
+    """
 
     if not lotl_tlso_certs:
         lotl_tlso_certs = latest_known_lotl_tlso_certs()

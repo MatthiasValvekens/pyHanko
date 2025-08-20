@@ -197,7 +197,8 @@ async def lotl_to_registry(
         last known set of list-of-the-lists signer certs bundled with this
         library.
 
-        See :func:`bootstrap_lotl_signers`.
+        See :func:`bootstrap_lotl_signers` and
+        :func:`~.eutl_parse.validate_and_parse_lotl`.
     :param cache:
         An optional :class:`TLCache` to be used while fetching trust lists.
     :param registry:
