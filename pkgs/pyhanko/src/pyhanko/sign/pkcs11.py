@@ -15,6 +15,7 @@ import pkcs11
 from asn1crypto import algos, core, x509
 from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
+
 from pyhanko.config.pkcs11 import (
     PKCS11PinEntryMode,
     PKCS11SignatureConfig,
@@ -23,7 +24,6 @@ from pyhanko.config.pkcs11 import (
 from pyhanko.pdf_utils.misc import coalesce
 from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 from pyhanko.sign.signers import Signer
-
 from pyhanko_certvalidator.registry import CertificateStore
 
 try:

@@ -12,6 +12,7 @@ from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, ServiceLabel
 from click.testing import CliRunner
 from freezegun import freeze_time
+
 from pyhanko.pdf_utils.misc import PdfStrictReadError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import (
@@ -19,6 +20,7 @@ from pyhanko.sign.validation import (
     validate_pdf_ltv_signature,
     validate_pdf_signature,
 )
+from pyhanko_certvalidator import ValidationContext
 from test_data.samples import (
     MINIMAL,
     TESTING_CA,
@@ -26,8 +28,6 @@ from test_data.samples import (
     TESTING_CA_ED448,
     TESTING_CA_ED25519,
 )
-
-from pyhanko_certvalidator import ValidationContext
 
 INPUT_PATH = 'input.pdf'
 SIGNED_OUTPUT_PATH = 'output.pdf'

@@ -7,6 +7,7 @@ from typing import Optional
 
 import tzlocal
 from asn1crypto import cms
+
 from pyhanko.pdf_utils import embed
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.fields import SigFieldSpec

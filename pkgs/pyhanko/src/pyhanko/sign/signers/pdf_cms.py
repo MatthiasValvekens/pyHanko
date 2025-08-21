@@ -27,6 +27,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
+
 from pyhanko.pdf_utils import misc
 from pyhanko.sign import attributes
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
@@ -44,7 +45,6 @@ from pyhanko.sign.general import (
     simple_cms_attribute,
 )
 from pyhanko.sign.timestamps import TimeStamper
-
 from pyhanko_certvalidator.registry import (
     CertificateStore,
     SimpleCertificateStore,

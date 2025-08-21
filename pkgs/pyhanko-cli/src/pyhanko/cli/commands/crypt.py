@@ -4,6 +4,7 @@ import click
 from pyhanko.cli._root import cli_root
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import _warn_empty_passphrase, readable_file
+
 from pyhanko.keys import load_certs_from_pemder
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.crypt import StandardSecurityHandler

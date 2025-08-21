@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import FrozenSet, Iterable, List, Optional, Set, Tuple, Union
 
 from asn1crypto import x509
+
 from pyhanko.sign.ades import qualified_asn1
 from pyhanko.sign.ades.report import AdESIndeterminate
 from pyhanko.sign.validation.errors import SignatureValidationError
@@ -24,7 +25,6 @@ from pyhanko.sign.validation.qualified.tsp import (
     Qualifier,
     TSPRegistry,
 )
-
 from pyhanko_certvalidator.authority import TrustedServiceType
 from pyhanko_certvalidator.path import ValidationPath
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, List, Optional, Set, Union
 
 from asn1crypto import algos, x509
+
 from pyhanko.config import api
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder

@@ -7,8 +7,9 @@ from io import BytesIO
 from itertools import product
 from typing import Tuple
 
-import pyhanko.pdf_utils.extensions
 import pytest
+
+import pyhanko.pdf_utils.extensions
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.content import (
     PdfResources,

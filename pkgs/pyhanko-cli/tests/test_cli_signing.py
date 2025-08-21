@@ -9,9 +9,11 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from cryptography.hazmat.primitives import serialization
 from pyhanko.cli import cli_root
+
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import async_validate_detached_cms
+from pyhanko_certvalidator import ValidationContext
 from test_data.samples import (
     MINIMAL_AES256,
     MINIMAL_HYBRID,
@@ -20,8 +22,6 @@ from test_data.samples import (
     MINIMAL_SLIGHTLY_BROKEN,
     TESTING_CA,
 )
-
-from pyhanko_certvalidator import ValidationContext
 
 from .conftest import (
     DUMMY_PASSPHRASE,

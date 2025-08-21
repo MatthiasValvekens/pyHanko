@@ -3,18 +3,19 @@ from certomancer import PKIArchitecture
 from certomancer.registry import EntityLabel
 from cryptography.hazmat.primitives import serialization
 from lxml.etree import fromstring, tostring
+from signxml import SignatureMethod
+from signxml.xades import XAdESSigner
+from xsdata.formats.dataclass.serializers import XmlSerializer
+from xsdata.formats.dataclass.serializers.config import SerializerConfig
+from xsdata.models.datatype import XmlDateTime
+
 from pyhanko.generated.etsi import ts_119612
 from pyhanko.sign.validation.qualified import eutl_parse
 from pyhanko.sign.validation.qualified.eutl_parse import STATUS_GRANTED
 from pyhanko.sign.validation.qualified.tsp import CA_QC_URI, QTST_URI
 from pyhanko.sign.validation.report.tools import NAMESPACES
-from signxml import SignatureMethod
-from signxml.xades import XAdESSigner
 from test_data.samples import TESTING_CA
 from test_utils.signing_commons import FROM_CA
-from xsdata.formats.dataclass.serializers import XmlSerializer
-from xsdata.formats.dataclass.serializers.config import SerializerConfig
-from xsdata.models.datatype import XmlDateTime
 
 
 def _certomancer_pki_as_service_definitions(pki_arch: PKIArchitecture):

@@ -280,6 +280,7 @@ class QRStamp(TextStamp):
 
     def _qr_xobject(self):
         import qrcode
+
         from pyhanko.pdf_utils.qr import PdfFancyQRImage, PdfStreamQRImage
 
         is_fancy = self.style.qr_inner_content is not None

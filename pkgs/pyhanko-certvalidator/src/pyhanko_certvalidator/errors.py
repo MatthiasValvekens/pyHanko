@@ -4,6 +4,7 @@ from typing import List, Optional, Type, TypeVar
 
 from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
+
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.path import ValidationPath
 

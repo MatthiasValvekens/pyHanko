@@ -20,6 +20,13 @@ from asn1crypto import x509
 from cryptography.x509 import load_der_x509_certificate
 from lxml import etree
 from lxml.etree import QName
+from signxml.exceptions import SignXMLException as InvalidXmlSignature
+from signxml.xades import XAdESSignatureConfiguration, XAdESVerifier
+from xsdata.formats.dataclass.parsers import XmlParser
+from xsdata.formats.dataclass.parsers.config import ParserConfig
+from xsdata.formats.dataclass.parsers.handlers import LxmlEventHandler
+from xsdata.formats.dataclass.parsers.handlers.lxml import EVENTS
+
 from pyhanko.generated.etsi import (
     MimeType,
     OtherTSLPointer,
@@ -59,12 +66,6 @@ from pyhanko.sign.validation.qualified.tsp import (
     TSPServiceParsingError,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
-from signxml.exceptions import SignXMLException as InvalidXmlSignature
-from signxml.xades import XAdESSignatureConfiguration, XAdESVerifier
-from xsdata.formats.dataclass.parsers import XmlParser
-from xsdata.formats.dataclass.parsers.config import ParserConfig
-from xsdata.formats.dataclass.parsers.handlers import LxmlEventHandler
-from xsdata.formats.dataclass.parsers.handlers.lxml import EVENTS
 
 __all__ = [
     'trust_list_to_registry',

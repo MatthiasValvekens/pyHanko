@@ -1,6 +1,7 @@
 import pytest
 from click import __version__ as click_version
 from pyhanko.cli import cli_root
+
 from test_data.samples import MINIMAL_AES256, MINIMAL_SLIGHTLY_BROKEN
 
 from .conftest import INPUT_PATH, _write_config

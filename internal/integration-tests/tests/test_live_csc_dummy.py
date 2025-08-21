@@ -3,6 +3,7 @@ import logging
 import os
 
 import pytest
+
 from pyhanko.pdf_utils.reader import PdfFileReader
 from test_utils.csc_utils.csc_dummy_client import CSCDummy
 from test_utils.signing_commons import async_val_trusted

@@ -11,6 +11,7 @@ from pyhanko.cli.plugin_api import (
 )
 from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE, logging_setup
 from pyhanko.cli.version import __version__ as cli_version
+
 from pyhanko.config.logging import LogConfig, parse_logging_config
 from pyhanko.version import __version__ as lib_version
 

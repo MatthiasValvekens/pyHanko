@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 from asn1crypto import cms, crl, x509
 from asn1crypto.crl import CRLEntryExtensionId
 from cryptography.exceptions import InvalidSignature
+
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.authority import Authority, AuthorityWithCert
 from pyhanko_certvalidator.context import ValidationContext

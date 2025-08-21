@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 import tzlocal
+
 from pyhanko.pdf_utils import layout
 from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.text import DEFAULT_BOX_LAYOUT, TextBox, TextBoxStyle

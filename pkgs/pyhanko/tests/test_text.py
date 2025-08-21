@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pytest
+
 from pyhanko.pdf_utils import generic, text
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulator
 from pyhanko.pdf_utils.generic import pdf_name

@@ -3,14 +3,15 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Iterable, Optional, Union
 
-import pyhanko.config.pkcs11
 import pytest
 import yaml
 from asn1crypto import x509
-from pyhanko import stamp
 from pyhanko.cli import config
 from pyhanko.cli.commands.signing.pkcs11_cli import ModuleConfigWrapper
 from pyhanko.cli.commands.signing.simple import KeyFileConfigWrapper
+
+import pyhanko.config.pkcs11
+from pyhanko import stamp
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import DEFAULT_ROOT_LOGGER_LEVEL, StdLogOutput

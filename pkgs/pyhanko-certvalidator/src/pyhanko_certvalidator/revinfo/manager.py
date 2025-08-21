@@ -11,6 +11,7 @@ from typing import (
 )
 
 from asn1crypto import crl, ocsp, x509
+
 from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.errors import CRLFetchError, OCSPFetchError
 from pyhanko_certvalidator.fetchers import Fetchers

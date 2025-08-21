@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Iterable, List, Optional, TypeVar, Union
 
 from asn1crypto import algos, crl, ocsp
+
 from pyhanko_certvalidator.ltv.types import (
     IssuedItemContainer,
     ValidationTimingParams,

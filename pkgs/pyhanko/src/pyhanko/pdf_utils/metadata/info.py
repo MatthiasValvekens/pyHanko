@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Union
 
 import tzlocal
+
 from pyhanko.pdf_utils import generic, misc
 
 from . import model

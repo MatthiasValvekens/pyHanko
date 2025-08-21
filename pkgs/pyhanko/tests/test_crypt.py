@@ -6,6 +6,7 @@ from typing import Optional
 import pytest
 from asn1crypto import cms, x509
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
+
 from pyhanko.keys import load_cert_from_pemder
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.crypt import (

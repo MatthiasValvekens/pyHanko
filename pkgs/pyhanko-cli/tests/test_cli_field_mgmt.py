@@ -2,6 +2,7 @@ from io import BytesIO
 
 import pytest
 from pyhanko.cli import cli_root
+
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import PdfSignatureMetadata, sign_pdf

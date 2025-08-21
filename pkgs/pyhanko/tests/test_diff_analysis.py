@@ -5,6 +5,7 @@ from itertools import product
 
 import pytest
 from freezegun.api import freeze_time
+
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name

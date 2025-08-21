@@ -8,13 +8,13 @@ from asn1crypto import crl as asn1_crl
 from asn1crypto import ocsp as asn1_ocsp
 from asn1crypto import x509
 from asn1crypto.x509 import Certificate
+
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import get_and_apply
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
-
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
 

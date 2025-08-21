@@ -76,6 +76,9 @@ dev = [
 [tool.uv.workspace]
 members = ["pkgs/*", "internal/*"]
 
+[tool.isort]
+src_paths = ["pkgs/*/src", "internal/*/src"]
+
 [tool.uv.sources]
 pyhanko = { workspace = true }
 pyhanko-certvalidator = { workspace = true }

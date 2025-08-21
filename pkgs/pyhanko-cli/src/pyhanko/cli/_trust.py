@@ -3,6 +3,7 @@ from typing import Iterable, Optional, TypeVar, Union
 import click
 from pyhanko.cli.config import CLIConfig
 from pyhanko.cli.utils import logger, readable_file
+
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.trust import init_validation_context_kwargs
 from pyhanko.keys import load_certs_from_pemder

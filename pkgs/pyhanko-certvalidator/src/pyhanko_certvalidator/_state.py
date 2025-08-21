@@ -1,6 +1,7 @@
 from typing import Optional
 
 from asn1crypto import x509
+
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.util import ConsList
 

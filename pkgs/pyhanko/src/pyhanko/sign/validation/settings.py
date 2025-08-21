@@ -2,12 +2,12 @@ from dataclasses import dataclass
 from typing import Iterable, Optional, Set
 
 from asn1crypto import x509
+
 from pyhanko.config.api import (
     ConfigurableMixin,
     process_bit_string_flags,
     process_oids,
 )
-
 from pyhanko_certvalidator.errors import InvalidCertificateError
 
 

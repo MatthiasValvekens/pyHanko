@@ -8,6 +8,7 @@ from typing import Dict, Optional, Tuple, Union
 
 from asn1crypto import core
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 from pyhanko.pdf_utils import generic, misc
 
 from ._legacy import (

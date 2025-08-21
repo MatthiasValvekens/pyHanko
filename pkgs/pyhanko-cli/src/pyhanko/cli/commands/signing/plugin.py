@@ -10,6 +10,7 @@ from pyhanko.cli.commands.signing.utils import get_text_params, open_for_signing
 from pyhanko.cli.plugin_api import SigningCommandPlugin
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import readable_file, writable_file
+
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign import PdfSigner, fields
 from pyhanko.sign.signers.pdf_cms import (

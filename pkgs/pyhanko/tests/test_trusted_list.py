@@ -11,6 +11,10 @@ from aiohttp.typedefs import StrOrURL
 from asn1crypto import x509
 from certomancer.registry import ArchLabel
 from freezegun import freeze_time
+from xsdata.formats.dataclass.parsers import XmlParser
+from xsdata.formats.dataclass.parsers.config import ParserConfig
+from yarl import URL
+
 from pyhanko.generated.etsi import ServiceTypeIdentifier, ts_119612
 from pyhanko.keys import load_cert_from_pemder
 from pyhanko.sign.validation.errors import SignatureValidationError
@@ -34,12 +38,6 @@ from pyhanko.sign.validation.qualified.tsp import (
     TSPServiceParsingError,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
-from test_data.samples import CERTOMANCER, TEST_DIR, TESTING_CA_QUALIFIED
-from test_utils.signing_commons import ECC_INTERM_CERT, FROM_CA, INTERM_CERT
-from xsdata.formats.dataclass.parsers import XmlParser
-from xsdata.formats.dataclass.parsers.config import ParserConfig
-from yarl import URL
-
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.authority import AuthorityWithCert, NamedKeyAuthority
 from pyhanko_certvalidator.context import CertValidationPolicySpec
@@ -50,6 +48,8 @@ from pyhanko_certvalidator.policy_decl import (
     RevocationCheckingPolicy,
     RevocationCheckingRule,
 )
+from test_data.samples import CERTOMANCER, TEST_DIR, TESTING_CA_QUALIFIED
+from test_utils.signing_commons import ECC_INTERM_CERT, FROM_CA, INTERM_CERT
 
 
 def _read_cas_from_file(path: Path):

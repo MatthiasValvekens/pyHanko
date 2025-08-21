@@ -14,6 +14,7 @@ from typing import (
 
 import tzlocal
 from lxml import etree
+
 from pyhanko.pdf_utils import generic, misc
 
 from ..crypt.api import SecurityHandler

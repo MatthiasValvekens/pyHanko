@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from asn1crypto import cms
+
 from pyhanko.sign.timestamps import TimeStamper
 
 from ..attributes import CMSAttributeProvider, TSTProvider

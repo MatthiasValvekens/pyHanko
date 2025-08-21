@@ -3,6 +3,7 @@ from typing import ClassVar, ContextManager, List, Optional
 
 import click
 from pyhanko.cli._ctx import CLIContext
+
 from pyhanko.sign import Signer
 
 __all__ = [

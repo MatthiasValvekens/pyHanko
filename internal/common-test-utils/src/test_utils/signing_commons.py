@@ -7,6 +7,7 @@ from asn1crypto import ocsp
 from asn1crypto.algos import DigestAlgorithm, DigestInfo
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
+
 from pyhanko.sign import signers, timestamps
 from pyhanko.sign.ades.cades_asn1 import SignaturePolicyId
 from pyhanko.sign.diff_analysis import ModificationLevel
@@ -16,6 +17,9 @@ from pyhanko.sign.validation import (
     async_validate_pdf_signature,
     validate_pdf_signature,
 )
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
@@ -28,10 +32,6 @@ from test_data.samples import (
     UNRELATED_TSA,
     read_all,
 )
-
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 logger = logging.getLogger(__name__)
 

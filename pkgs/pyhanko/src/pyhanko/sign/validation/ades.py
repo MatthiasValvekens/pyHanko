@@ -39,6 +39,7 @@ from asn1crypto import pdf as asn1_pdf
 from asn1crypto import tsp, x509
 from asn1crypto.crl import CertificateList
 from asn1crypto.ocsp import OCSPResponse
+
 from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.sign.ades.report import (
     AdESFailure,
@@ -73,7 +74,6 @@ from pyhanko.sign.validation.status import (
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
 )
-
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.authority import (
     Authority,

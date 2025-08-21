@@ -5,6 +5,7 @@ from typing import List, Optional
 
 import cryptography.exceptions
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt._util import (
     aes_cbc_decrypt,

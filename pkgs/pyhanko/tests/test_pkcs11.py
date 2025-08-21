@@ -14,6 +14,7 @@ from certomancer.registry import CertLabel
 from freezegun import freeze_time
 from pkcs11 import Mechanism, PKCS11Error
 from pkcs11 import types as p11_types
+
 from pyhanko.config.pkcs11 import PKCS11PinEntryMode, PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -26,6 +27,7 @@ from pyhanko.sign.pkcs11 import (
     criteria_satisfied_by,
     find_token,
 )
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import MINIMAL, TESTING_CA
 from test_utils.signing_commons import (
     SIMPLE_DSA_V_CONTEXT,
@@ -38,8 +40,6 @@ from test_utils.signing_commons import (
     pkcs11_test_module,
     val_trusted,
 )
-
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 pytestmark = pkcs11_only
 

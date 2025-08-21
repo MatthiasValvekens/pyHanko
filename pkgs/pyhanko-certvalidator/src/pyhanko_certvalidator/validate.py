@@ -13,7 +13,7 @@ from cryptography.exceptions import InvalidSignature
 
 from ._state import ValProcState
 from .asn1_types import AAControls, Target
-from .authority import TrustAnchor, AuthorityWithCert
+from .authority import AuthorityWithCert, TrustAnchor
 from .context import ACTargetDescription, ValidationContext
 from .errors import (
     CRLFetchError,

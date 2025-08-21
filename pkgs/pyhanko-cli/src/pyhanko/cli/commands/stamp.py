@@ -6,6 +6,7 @@ from pyhanko.cli._root import cli_root
 from pyhanko.cli.config import CLIConfig
 from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE, pyhanko_exception_manager
 from pyhanko.cli.utils import _index_page, logger, readable_file
+
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 

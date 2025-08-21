@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import AsyncGenerator, Iterable, Union
 
 from asn1crypto import cms, crl, ocsp, x509
+
 from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.version import __version__
 

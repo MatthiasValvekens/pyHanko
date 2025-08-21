@@ -18,6 +18,7 @@ from asn1crypto.algos import (
 from certomancer import PKIArchitecture
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
+
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import attributes, fields, signers, timestamps
@@ -60,6 +61,12 @@ from pyhanko.sign.validation.errors import (
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 from pyhanko.sign.validation.status import ClaimedAttributes
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsageConstraint,
+    DisallowWeakAlgorithmsPolicy,
+)
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
@@ -94,13 +101,6 @@ from test_utils.signing_commons import (
     val_trusted,
     val_untrusted,
 )
-
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.policy_decl import (
-    AlgorithmUsageConstraint,
-    DisallowWeakAlgorithmsPolicy,
-)
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 
 def test_generic_data_sign_legacy():

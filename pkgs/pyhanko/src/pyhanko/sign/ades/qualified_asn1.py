@@ -1,4 +1,5 @@
 from asn1crypto import core, x509
+
 from pyhanko.sign.ades.asn1_util import register_x509_extension
 
 __all__ = [

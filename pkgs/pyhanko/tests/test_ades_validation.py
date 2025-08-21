@@ -16,6 +16,7 @@ from certomancer.registry import (
     ServiceLabel,
 )
 from freezegun import freeze_time
+
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import PdfTimeStamper, signers, timestamps
@@ -49,26 +50,6 @@ from pyhanko.sign.validation.qualified.tsp import (
     QcCertType,
     TSPTrustManager,
 )
-from test_data.certomancer_trust_lists import certomancer_pki_as_trusted_list
-from test_data.samples import (
-    CERTOMANCER,
-    MINIMAL_ONE_FIELD,
-    TESTING_CA,
-    TESTING_CA_QUALIFIED,
-    UNRELATED_TSA,
-)
-from test_utils.signing_commons import (
-    DUMMY_HTTP_TS_VARIANT,
-    DUMMY_TS,
-    DUMMY_TS2,
-    FROM_CA,
-    INTERM_CERT,
-    REVOKED_SIGNER,
-    TRUST_ROOTS,
-    TSA_CERT,
-    live_testing_vc,
-)
-
 from pyhanko_certvalidator import policy_decl as certv_policy_decl
 from pyhanko_certvalidator.authority import CertTrustAnchor, TrustedServiceType
 from pyhanko_certvalidator.context import (
@@ -96,6 +77,25 @@ from pyhanko_certvalidator.registry import (
     SimpleTrustManager,
 )
 from pyhanko_certvalidator.validate import async_validate_path
+from test_data.certomancer_trust_lists import certomancer_pki_as_trusted_list
+from test_data.samples import (
+    CERTOMANCER,
+    MINIMAL_ONE_FIELD,
+    TESTING_CA,
+    TESTING_CA_QUALIFIED,
+    UNRELATED_TSA,
+)
+from test_utils.signing_commons import (
+    DUMMY_HTTP_TS_VARIANT,
+    DUMMY_TS,
+    DUMMY_TS2,
+    FROM_CA,
+    INTERM_CERT,
+    REVOKED_SIGNER,
+    TRUST_ROOTS,
+    TSA_CERT,
+    live_testing_vc,
+)
 
 from .test_pades import PADES
 

@@ -8,6 +8,7 @@ from asn1crypto import cms, core, tsp
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
+
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -54,6 +55,16 @@ from pyhanko.sign.validation.errors import (
     SignatureValidationError,
     ValidationInfoReadingError,
 )
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.fetchers.requests_fetchers import (
+    RequestsFetcherBackend,
+)
+from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
+    RevocationCheckingPolicy,
+    RevocationCheckingRule,
+)
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import (
     CERTOMANCER,
     MINIMAL,
@@ -85,17 +96,6 @@ from test_utils.signing_commons import (
     live_testing_vc,
     val_trusted,
 )
-
-from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
-)
-from pyhanko_certvalidator.policy_decl import (
-    CertRevTrustPolicy,
-    RevocationCheckingPolicy,
-    RevocationCheckingRule,
-)
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 
 def ts_response_callback(request, _context):

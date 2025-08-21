@@ -5,8 +5,8 @@ from datetime import datetime
 from typing import Dict, FrozenSet, Generator, Iterable, Optional, Set, Tuple
 
 from asn1crypto import x509
-from pyhanko.sign.validation.settings import KeyUsageConstraints
 
+from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko_certvalidator.authority import (
     Authority,
     AuthorityWithCert,

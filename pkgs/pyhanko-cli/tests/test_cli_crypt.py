@@ -6,6 +6,7 @@ from cryptography import x509 as pyca_x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko.cli import cli_root
+
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.crypt import (
     AuthStatus,

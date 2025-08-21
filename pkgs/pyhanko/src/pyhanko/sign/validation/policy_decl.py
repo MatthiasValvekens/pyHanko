@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import FrozenSet, Generator, List, Optional, Union
 
 from asn1crypto import x509
+
 from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
 from pyhanko.sign.validation import KeyUsageConstraints
 from pyhanko.sign.validation.qualified.q_status import (
@@ -12,7 +13,6 @@ from pyhanko.sign.validation.qualified.q_status import (
 )
 from pyhanko.sign.validation.qualified.tsp import QcCertType
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
-
 from pyhanko_certvalidator.authority import TrustedServiceType
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,

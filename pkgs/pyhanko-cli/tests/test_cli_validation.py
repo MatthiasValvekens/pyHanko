@@ -11,12 +11,14 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko.cli import cli_root
+
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
 from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import (
     MINIMAL,
     MINIMAL_AES256,
@@ -24,8 +26,6 @@ from test_data.samples import (
     MINIMAL_PUBKEY_AES256,
     TESTING_CA,
 )
-
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from .conftest import (
     FREEZE_DT,

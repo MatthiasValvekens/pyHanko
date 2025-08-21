@@ -4,6 +4,7 @@ from io import BytesIO
 import pytest
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
+
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -13,6 +14,7 @@ from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import fields, signers
 from pyhanko.sign.fields import InvisSigSettings, VisibleSigSettings
 from pyhanko.sign.general import SigningError
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import (
     MINIMAL,
     MINIMAL_ONE_FIELD,
@@ -28,8 +30,6 @@ from test_utils.signing_commons import (
     ROOT_CERT,
     val_trusted,
 )
-
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from .test_signing import sign_test_files
 

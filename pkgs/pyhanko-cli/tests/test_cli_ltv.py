@@ -1,6 +1,7 @@
 import pytest
 from certomancer.registry import CertLabel
 from pyhanko.cli import cli_root
+
 from test_data.samples import TESTING_CA
 
 from .conftest import (

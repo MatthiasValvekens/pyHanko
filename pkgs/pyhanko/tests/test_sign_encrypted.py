@@ -2,6 +2,7 @@ from io import BytesIO
 
 import pytest
 from freezegun import freeze_time
+
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.crypt import AuthStatus
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter

@@ -2,6 +2,7 @@ import getpass
 from typing import BinaryIO, Optional
 
 import click
+
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.crypt import AuthStatus
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter

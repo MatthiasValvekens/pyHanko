@@ -10,12 +10,12 @@ from pyhanko.cli._trust import (
 from pyhanko.cli.commands.signing.plugin import command_from_plugin
 from pyhanko.cli.commands.stamp import select_style
 from pyhanko.cli.utils import parse_field_location_spec
+
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import DEFAULT_SIGNER_KEY_USAGE, fields, signers
 from pyhanko.sign.signers.pdf_byterange import BuildProps
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.version import __version__
-
 from pyhanko_certvalidator import ValidationContext
 
 from ..._ctx import CLIContext

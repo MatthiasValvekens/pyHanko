@@ -1,9 +1,9 @@
 from typing import Optional, Union
 
 from asn1crypto import cms, tsp
+
 from pyhanko.sign.timestamps import TimeStamper, TimestampRequestError
 from pyhanko.sign.timestamps.common_utils import set_tsp_headers
-
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers.util import LazySession
 
 try:

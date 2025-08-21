@@ -6,8 +6,8 @@ from typing import Iterator, Optional, TypeVar
 
 from asn1crypto import cms
 from asn1crypto import pdf as asn1_pdf
-from pyhanko.pdf_utils.reader import PdfFileReader
 
+from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.policy_decl import (
     CertRevTrustPolicy,

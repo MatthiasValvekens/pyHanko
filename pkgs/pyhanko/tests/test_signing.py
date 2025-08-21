@@ -4,13 +4,14 @@ import os
 from datetime import datetime
 from io import BytesIO
 
-import pyhanko.pdf_utils.content
-import pyhanko.sign.fields
 import pytest
 from asn1crypto.algos import SignedDigestAlgorithm
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
+
+import pyhanko.pdf_utils.content
+import pyhanko.sign.fields
 from pyhanko import stamp
 from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
 from pyhanko.pdf_utils import embed, generic, layout
@@ -48,6 +49,17 @@ from pyhanko.sign.validation import (
 )
 from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.stamp import QRStampStyle
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.authority import (
+    CertTrustAnchor,
+    TrustedServiceType,
+    TrustQualifiers,
+)
+from pyhanko_certvalidator.errors import PathValidationError
+from pyhanko_certvalidator.registry import (
+    SimpleCertificateStore,
+    SimpleTrustManager,
+)
 from test_data.samples import *
 from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
@@ -70,18 +82,6 @@ from test_utils.signing_commons import (
     live_testing_vc,
     val_trusted,
     val_untrusted,
-)
-
-from pyhanko_certvalidator import CertificateValidator, ValidationContext
-from pyhanko_certvalidator.authority import (
-    CertTrustAnchor,
-    TrustedServiceType,
-    TrustQualifiers,
-)
-from pyhanko_certvalidator.errors import PathValidationError
-from pyhanko_certvalidator.registry import (
-    SimpleCertificateStore,
-    SimpleTrustManager,
 )
 
 DUMMY_TS_NO_NONCE = timestamps.DummyTimeStamper(

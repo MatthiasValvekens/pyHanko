@@ -6,6 +6,7 @@ from io import BytesIO
 import pytest
 import tzlocal
 from freezegun import freeze_time
+
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import EncryptedObjAccess
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter

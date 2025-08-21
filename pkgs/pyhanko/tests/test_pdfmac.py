@@ -20,6 +20,8 @@ import pytest
 from asn1crypto import core
 from certomancer.integrations.illusionist import Illusionist
 from freezegun import freeze_time
+from requests_mock import Mocker
+
 from pyhanko.pdf_utils import generic, writer
 from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler,
@@ -46,7 +48,7 @@ from pyhanko.sign.validation import (
     validate_pdf_ltv_signature,
 )
 from pyhanko.sign.validation.errors import DisallowedAlgorithmError
-from requests_mock import Mocker
+from pyhanko_certvalidator import ValidationContext
 from test_data.samples import *
 from test_utils.signing_commons import (
     DUMMY_TS,
@@ -55,8 +57,6 @@ from test_utils.signing_commons import (
     SIMPLE_ECC_V_CONTEXT,
     val_trusted,
 )
-
-from pyhanko_certvalidator import ValidationContext
 
 DUMMY_PASSWORD = "secret"
 

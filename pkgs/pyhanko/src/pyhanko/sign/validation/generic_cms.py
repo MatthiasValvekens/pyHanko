@@ -21,6 +21,7 @@ from typing import (
 from asn1crypto import algos, cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
+
 from pyhanko.sign.general import (
     CMSExtractionError,
     CMSStructuralError,
@@ -33,7 +34,6 @@ from pyhanko.sign.general import (
     find_unique_cms_attribute,
     get_pyca_cryptography_hash,
 )
-
 from pyhanko_certvalidator import (
     CancelableAsyncIterator,
     ValidationContext,

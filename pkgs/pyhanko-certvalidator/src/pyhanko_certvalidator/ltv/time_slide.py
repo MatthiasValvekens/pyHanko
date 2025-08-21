@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from typing import Iterable, List, Optional, Set, Tuple
 
 from asn1crypto import algos, keys, x509
+
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.errors import (
     DisallowedAlgorithmError,

@@ -9,10 +9,10 @@ from asn1crypto import x509
 from oscrypto import trust_list
 
 from .authority import (
+    Authority,
+    AuthorityWithCert,
     CertTrustAnchor,
     TrustAnchor,
-    AuthorityWithCert,
-    Authority,
     TrustedServiceType,
 )
 from .errors import PathBuildingError

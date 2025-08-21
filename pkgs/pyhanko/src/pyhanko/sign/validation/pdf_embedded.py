@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Optional, Union
 
 from asn1crypto import cms, x509
+
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.reader import PdfFileReader, process_data_at_eof
@@ -29,7 +30,6 @@ from pyhanko.sign.general import (
     byte_range_digest,
     extract_signer_info,
 )
-
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
 
