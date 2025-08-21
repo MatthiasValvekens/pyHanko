@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+from typing import Optional
+
+from asn1crypto import algos
+from asn1crypto.keys import PublicKeyInfo
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import (
+    dsa,
+    ec,
+    ed448,
+    ed25519,
+    padding,
+    rsa,
+)
+
+from pyhanko_certvalidator.errors import (
+    DSAParametersUnavailable,
+    PSSParameterMismatch,
+)
+from pyhanko_certvalidator.util import (
+    get_pyca_cryptography_hash_for_signing,
+    process_pss_params,
+)
+
+
+def validate_raw(
+    signature: bytes,
+    signed_data: bytes,
+    public_key_info: PublicKeyInfo,
+    signature_algorithm: algos.SignedDigestAlgorithm,
+    contextual_md_algorithm: Optional[str] = None,
+    prehashed: bool = False,
+):
+    """
+    Validate a raw signature. Internal API.
+    """
+    sig_algo = signature_algorithm.signature_algo
+    parameters = signature_algorithm['parameters']
+
+    if (
+        sig_algo == 'dsa'
+        and public_key_info['algorithm']['parameters'].native is None
+    ):
+        raise DSAParametersUnavailable(
+            "DSA public key parameters were not provided."
+        )
+
+    # pyca/cryptography can't load PSS-exclusive keys without some help:
+    if public_key_info.algorithm == 'rsassa_pss':
+        public_key_info = public_key_info.copy()
+        assert isinstance(parameters, algos.RSASSAPSSParams)
+        pss_key_params = public_key_info['algorithm']['parameters'].native
+        if pss_key_params is not None and pss_key_params != parameters.native:
+            raise PSSParameterMismatch(
+                "Public key info includes PSS parameters that do not match "
+                "those on the signature"
+            )
+        # set key type to generic RSA, discard parameters
+        public_key_info['algorithm'] = {'algorithm': 'rsa'}
+
+    pub_key = serialization.load_der_public_key(public_key_info.dump())
+    try:
+        hash_algo = signature_algorithm.hash_algo
+    except ValueError:
+        hash_algo = contextual_md_algorithm
+    if sig_algo == 'rsassa_pkcs1v15':
+        assert isinstance(pub_key, rsa.RSAPublicKey)
+        verify_md = get_pyca_cryptography_hash_for_signing(
+            hash_algo, prehashed=prehashed
+        )
+        pub_key.verify(signature, signed_data, padding.PKCS1v15(), verify_md)
+    elif sig_algo == 'rsassa_pss':
+        assert isinstance(pub_key, rsa.RSAPublicKey)
+        pss_padding, verify_md = process_pss_params(
+            signature_algorithm['parameters'], prehashed=prehashed
+        )
+        pub_key.verify(signature, signed_data, pss_padding, verify_md)
+    elif sig_algo == 'dsa':
+        assert isinstance(pub_key, dsa.DSAPublicKey)
+        verify_md = get_pyca_cryptography_hash_for_signing(
+            hash_algo, prehashed=prehashed
+        )
+        pub_key.verify(signature, signed_data, verify_md)
+    elif sig_algo == 'ecdsa':
+        assert isinstance(pub_key, ec.EllipticCurvePublicKey)
+        verify_md = get_pyca_cryptography_hash_for_signing(
+            hash_algo, prehashed=prehashed
+        )
+        pub_key.verify(signature, signed_data, ec.ECDSA(verify_md))
+    elif sig_algo == 'ed25519':
+        assert isinstance(pub_key, ed25519.Ed25519PublicKey)
+        pub_key.verify(signature, signed_data)
+    elif sig_algo == 'ed448':
+        assert isinstance(pub_key, ed448.Ed448PublicKey)
+        pub_key.verify(signature, signed_data)
+    else:  # pragma: nocover
+        raise NotImplementedError(
+            f"Signature mechanism {sig_algo} is not supported."
+        )

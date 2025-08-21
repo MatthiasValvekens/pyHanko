@@ -16,10 +16,10 @@ from asn1crypto.algos import SignedDigestAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
 
 from pyhanko.keys import *
 from pyhanko.pdf_utils import misc
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 __all__ = [
     'simple_cms_attribute',
@@ -33,10 +33,7 @@ __all__ = [
     'extract_signer_info',
     'extract_certificate_info',
     'get_cms_hash_algo_for_mechanism',
-    'get_pyca_cryptography_hash',
-    'get_pyca_cryptography_hash_for_signing',
     'optimal_pss_params',
-    'process_pss_params',
     'as_signing_certificate',
     'as_signing_certificate_v2',
     'match_issuer_serial',
@@ -347,22 +344,6 @@ class UnacceptableSignerError(SigningError):
     pass
 
 
-def get_pyca_cryptography_hash(algorithm) -> Union[hashes.HashAlgorithm]:
-    if algorithm.lower() in ('shake256', 'shake256_len'):
-        # force the output length to 64 bytes = 512 bits. We don't
-        # support any other lengths because those can't be valid in CMS
-        return hashes.SHAKE256(digest_size=64)
-    else:
-        return getattr(hashes, algorithm.upper())()
-
-
-def get_pyca_cryptography_hash_for_signing(
-    algorithm, prehashed=False
-) -> Union[hashes.HashAlgorithm, Prehashed]:
-    hash_algo = get_pyca_cryptography_hash(algorithm)
-    return Prehashed(hash_algo) if prehashed else hash_algo
-
-
 def get_cms_hash_algo_for_mechanism(mech: SignedDigestAlgorithm) -> str:
     """
     Internal function that takes a :class:`.SignedDigestAlgorithm` instance
@@ -384,45 +365,6 @@ def get_cms_hash_algo_for_mechanism(mech: SignedDigestAlgorithm) -> str:
         return 'shake256'
     else:
         return mech.hash_algo
-
-
-def process_pss_params(
-    params: algos.RSASSAPSSParams, digest_algorithm, prehashed=False
-):
-    """
-    Extract PSS padding settings and message digest from an
-    ``RSASSAPSSParams`` value.
-
-    Internal API.
-    """
-
-    hash_algo: algos.DigestAlgorithm = params['hash_algorithm']
-    md_name = hash_algo['algorithm'].native
-    if md_name.casefold() != digest_algorithm.casefold():
-        raise ValueError(
-            f"PSS MD '{md_name}' must agree with signature "
-            f"MD '{digest_algorithm}'."
-        )  # pragma: nocover
-    mga: algos.MaskGenAlgorithm = params['mask_gen_algorithm']
-    if not mga['algorithm'].native == 'mgf1':
-        raise NotImplementedError("Only MFG1 is supported")
-
-    mgf_md_name = mga['parameters']['algorithm'].native
-
-    if mgf_md_name != md_name:
-        logger.warning(
-            f"Message digest for MGF1 is {mgf_md_name}, and the one used for "
-            f"signing is {md_name}. If these do not agree, some software may "
-            f"refuse to validate the signature."
-        )
-    salt_len: int = params['salt_length'].native
-
-    mgf_md = get_pyca_cryptography_hash(mgf_md_name)
-    md = get_pyca_cryptography_hash_for_signing(md_name, prehashed=prehashed)
-    pss_padding = padding.PSS(
-        mgf=padding.MGF1(algorithm=mgf_md), salt_length=salt_len
-    )
-    return pss_padding, md
 
 
 def optimal_pss_params(

@@ -19,7 +19,6 @@ from pyhanko.sign.general import (
     NonexistentAttributeError,
     find_cms_attribute,
     find_unique_cms_attribute,
-    get_pyca_cryptography_hash,
 )
 from pyhanko.sign.validation.ades import (
     AdESBasicValidationResult,
@@ -32,6 +31,7 @@ from pyhanko.sign.validation.generic_cms import get_signing_cert_attr
 from pyhanko.sign.validation.pdf_embedded import EmbeddedPdfSignature
 from pyhanko.sign.validation.status import PdfSignatureStatus
 from pyhanko_certvalidator.ltv.poe import ValidationObject, ValidationObjectType
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 __all__ = ['generate_report']
 

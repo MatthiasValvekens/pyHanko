@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives import hashes, hmac, keywrap
 from cryptography.hazmat.primitives.kdf import hkdf
 
 from pyhanko.pdf_utils import generic, misc
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 from ...sign.general import (
     CMSStructuralError,
@@ -17,7 +18,6 @@ from ...sign.general import (
     ValueErrorWithMessage,
     byte_range_digest,
     find_unique_cms_attribute,
-    get_pyca_cryptography_hash,
     simple_cms_attribute,
 )
 from ...sign.signers.pdf_byterange import (

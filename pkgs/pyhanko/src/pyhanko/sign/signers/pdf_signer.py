@@ -41,7 +41,6 @@ from pyhanko.sign.general import (
     SigningError,
     find_unique_cms_attribute,
     get_cms_hash_algo_for_mechanism,
-    get_pyca_cryptography_hash,
     simple_cms_attribute,
 )
 from pyhanko.sign.timestamps import TimeStamper
@@ -49,6 +48,7 @@ from pyhanko.stamp import BaseStampStyle
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
 from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from . import constants

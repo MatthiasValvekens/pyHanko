@@ -60,12 +60,12 @@ from .policy_tree import (
 from .registry import CertificateCollection
 from .revinfo.validate_crl import verify_crl
 from .revinfo.validate_ocsp import verify_ocsp_response
+from .sig_validate import validate_raw
 from .util import (
     ConsList,
     extract_dir_name,
     get_ac_extension_value,
     get_declared_revinfo,
-    validate_sig,
 )
 
 logger = logging.getLogger(__name__)
@@ -487,7 +487,7 @@ def _check_ac_signature(
         )
 
     try:
-        validate_sig(
+        validate_raw(
             signature=attr_cert['signature'].native,
             signed_data=attr_cert['ac_info'].dump(),
             # TODO support PK parameter inheritance?
@@ -495,8 +495,7 @@ def _check_ac_signature(
             #  validation algo)
             # low-priority since this only affects DSA in practice
             public_key_info=aa_cert.public_key,
-            signed_digest_algorithm=sd_algo,
-            parameters=attr_cert['signature_algorithm']['parameters'],
+            signature_algorithm=sd_algo,
         )
     except PSSParameterMismatch:
         raise InvalidAttrCertificateError(
@@ -978,12 +977,11 @@ class _PathValidationState:
             )
 
         try:
-            validate_sig(
+            validate_raw(
                 signature=cert['signature_value'].native,
                 signed_data=cert['tbs_certificate'].dump(),
                 public_key_info=self.working_public_key,
-                signed_digest_algorithm=sd_algo,
-                parameters=cert['signature_algorithm']['parameters'],
+                signature_algorithm=sd_algo,
             )
         except PSSParameterMismatch:
             raise PathValidationError.from_state(

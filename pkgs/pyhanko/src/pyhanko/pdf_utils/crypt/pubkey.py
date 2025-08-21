@@ -43,6 +43,8 @@ from cryptography.hazmat.primitives.kdf import KeyDerivationFunction
 from cryptography.hazmat.primitives.kdf.x963kdf import X963KDF
 from cryptography.hazmat.primitives.serialization import pkcs12
 
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
+
 from .. import generic, misc
 from ._util import (
     aes_cbc_decrypt,
@@ -363,7 +365,6 @@ def _rsaes_oaep_recipient(
     envelope_key: bytes,
 ):
     # recycle these routines
-    from pyhanko.sign.general import get_pyca_cryptography_hash
     from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
 
     digest_function_name = select_suitable_signing_md(pub_key_info)
@@ -872,8 +873,6 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         if algo_name == 'rsaes_pkcs1v15':
             padding = PKCS1v15()
         elif algo_name == 'rsaes_oaep':
-            from pyhanko.sign.general import get_pyca_cryptography_hash
-
             oaep_params: RSAESOAEPParams = algo_params['parameters']
             mgf = oaep_params['mask_gen_algorithm']
             mgf_name = mgf['algorithm'].native

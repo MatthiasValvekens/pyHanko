@@ -40,10 +40,10 @@ from pyhanko_certvalidator.revinfo.archival import (
     RevinfoUsabilityRating,
 )
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
+from pyhanko_certvalidator.sig_validate import validate_raw
 from pyhanko_certvalidator.util import (
     ConsList,
     extract_ac_issuer_dir_name,
-    validate_sig,
 )
 
 OCSP_PROVENANCE_ERR = (
@@ -379,12 +379,11 @@ def _verify_ocsp_signature(
     # Verify that the response was properly signed by the validated certificate
     tbs_response = response['tbs_response_data']
     try:
-        validate_sig(
+        validate_raw(
             signature=response['signature'].native,
             signed_data=tbs_response.dump(),
-            signed_digest_algorithm=response['signature_algorithm'],
             public_key_info=responder_key,
-            parameters=response['signature_algorithm']['parameters'],
+            signature_algorithm=response['signature_algorithm'],
         )
         return True
     except PSSParameterMismatch:

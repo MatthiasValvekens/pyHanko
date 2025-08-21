@@ -32,7 +32,6 @@ from pyhanko.sign.general import (
     extract_certificate_info,
     extract_signer_info,
     find_unique_cms_attribute,
-    get_pyca_cryptography_hash,
 )
 from pyhanko_certvalidator import (
     CancelableAsyncIterator,
@@ -53,6 +52,8 @@ from pyhanko_certvalidator.errors import (
 from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import PKIXValidationParams
+from pyhanko_certvalidator.sig_validate import validate_raw
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from ...pdf_utils import misc
@@ -73,7 +74,6 @@ from .utils import (
     DEFAULT_ALGORITHM_USAGE_POLICY,
     CMSAlgorithmUsagePolicy,
     extract_message_digest,
-    validate_raw,
 )
 
 __all__ = [
@@ -304,6 +304,18 @@ def validate_sig_integrity(
             raise errors.DisallowedAlgorithmError(
                 msg, permanent=digest_algo_allowed.not_allowed_after is None
             )
+        digest_compatible = algorithm_usage_policy.digest_combination_allowed(
+            signature_algo=signature_algorithm,
+            message_digest_algo=algos.DigestAlgorithm(
+                {'algorithm': md_algorithm}
+            ),
+            moment=None,
+        )
+        if not digest_compatible:
+            raise errors.DisallowedAlgorithmError(
+                failure_message=digest_compatible.failure_reason,
+                permanent=digest_compatible.not_allowed_after is None,
+            )
 
     signature = signer_info['signature'].native
 
@@ -380,12 +392,10 @@ def validate_sig_integrity(
         validate_raw(
             signature,
             signed_data,
-            cert,
+            cert.public_key,
             signature_algorithm,
-            md_algorithm,
+            contextual_md_algorithm=md_algorithm,
             prehashed=prehashed,
-            algorithm_policy=algorithm_usage_policy,
-            time_indic=time_indic,
         )
         valid = True
     except InvalidSignature:
