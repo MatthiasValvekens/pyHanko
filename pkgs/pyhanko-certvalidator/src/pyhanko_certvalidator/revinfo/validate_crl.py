@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple, Union
 
-from asn1crypto import cms, crl, x509
+from asn1crypto import cms, crl, keys, x509
 from asn1crypto.crl import CRLEntryExtensionId
 from cryptography.exceptions import InvalidSignature
 
@@ -37,7 +37,7 @@ from pyhanko_certvalidator.revinfo.constants import (
     VALID_REVOCATION_REASONS,
 )
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
-from pyhanko_certvalidator.sig_validate import validate_raw
+from pyhanko_certvalidator.sig_validate import SignatureValidator
 from pyhanko_certvalidator.util import (
     ConsList,
     get_ac_extension_value,
@@ -215,19 +215,6 @@ async def _find_candidate_crl_paths(
             errs.unauthorized_certs += 1
             continue
 
-        try:
-            # Step g
-            # NOTE: Theoretically this can only be done after full X.509
-            # path validation (step f), but that only matters for DSA key
-            # inheritance which we don't support anyhow when doing revocation
-            # checks.
-            _verify_crl_signature(
-                certificate_list, candidate_crl_issuer.public_key
-            )
-        except CRLValidationError:
-            errs.signatures_failed += 1
-            continue
-
         cand_path = proc_state.check_path_verif_recursion(candidate_crl_issuer)
         if not cand_path:
             try:
@@ -302,12 +289,23 @@ async def _find_crl_issuer(
                 issuing_authority_identical=issuing_authority_identical,
                 proc_state=proc_state,
             )
+        except CRLValidationError as e:
+            errs.explicit_errors.append(e)
+            continue
+        try:
+            # Step g
+            # Verify the CRL signature
+            _verify_crl_signature(
+                certificate_list,
+                candidate_crl_issuer.public_key,
+                validation_context.sig_validator,
+            )
             validation_context.revinfo_manager.record_crl_issuer(
                 certificate_list, candidate_crl_issuer
             )
             return candidate_crl_issuer_path
-        except CRLValidationError as e:
-            errs.explicit_errors.append(e)
+        except CRLValidationError:
+            errs.signatures_failed += 1
             continue
     raise errs.get_exc()
 
@@ -621,6 +619,21 @@ async def _handle_single_crl(
     else:
         delta_certificate_list_cont = None
 
+    if delta_certificate_list_cont:
+        # Delta CRL validation Step h
+        try:
+            _verify_crl_signature(
+                delta_certificate_list_cont.crl_data,
+                crl_issuer.public_key,
+                validation_context.sig_validator,
+            )
+        except CRLValidationError:
+            errs.append(
+                'Delta CRL signature could not be verified',
+                delta_certificate_list_cont,
+            )
+            return None
+
     try:
         revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
             crl_issuer=crl_issuer,
@@ -694,21 +707,9 @@ def _maybe_get_delta_crl(
             suspect_stale=None,
         )
 
-    delta_certificate_list = delta_certificate_list_cont.crl_data
-
     if not _verify_no_unknown_critical_extensions(
         delta_certificate_list_cont, errs, is_delta=True
     ):
-        return None
-
-    # Step h
-    try:
-        _verify_crl_signature(delta_certificate_list, crl_issuer.public_key)
-    except CRLValidationError:
-        errs.append(
-            'Delta CRL signature could not be verified',
-            delta_certificate_list_cont,
-        )
         return None
 
     if policy and timing_params:
@@ -1322,12 +1323,20 @@ async def collect_relevant_crls_with_paths(
     )
 
 
-def _verify_crl_signature(certificate_list, public_key):
+def _verify_crl_signature(
+    certificate_list: crl.CertificateList,
+    public_key: keys.PublicKeyInfo,
+    sig_validator: SignatureValidator,
+):
     """
     Verifies the digital signature on an asn1crypto.crl.CertificateList object
 
     :param certificate_list:
         An asn1crypto.crl.CertificateList object
+    :param public_key:
+        The public key with which to validate the CRL's signature.
+    :param sig_validator:
+        The signature validator implementing the validation mechanism.
 
     :raises:
         pyhanko_certvalidator.errors.CRLValidationError - when the signature is
@@ -1335,7 +1344,7 @@ def _verify_crl_signature(certificate_list, public_key):
     """
 
     try:
-        validate_raw(
+        sig_validator.validate_signature(
             signature=certificate_list['signature'].native,
             signed_data=certificate_list['tbs_cert_list'].dump(),
             public_key_info=public_key,

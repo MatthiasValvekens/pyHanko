@@ -40,7 +40,7 @@ from pyhanko_certvalidator.revinfo.archival import (
     RevinfoUsabilityRating,
 )
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
-from pyhanko_certvalidator.sig_validate import validate_raw
+from pyhanko_certvalidator.sig_validate import SignatureValidator
 from pyhanko_certvalidator.util import (
     ConsList,
     extract_ac_issuer_dir_name,
@@ -370,7 +370,10 @@ def _check_ocsp_status(
 
 
 def _verify_ocsp_signature(
-    responder_key: PublicKeyInfo, ocsp_response: OCSPContainer, errs: _OCSPErrs
+    responder_key: PublicKeyInfo,
+    ocsp_response: OCSPContainer,
+    sig_validator: SignatureValidator,
+    errs: _OCSPErrs,
 ) -> bool:
     response = ocsp_response.extract_basic_ocsp_response()
     if response is None:
@@ -379,7 +382,7 @@ def _verify_ocsp_signature(
     # Verify that the response was properly signed by the validated certificate
     tbs_response = response['tbs_response_data']
     try:
-        validate_raw(
+        sig_validator.validate_signature(
             signature=response['signature'].native,
             signed_data=tbs_response.dump(),
             public_key_info=responder_key,
@@ -415,14 +418,6 @@ def _assess_ocsp_relevance(
     )
     if not responder_cert:
         return None
-
-    signature_ok = _verify_ocsp_signature(
-        responder_key=responder_cert.public_key,
-        ocsp_response=ocsp_response,
-        errs=errs,
-    )
-    if not signature_ok:
-        return None
     return responder_cert
 
 
@@ -444,7 +439,6 @@ async def _handle_single_ocsp_resp(
     )
     if responder_cert is None:
         return False
-
     freshness_result = ocsp_response.usable_at(
         policy=validation_context.revinfo_policy,
         timing_params=validation_context.timing_params,
@@ -463,6 +457,15 @@ async def _handle_single_ocsp_resp(
         else:
             msg = 'OCSP response freshness could not be established'
         errs.append(msg, ocsp_response, is_freshness_failure=True)
+        return False
+
+    signature_ok = _verify_ocsp_signature(
+        responder_key=responder_cert.public_key,
+        ocsp_response=ocsp_response,
+        sig_validator=validation_context.sig_validator,
+        errs=errs,
+    )
+    if not signature_ok:
         return False
 
     # check whether the responder cert is authorised
