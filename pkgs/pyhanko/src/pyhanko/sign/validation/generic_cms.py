@@ -52,7 +52,11 @@ from pyhanko_certvalidator.errors import (
 from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import PKIXValidationParams
-from pyhanko_certvalidator.sig_validate import validate_raw
+from pyhanko_certvalidator.sig_validate import (
+    DefaultSignatureValidator,
+    SignatureValidationContext,
+    SignatureValidator,
+)
 from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
@@ -237,6 +241,7 @@ def validate_sig_integrity(
     cert: x509.Certificate,
     expected_content_type: str,
     actual_digest: bytes,
+    sig_validator: Optional[SignatureValidator] = None,
     algorithm_usage_policy: Optional[CMSAlgorithmUsagePolicy] = None,
     time_indic: Optional[datetime] = None,
 ) -> Tuple[bool, bool]:
@@ -261,6 +266,8 @@ def validate_sig_integrity(
         see :class:`cms.ContentType`).
     :param actual_digest:
         The actual digest to be matched to the message digest attribute.
+    :param sig_validator:
+        Signature validator implementing the cryptographic validation process.
     :param algorithm_usage_policy:
         Algorithm usage policy.
     :param time_indic:
@@ -389,13 +396,16 @@ def validate_sig_integrity(
         embedded_digest = extract_message_digest(signer_info)
 
     try:
-        validate_raw(
+        sig_validator = sig_validator or DefaultSignatureValidator()
+        sig_validator.validate_signature(
             signature,
             signed_data,
             cert.public_key,
             signature_algorithm,
-            contextual_md_algorithm=md_algorithm,
-            prehashed=prehashed,
+            context=SignatureValidationContext(
+                contextual_md_algorithm=md_algorithm,
+                prehashed=prehashed,
+            ),
         )
         valid = True
     except InvalidSignature:
@@ -509,6 +519,7 @@ async def cms_basic_validation(
             actual_digest=raw_digest,
             algorithm_usage_policy=algorithm_policy,
             time_indic=time_indic,
+            sig_validator=validation_context.sig_validator,
         )
     except CMSStructuralError as e:
         raise errors.SignatureValidationError(

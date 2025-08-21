@@ -36,6 +36,7 @@ from .revinfo.archival import (
     process_legacy_ocsp_input,
 )
 from .revinfo.manager import RevinfoManager
+from .sig_validate import DefaultSignatureValidator, SignatureValidator
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,7 @@ class ValidationContext:
         trust_manager: Optional[TrustManager] = None,
         algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = None,
         fetchers: Optional[Fetchers] = None,
+        signature_validator: Optional[SignatureValidator] = None,
     ):
         """
         :param trust_roots:
@@ -318,6 +320,7 @@ class ValidationContext:
         )
 
         self._acceptable_ac_targets = acceptable_ac_targets
+        self.sig_validator = signature_validator or DefaultSignatureValidator()
 
     @property
     def revinfo_manager(self) -> RevinfoManager:
@@ -656,6 +659,12 @@ class CertValidationPolicySpec:
     The PKIX validation parameters to use, as defined in :rfc:`5280`.
     """
 
+    signature_validator: SignatureValidator = DefaultSignatureValidator()
+    """
+    Validator implementing the necessary cryptographic operations to validate
+    signatures.
+    """
+
     def build_validation_context(
         self,
         timing_info: ValidationTimingInfo,
@@ -700,4 +709,5 @@ class CertValidationPolicySpec:
             time_tolerance=self.time_tolerance,
             acceptable_ac_targets=self.acceptable_ac_targets,
             allow_fetching=revinfo_manager.fetching_allowed,
+            signature_validator=self.signature_validator,
         )

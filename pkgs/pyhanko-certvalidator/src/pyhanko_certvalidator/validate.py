@@ -60,7 +60,7 @@ from .policy_tree import (
 from .registry import CertificateCollection
 from .revinfo.validate_crl import verify_crl
 from .revinfo.validate_ocsp import verify_ocsp_response
-from .sig_validate import validate_raw
+from .sig_validate import SignatureValidator
 from .util import (
     ConsList,
     extract_dir_name,
@@ -487,7 +487,7 @@ def _check_ac_signature(
         )
 
     try:
-        validate_raw(
+        validation_context.sig_validator.validate_signature(
             signature=attr_cert['signature'].native,
             signed_data=attr_cert['ac_info'].dump(),
             # TODO support PK parameter inheritance?
@@ -956,6 +956,7 @@ class _PathValidationState:
         algorithm_policy: AlgorithmUsagePolicy,
         proc_state: ValProcState,
         moment: datetime.datetime,
+        sig_validator: SignatureValidator,
     ):
         sd_algo: algos.SignedDigestAlgorithm = cert['signature_algorithm']
         sd_algo_name = sd_algo['algorithm'].native
@@ -977,7 +978,7 @@ class _PathValidationState:
             )
 
         try:
-            validate_raw(
+            sig_validator.validate_signature(
                 signature=cert['signature_value'].native,
                 signed_data=cert['tbs_certificate'].dump(),
                 public_key_info=self.working_public_key,
@@ -1127,6 +1128,7 @@ async def intl_validate_path(
             validation_context.algorithm_policy,
             proc_state,
             validation_context.best_signature_time,
+            validation_context.sig_validator,
         )
 
         # Step 2 a 2

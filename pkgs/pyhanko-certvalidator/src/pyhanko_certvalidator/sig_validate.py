@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import abc
+from dataclasses import dataclass
 from typing import Optional
 
 from asn1crypto import algos
@@ -24,13 +26,49 @@ from pyhanko_certvalidator.util import (
 )
 
 
-def validate_raw(
+@dataclass(frozen=True)
+class SignatureValidationContext:
+    contextual_md_algorithm: Optional[str] = None
+    prehashed: bool = False
+
+
+class SignatureValidator(abc.ABC):
+
+    def validate_signature(
+        self,
+        signature: bytes,
+        signed_data: bytes,
+        public_key_info: PublicKeyInfo,
+        signature_algorithm: algos.SignedDigestAlgorithm,
+        context: SignatureValidationContext = SignatureValidationContext(),
+    ):
+        raise NotImplementedError()
+
+
+class DefaultSignatureValidator(SignatureValidator):
+    def validate_signature(
+        self,
+        signature: bytes,
+        signed_data: bytes,
+        public_key_info: PublicKeyInfo,
+        signature_algorithm: algos.SignedDigestAlgorithm,
+        context: SignatureValidationContext = SignatureValidationContext(),
+    ):
+        return _validate_raw(
+            signature,
+            signed_data,
+            public_key_info,
+            signature_algorithm,
+            context,
+        )
+
+
+def _validate_raw(
     signature: bytes,
     signed_data: bytes,
     public_key_info: PublicKeyInfo,
     signature_algorithm: algos.SignedDigestAlgorithm,
-    contextual_md_algorithm: Optional[str] = None,
-    prehashed: bool = False,
+    context: SignatureValidationContext = SignatureValidationContext(),
 ):
     """
     Validate a raw signature. Internal API.
@@ -63,29 +101,29 @@ def validate_raw(
     try:
         hash_algo = signature_algorithm.hash_algo
     except ValueError:
-        hash_algo = contextual_md_algorithm
+        hash_algo = context.contextual_md_algorithm
     if sig_algo == 'rsassa_pkcs1v15':
         assert isinstance(pub_key, rsa.RSAPublicKey)
         verify_md = get_pyca_cryptography_hash_for_signing(
-            hash_algo, prehashed=prehashed
+            hash_algo, prehashed=context.prehashed
         )
         pub_key.verify(signature, signed_data, padding.PKCS1v15(), verify_md)
     elif sig_algo == 'rsassa_pss':
         assert isinstance(pub_key, rsa.RSAPublicKey)
         pss_padding, verify_md = process_pss_params(
-            signature_algorithm['parameters'], prehashed=prehashed
+            signature_algorithm['parameters'], prehashed=context.prehashed
         )
         pub_key.verify(signature, signed_data, pss_padding, verify_md)
     elif sig_algo == 'dsa':
         assert isinstance(pub_key, dsa.DSAPublicKey)
         verify_md = get_pyca_cryptography_hash_for_signing(
-            hash_algo, prehashed=prehashed
+            hash_algo, prehashed=context.prehashed
         )
         pub_key.verify(signature, signed_data, verify_md)
     elif sig_algo == 'ecdsa':
         assert isinstance(pub_key, ec.EllipticCurvePublicKey)
         verify_md = get_pyca_cryptography_hash_for_signing(
-            hash_algo, prehashed=prehashed
+            hash_algo, prehashed=context.prehashed
         )
         pub_key.verify(signature, signed_data, ec.ECDSA(verify_md))
     elif sig_algo == 'ed25519':

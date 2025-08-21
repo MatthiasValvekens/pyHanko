@@ -12,7 +12,7 @@ from freezegun import freeze_time
 
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import csc_signer
-from pyhanko_certvalidator.sig_validate import validate_raw
+from pyhanko_certvalidator.sig_validate import DefaultSignatureValidator
 from test_data.samples import CERTOMANCER, TESTING_CA
 from test_utils.csc_utils.csc_dummy_client import CSCDummyClientAuthManager
 
@@ -558,7 +558,7 @@ async def test_submit_job_during_commit(aiohttp_client):
 
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     for ix, sig in enumerate([sig1, *others]):
-        validate_raw(
+        DefaultSignatureValidator().validate_signature(
             sig,
             b'foobar%d' % (ix + 1),
             signer_cert.public_key,
@@ -630,7 +630,7 @@ async def test_csc_with_parameters(aiohttp_client):
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     mech = signer.get_signature_mechanism_for_digest('sha256')
     assert mech.signature_algo == 'rsassa_pss'
-    validate_raw(
+    DefaultSignatureValidator().validate_signature(
         result,
         b'foobar',
         signer_cert.public_key,
@@ -666,7 +666,7 @@ async def test_prefetched_sad_not_twice(aiohttp_client):
 
     result = await signer.async_sign_raw(b'foobar', digest_algorithm='sha256')
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
-    validate_raw(
+    DefaultSignatureValidator().validate_signature(
         result,
         b'foobar',
         signer_cert.public_key,
