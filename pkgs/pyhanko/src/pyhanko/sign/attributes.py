@@ -7,9 +7,10 @@ from asn1crypto import pdf as asn1_pdf
 from asn1crypto import tsp, x509
 from cryptography.hazmat.primitives import hashes
 
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
+
 from .general import (
     as_signing_certificate_v2,
-    get_pyca_cryptography_hash,
     simple_cms_attribute,
 )
 from .timestamps import TimeStamper

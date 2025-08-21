@@ -6,8 +6,7 @@ from asn1crypto import cms, tsp
 from cryptography.hazmat.primitives import hashes
 
 from pyhanko_certvalidator.registry import CertificateStore
-
-from ..general import get_pyca_cryptography_hash
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 __all__ = [
     'TimestampRequestError',

@@ -1,20 +1,18 @@
 from __future__ import annotations
 
 import abc
+import logging
 from dataclasses import dataclass
 from typing import AsyncIterator, Generic, List, Optional, TypeVar, Union
 
 from asn1crypto import algos, cms, core, x509
-from asn1crypto.keys import PublicKeyInfo
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import (
-    dsa,
-    ec,
-    ed448,
-    ed25519,
     padding,
-    rsa,
 )
+from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
+
+logger = logging.getLogger(__name__)
 
 
 def extract_dir_name(
@@ -193,83 +191,52 @@ def get_declared_revinfo(
     return has_crl, has_ocsp
 
 
-def validate_sig(
-    signature: bytes,
-    signed_data: bytes,
-    public_key_info: PublicKeyInfo,
-    signed_digest_algorithm: algos.SignedDigestAlgorithm,
-    parameters=None,
-):
-    from .errors import DSAParametersUnavailable, PSSParameterMismatch
+def get_pyca_cryptography_hash(algorithm) -> Union[hashes.HashAlgorithm]:
+    if algorithm.lower() in ('shake256', 'shake256_len'):
+        # force the output length to 64 bytes = 512 bits. We don't
+        # support any other lengths because those can't be valid in CMS
+        return hashes.SHAKE256(digest_size=64)
+    else:
+        return getattr(hashes, algorithm.upper())()
 
-    sig_algo = signed_digest_algorithm.signature_algo
 
-    if (
-        sig_algo == 'dsa'
-        and public_key_info['algorithm']['parameters'].native is None
-    ):
-        raise DSAParametersUnavailable(
-            "DSA public key parameters were not provided."
+def get_pyca_cryptography_hash_for_signing(
+    algorithm, prehashed=False
+) -> Union[hashes.HashAlgorithm, Prehashed]:
+    hash_algo = get_pyca_cryptography_hash(algorithm)
+    return Prehashed(hash_algo) if prehashed else hash_algo
+
+
+def process_pss_params(params: algos.RSASSAPSSParams, prehashed: bool = False):
+    """
+    Extract PSS padding settings and message digest from an
+    ``RSASSAPSSParams`` value.
+
+    Internal API.
+    """
+
+    hash_algo: algos.DigestAlgorithm = params['hash_algorithm']
+    md_name = hash_algo['algorithm'].native
+    mga: algos.MaskGenAlgorithm = params['mask_gen_algorithm']
+    if not mga['algorithm'].native == 'mgf1':
+        raise NotImplementedError("Only MFG1 is supported")
+
+    mgf_md_name = mga['parameters']['algorithm'].native
+
+    if mgf_md_name != md_name:
+        logger.warning(
+            f"Message digest for MGF1 is {mgf_md_name}, and the one used for "
+            f"signing is {md_name}. If these do not agree, some software may "
+            f"refuse to validate the signature."
         )
+    salt_len: int = params['salt_length'].native
 
-    # pyca/cryptography can't load PSS-exclusive keys without some help:
-    if public_key_info.algorithm == 'rsassa_pss':
-        public_key_info = public_key_info.copy()
-        assert isinstance(parameters, algos.RSASSAPSSParams)
-        pss_key_params = public_key_info['algorithm']['parameters'].native
-        if pss_key_params is not None and pss_key_params != parameters.native:
-            raise PSSParameterMismatch(
-                "Public key info includes PSS parameters that do not match "
-                "those on the signature"
-            )
-        # set key type to generic RSA, discard parameters
-        public_key_info['algorithm'] = {'algorithm': 'rsa'}
-
-    pub_key = serialization.load_der_public_key(public_key_info.dump())
-
-    if sig_algo == 'rsassa_pkcs1v15':
-        hash_algo = signed_digest_algorithm.hash_algo
-        assert isinstance(pub_key, rsa.RSAPublicKey)
-        h = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, padding.PKCS1v15(), h)
-    elif sig_algo == 'rsassa_pss':
-        hash_algo = signed_digest_algorithm.hash_algo
-        assert isinstance(pub_key, rsa.RSAPublicKey)
-        assert isinstance(parameters, algos.RSASSAPSSParams)
-        mga: algos.MaskGenAlgorithm = parameters['mask_gen_algorithm']
-        if not mga['algorithm'].native == 'mgf1':
-            raise NotImplementedError("Only MFG1 is supported")
-
-        mgf_md_name = mga['parameters']['algorithm'].native
-
-        salt_len: int = parameters['salt_length'].native
-
-        mgf_md = getattr(hashes, mgf_md_name.upper())()
-        pss_padding = padding.PSS(
-            mgf=padding.MGF1(algorithm=mgf_md), salt_length=salt_len
-        )
-        hash_spec = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, pss_padding, hash_spec)
-    elif sig_algo == 'dsa':
-        hash_algo = signed_digest_algorithm.hash_algo
-        assert isinstance(pub_key, dsa.DSAPublicKey)
-        hash_spec = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, hash_spec)
-    elif sig_algo == 'ecdsa':
-        hash_algo = signed_digest_algorithm.hash_algo
-        assert isinstance(pub_key, ec.EllipticCurvePublicKey)
-        hash_spec = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, ec.ECDSA(hash_spec))
-    elif sig_algo == 'ed25519':
-        assert isinstance(pub_key, ed25519.Ed25519PublicKey)
-        pub_key.verify(signature, signed_data)
-    elif sig_algo == 'ed448':
-        assert isinstance(pub_key, ed448.Ed448PublicKey)
-        pub_key.verify(signature, signed_data)
-    else:  # pragma: nocover
-        raise NotImplementedError(
-            f"Signature mechanism {sig_algo} is not supported."
-        )
+    mgf_md = get_pyca_cryptography_hash(mgf_md_name)
+    md = get_pyca_cryptography_hash_for_signing(md_name, prehashed=prehashed)
+    pss_padding = padding.PSS(
+        mgf=padding.MGF1(algorithm=mgf_md), salt_length=salt_len
+    )
+    return pss_padding, md
 
 
 ListElem = TypeVar('ListElem')

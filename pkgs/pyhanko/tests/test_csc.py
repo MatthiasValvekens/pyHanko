@@ -12,7 +12,7 @@ from freezegun import freeze_time
 
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import csc_signer
-from pyhanko.sign.validation.utils import validate_raw
+from pyhanko_certvalidator.sig_validate import validate_raw
 from test_data.samples import CERTOMANCER, TESTING_CA
 from test_utils.csc_utils.csc_dummy_client import CSCDummyClientAuthManager
 
@@ -561,11 +561,10 @@ async def test_submit_job_during_commit(aiohttp_client):
         validate_raw(
             sig,
             b'foobar%d' % (ix + 1),
-            signer_cert,
+            signer_cert.public_key,
             signature_algorithm=algos.SignedDigestAlgorithm(
                 {'algorithm': 'sha256_rsa'}
             ),
-            md_algorithm='sha256',
         )
     assert auth_man.authorizations_requested == 2
 
@@ -634,9 +633,8 @@ async def test_csc_with_parameters(aiohttp_client):
     validate_raw(
         result,
         b'foobar',
-        signer_cert,
+        signer_cert.public_key,
         signature_algorithm=mech,
-        md_algorithm='sha256',
     )
 
 
@@ -671,11 +669,10 @@ async def test_prefetched_sad_not_twice(aiohttp_client):
     validate_raw(
         result,
         b'foobar',
-        signer_cert,
+        signer_cert.public_key,
         signature_algorithm=algos.SignedDigestAlgorithm(
             {'algorithm': 'sha256_rsa'}
         ),
-        md_algorithm='sha256',
     )
 
     # but a second attempt should fail

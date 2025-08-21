@@ -26,7 +26,7 @@ from pyhanko.sign.diff_analysis import (
     DiffResult,
     ModificationLevel,
 )
-from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
+from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import cms_embedder
 from pyhanko.sign.signers.pdf_byterange import BuildProps
 from pyhanko.sign.signers.pdf_cms import (
@@ -60,6 +60,7 @@ from pyhanko_certvalidator.registry import (
     SimpleCertificateStore,
     SimpleTrustManager,
 )
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 from test_data.samples import *
 from test_utils.signing_commons import (
     DUMMY_HTTP_TS,

@@ -8,9 +8,10 @@ from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from pyhanko_certvalidator.registry import CertificateStore
+from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 from .. import general
-from ..general import get_pyca_cryptography_hash, simple_cms_attribute
+from ..general import simple_cms_attribute
 from .api import TimeStamper
 from .common_utils import get_nonce
 

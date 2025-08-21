@@ -37,11 +37,11 @@ from pyhanko_certvalidator.revinfo.constants import (
     VALID_REVOCATION_REASONS,
 )
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
+from pyhanko_certvalidator.sig_validate import validate_raw
 from pyhanko_certvalidator.util import (
     ConsList,
     get_ac_extension_value,
     get_issuer_dn,
-    validate_sig,
 )
 
 logger = logging.getLogger(__name__)
@@ -1335,12 +1335,11 @@ def _verify_crl_signature(certificate_list, public_key):
     """
 
     try:
-        validate_sig(
+        validate_raw(
             signature=certificate_list['signature'].native,
             signed_data=certificate_list['tbs_cert_list'].dump(),
             public_key_info=public_key,
-            signed_digest_algorithm=certificate_list['signature_algorithm'],
-            parameters=certificate_list['signature_algorithm']['parameters'],
+            signature_algorithm=certificate_list['signature_algorithm'],
         )
     except PSSParameterMismatch as e:
         raise CRLValidationError(
