@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric import (
 )
 
 from pyhanko_certvalidator.errors import (
+    AlgorithmNotSupported,
     DSAParametersUnavailable,
     PSSParameterMismatch,
 )
@@ -25,14 +26,38 @@ from pyhanko_certvalidator.util import (
     process_pss_params,
 )
 
+__all__ = [
+    'SignatureValidator',
+    'SignatureValidationContext',
+    'DefaultSignatureValidator',
+]
+
 
 @dataclass(frozen=True)
 class SignatureValidationContext:
+    """
+    Additional context about a signature that is crucial for
+    executing the cryptographic validation process.
+    """
+
     contextual_md_algorithm: Optional[str] = None
+    """
+    Digest algorithm inferred from context. Used when the digest
+    algorithm cannot be derived from the ASN.1 data describing the
+    signature algorithm.
+    """
+
     prehashed: bool = False
+    """
+    Indicates whether the payload was pre-hashed (not always possible
+    depending on the signature algorithm).
+    """
 
 
 class SignatureValidator(abc.ABC):
+    """
+    Abstracts away cryptographic validation primitives.
+    """
 
     def validate_signature(
         self,
@@ -42,6 +67,23 @@ class SignatureValidator(abc.ABC):
         signature_algorithm: algos.SignedDigestAlgorithm,
         context: SignatureValidationContext = SignatureValidationContext(),
     ):
+        """
+        Validate a cryptographic signature over a piece of data.
+
+        :param signature:
+            The signature data.
+        :param signed_data:
+            The signed data.
+        :param public_key_info:
+            The public key with which to validate the signature.
+        :param signature_algorithm:
+            The algorithm to use when validating.
+        :param context:
+            Additional context that is crucial for executing the cryptographic
+            validation process.
+        :raises InvalidSignature:
+            Raised if the signature is invalid.
+        """
         raise NotImplementedError()
 
 
@@ -73,7 +115,11 @@ def _validate_raw(
     """
     Validate a raw signature. Internal API.
     """
-    sig_algo = signature_algorithm.signature_algo
+    try:
+        sig_algo = signature_algorithm.signature_algo
+    except ValueError:
+        sig_algo = signature_algorithm['algorithm'].native
+
     parameters = signature_algorithm['parameters']
 
     if (
@@ -132,7 +178,7 @@ def _validate_raw(
     elif sig_algo == 'ed448':
         assert isinstance(pub_key, ed448.Ed448PublicKey)
         pub_key.verify(signature, signed_data)
-    else:  # pragma: nocover
-        raise NotImplementedError(
+    else:
+        raise AlgorithmNotSupported(
             f"Signature mechanism {sig_algo} is not supported."
         )

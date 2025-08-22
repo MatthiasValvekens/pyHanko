@@ -2,6 +2,7 @@ import pytest
 from asn1crypto import algos, keys
 
 from pyhanko_certvalidator.errors import (
+    AlgorithmNotSupported,
     DSAParametersUnavailable,
     PSSParameterMismatch,
 )
@@ -55,4 +56,18 @@ def test_pss_parameter_mismatch():
             payload,
             pubkey_mangled,
             issued_cert['signature_algorithm'],
+        )
+
+
+def test_algorithm_not_supported():
+    pubkey = load_cert_object('testing-ca-pss', 'root.cert.pem').public_key
+    issued_cert = load_cert_object('testing-ca-pss', 'interm.cert.pem')
+    payload = issued_cert['tbs_certificate'].dump()
+    signature = issued_cert['signature_value'].native
+    algo = algos.SignedDigestAlgorithm(
+        {'algorithm': algos.SignedDigestAlgorithmId('2.999')}
+    )
+    with pytest.raises(AlgorithmNotSupported):
+        DefaultSignatureValidator().validate_signature(
+            signature, payload, pubkey, algo
         )

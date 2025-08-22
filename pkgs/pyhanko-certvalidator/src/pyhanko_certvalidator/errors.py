@@ -230,3 +230,7 @@ class DSAParametersUnavailable(InvalidSignature):
     # completely irrelevant problem in this day and age, so treating those
     # signatures as invalid as a matter of course seems pretty much OK.
     pass
+
+
+class AlgorithmNotSupported(InvalidSignature):
+    pass

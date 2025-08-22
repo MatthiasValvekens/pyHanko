@@ -86,6 +86,14 @@ pyhanko\_certvalidator.registry module
    :undoc-members:
    :show-inheritance:
 
+pyhanko\_certvalidator.sig\_validate module
+-------------------------------------------
+
+.. automodule:: pyhanko_certvalidator.sig_validate
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 pyhanko\_certvalidator.util module
 ----------------------------------
 
