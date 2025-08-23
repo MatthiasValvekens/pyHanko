@@ -6,6 +6,44 @@ Release history
 pyHanko
 -------
 
+.. _release-0.30.0:
+
+0.30.0
+======
+
+*Release date:* 2025-08-23
+
+
+Dependency changes
+------------------
+
+ * Bump ``python-pkcs11`` to ``0.9.x``.
+ * Introduce ``signxml>=4.2.0`` into ``[etsi]`` dependency group.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Allow custom text and stamp border colours.
+
+
+Validation
+^^^^^^^^^^
+
+ * Allow slotting in a custom validation implementation (e.g.
+   to support validating signatures that require cryptographic
+   primitives that aren't supported in-tree). This applies
+   to certificate validation as well.
+   See :class:`~pyhanko_certvalidator.sig_validate.SignatureValidator`.
+ * Add support for validating against ETSI TS 119 612 trusted lists
+   (as used in the EU's eIDAS programme) and deriving qualification judgments
+   from such lists for signatures and timestamps. This is an incubating feature;
+   in particular it is not yet exposed in the CLI.
+
+
 .. _release-0.29.1:
 
 0.29.1
@@ -2308,6 +2346,25 @@ Initial release.
 ---------------------
 pyhanko-certvalidator
 ---------------------
+
+.. _certvalidator-release-0.28.0:
+
+0.28.0
+======
+
+*Release date:* 2025-08-23
+
+ * Remove unneeded Python 3.8 compatibility code
+ * Improve test coverage for some more exotic CRL
+   processing scenarios, simplify code accordingly.
+ * Supply more info on freshness check failures,
+   ensure time tolerance is accounted for.
+ * Support time-limited roots.
+ * Fix various bugs in AdES validation and the handling
+   of non-default ``TrustAnchor`` implementations.
+ * Unify raw signature validation internals with pyHanko;
+   make the validation implementation pluggable.
+   See :class:`~pyhanko_certvalidator.sig_validate.SignatureValidator`.
 
 
 .. _certvalidator-release-0.27.0:
