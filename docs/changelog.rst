@@ -885,7 +885,7 @@ Breaking changes
    backwards compatible, but all of those concern internal APIs.
  * There are some noteworthy changes to the ``pyhanko-certvalidator`` API.
    Those are documented in
-   `the change log <https://github.com/MatthiasValvekens/certvalidator/blob/master/changelog.md#0200>`_.
+   :ref:`the change log <certvalidator-release-0.20.0>`.
    Most of these do not affect basic usage.
 
 
@@ -2303,6 +2303,603 @@ Bugs fixed
 *Release date:* 2020-12-30
 
 Initial release.
+
+
+---------------------
+pyhanko-certvalidator
+---------------------
+
+
+.. _certvalidator-release-0.27.0:
+
+0.27.0
+======
+
+*Release date:* 2025-05-24
+
+ * Integrated into pyHanko repository as separate sub-package.
+ * No functional changes.
+
+
+.. _certvalidator-release-0.26.8:
+
+0.26.8
+======
+
+*Release date:* 2025-03-15
+
+ * Fixed bug where an HTTP(S) CRL URI appearing next to
+   an LDAP one as part of the same DP entry would not
+   always be picked up.
+ * Dramatically improved processing speed for large CRLs.
+
+
+.. _certvalidator-release-0.26.7:
+
+0.26.7
+======
+
+*Release date:* 2025-03-12
+
+ * No functional changes.
+
+
+.. _certvalidator-release-0.26.6:
+
+0.26.6
+======
+
+*Release date:* 2025-03-12
+
+ * Drop Python 3.7
+ * List ``qcStatements`` as a known extension
+
+
+.. _certvalidator-release-0.26.5:
+
+0.26.5
+======
+
+*Release date:* 2024-11-17
+
+ * Future-proofing against an upcoming ``asn1crypto``
+   that is already being shipped in some distro
+   packages.
+ * Address some timing issues in tests.
+
+
+.. _certvalidator-release-0.26.4:
+
+0.26.4
+======
+
+*Release date:* 2024-11-12
+
+ * Bump ``aiohttp`` requirement to ``>=3.8,<3.11``.
+ * Declare support for Python 3.12 and 3.13
+
+
+.. _certvalidator-release-0.26.3:
+
+0.26.3
+======
+
+*Release date:* 2023-12-13
+
+ * Bump ``aiohttp`` requirement to ``>=3.8,<3.10``.
+ * Address two certificate fetching issues.
+ * Tolerate CMS certificate-only message in response
+   without ``Content-Type``.
+ * Deal with implicit reliance on order of certs when
+   processing such messages.
+
+
+.. _certvalidator-release-0.26.2:
+
+0.26.2
+======
+
+*Release date:* 2023-11-18
+
+ * Bump some dependency versions.
+
+
+.. _certvalidator-release-0.26.1:
+
+0.26.1
+======
+
+*Release date:* 2023-11-18
+
+ * Handle nonspecific OCSP validation errors cleanly during validation.
+
+
+.. _certvalidator-release-0.26.0:
+
+0.26.0
+======
+
+*Release date:* 2023-11-14
+
+
+ * Fix error reporting on banned algorithms in some cases
+ * Allow caller to assert revocation status of a cert
+ * More refined POE information tracking in experimental AdES API
+
+
+.. _certvalidator-release-0.25.0:
+
+0.25.0
+======
+
+*Release date:* 2023-10-06
+
+ * Introduce a more precise error type to signal stale revocation
+   information.
+
+
+.. _certvalidator-release-0.24.1:
+
+0.24.1
+======
+
+*Release date:* 2023-09-17
+
+
+ * Ignore content types altogether when fetching certificates
+   and the response payload is PEM.
+
+
+.. _certvalidator-release-0.24.0:
+
+0.24.0
+======
+
+*Release date:* 2023-09-07
+
+ * Further increase leniency regarding content types when fetching
+   certificates on-the-fly
+ * Add SLSA provenance data to releases
+ * Various updates in test dependencies and CI workflow dependencies.
+
+
+.. _certvalidator-release-0.23.0:
+
+0.23.0
+======
+
+*Release date:* 2023-05-14
+
+ * Improve processing of OCSP responses without ``nextUpdate``
+ * Some more package metadata & release flow tweaks
+
+
+.. _certvalidator-release-0.22.0:
+
+0.22.0
+======
+
+*Release date:* 2023-04-23
+
+ * No implementation changes compared to ``0.21.2``
+ * Renamed ``async_http`` dependency group to ``async-http``.
+ * Move towards automated GitHub Actions-based release flow
+   as a move towards better process standardisation.
+ * Sign release artifacts with Sigstore.
+
+
+.. _certvalidator-release-0.21.2:
+
+0.21.2
+======
+
+*Release date:* 2023-04-17
+
+ * Fix a typing issue caused by a typo in the ``requests`` cert fetcher.
+ * Removed a piece of misbehaving and duplicative logic in the
+   revocation freshness checker.
+
+
+.. _certvalidator-release-0.21.1:
+
+0.21.1
+======
+
+*Release date:* 2023-04-02
+
+ * Fix ``DisallowedAlgorithmError`` parameters.
+ * Preserve timestamp info in expiration-related errors.
+ * Disable algo enforcement in prima facie past validation checks.
+ * Correct a misunderstanding in the interaction between the AdES code and
+   the old "retroactive revinfo" setting.
+
+
+.. _certvalidator-release-0.21.0:
+
+0.21.0
+======
+
+*Release date:* 2023-04-01
+
+ * Switch to ``pyproject.toml`` to manage project metadata.
+ * Path validation errors now carry information about the paths that triggered them.
+ * ``InvalidCertificateError`` is no longer a subclass of ``PathValidationError``, only of
+   ``ValidationError``. This is a minor but nonetheless breaking change.
+
+
+.. _certvalidator-release-0.20.1:
+
+0.20.1
+======
+
+*Release date:* 2023-02-21
+
+Minor maintenance release without functional changes, only to metadata, documentation and typing.
+
+.. _certvalidator-release-0.20.0:
+
+0.20.0
+======
+
+*Release date:* 2023-01-23
+
+This is a big release, with many breaking changes in the "deeper" APIs.
+The impact on the high-level API should be small to nonexistent, but caution when upgrading is advised.
+
+ * More uniform and machine-processable errors.
+ * Move towards a setup using "policy objects" that can be used to
+   construct ``ValidationContext`` objects in a systematic way.
+ * Move revinfo gathering to a separate revinfo manager class. Some arguably
+   internal methods on ``ValidationContext`` were moved to the ``RevinfoManager`` class.
+ * Incubating API for AdES validation primitives (freshness, POE handling, more
+   sophisticated revinfo gathering, time slide) and some certificate-related
+   validation routines.
+ * Introduce a more fully-fledged API to manage permissible algorithms.
+ * Broaden trust root provisioning beyond certificates: trust roots
+   can now have qualifiers, and be provisioned as a name-key pair as opposed
+   to a (self-signed) certificate. This implies breaking changes for
+   ``ValidationPath``.
+   In general, issuance semantics in the internals are now expressed through
+   the ``Authority`` API as much as possible.
+ * In the same vein, ``CertificateRegistry`` was refactored into ``TrustManager``,
+   ``CertificateRegistry`` and ``PathBuilder``. These are respectively responsible
+   for managing trust, maintaining the certificate cache, and building paths.
+ * Thorough clean-up of legacy dev tooling; put in place ``mypy`` and ``black``,
+   move to ``pytest``, get rid of ``pretty_message`` in favour of f-strings.
+
+
+.. _certvalidator-release-0.19.8:
+
+0.19.8
+======
+
+*Release date:* 2022-12-20
+
+ * Fix double encoding when generating OCSP nonces
+
+
+.. _certvalidator-release-0.19.7:
+
+0.19.7
+======
+
+*Release date:* 2022-12-11
+
+ * Make certificate fetcher more tolerant (see #2)
+
+
+.. _certvalidator-release-0.19.6:
+
+0.19.6
+======
+
+*Release date:* 2022-10-27
+
+ * Update ``asn1crypto`` to ``1.5.1``
+ * Declare Python 3.11 support
+
+
+.. _certvalidator-release-0.19.5:
+
+0.19.5
+======
+
+*Release date:* 2022-03-08
+
+ * Maintenance update to bump ``asn1crypto`` to ``1.5.0`` and get rid of a number of
+   compatibility shims for fixes that were upstreamed to ``asn1crypto``.
+
+
+.. _certvalidator-release-0.19.4:
+
+0.19.4
+======
+
+*Release date:* 2022-02-10
+
+ * Fix improper error handling when dealing with expired or not-yet-valid
+   attribute certificates.
+
+
+.. _certvalidator-release-0.19.3:
+
+0.19.3
+======
+
+*Release date:* 2022-02-03
+
+ * Correct and improve behaviour of certificate fetcher when the
+   server does not supply a Content-Type header.
+
+.. _certvalidator-release-0.19.2:
+
+0.19.2
+======
+
+*Release date:* 2021-12-22
+
+ * Patch ``asn1crypto`` to work around tagging issue in AC issuer field
+
+
+.. _certvalidator-release-0.19.1:
+
+0.19.1
+======
+
+*Release date:* 2021-12-22
+
+ * Properly enforce algo matching in AC validation
+
+
+.. _certvalidator-release-0.19.0:
+
+0.19.0
+======
+
+*Release date:* 2021-12-14
+
+ * Attribute certificate validation support
+ * Support for ``AAControls`` extension
+ * Refactored OCSP and CRL logic to work with attribute certificate validation
+ * Many nominal type checks removed in favour of type annotations
+ * Many API entry points now accept both ``asn1crypto.x509.Certificate`` and ``asn1crypto.cms.AttributeCertificateV2``
+ * Minor breaking change: ``bytes`` is no longer acceptable as a substitute for ``asn1crypto.x509.Certificate`` in the public API
+
+
+.. _certvalidator-release-0.18.1:
+
+0.18.1
+======
+
+*Release date:* 2021-12-04
+
+ * Various improvements to error handling in certificate fetchers
+
+
+.. _certvalidator-release-0.18.0:
+
+0.18.0
+======
+
+*Release date:* 2021-11-26
+
+ * Replace ``revocation_mode`` with more flexible revocation policy controls,
+   aligned with ETSI TS 119 172. Old ``revocation_mode`` params will be transparently
+   translated to corresponding 'refined' policies, but the ``revocation_mode`` property
+   on ``ValidationContext`` was removed.
+ * Handle soft fails as part of revocation policies. Concretely, this means that the
+   ``SoftFailError`` exception type was removed. Exceptions arising from quashed
+   'soft' failures can still be retrieved via the ``soft_fail_exceptions`` property
+   on ``ValidationContext`` instances; the resulting list can contain any exception type.
+ * Fix various hiccups in CRL and OCSP handling.
+
+
+.. _certvalidator-release-0.17.4:
+
+0.17.4
+======
+
+*Release date:* 2021-11-13
+
+ * Fix mistaken assumption when a certificate's MIME type is announced as ``application/x-x509-ca-cert``.
+ * Update aiohttp to 3.8.0
+
+
+.. _certvalidator-release-0.17.3:
+
+0.17.3
+======
+
+*Release date:* 2021-10-28
+
+ * Fix a deadlocking bug caused by improper exception handling
+   in the fetcher code.
+ * Exceptions are now communicated to fetch jobs waiting for results.
+
+
+.. _certvalidator-release-0.17.2:
+
+0.17.2
+======
+
+*Release date:* 2021-10-19
+
+ * Replace ``run_until_complete()`` with ``asyncio.run()`` for better
+   event loop state management.
+
+
+.. _certvalidator-release-0.17.1:
+
+0.17.1
+======
+
+*Release date:* 2021-10-11
+
+ * Fixes a packaging error in ``0.17.0``
+
+
+.. _certvalidator-release-0.17.0:
+
+0.17.0
+======
+
+*Release date:* 2021-10-11
+
+.. warning::
+    **This release contains breaking changes in lower-level APIs.**
+    High-level API functions should continue to work as-is, although some have been deprecated.
+    However, the rewrite of the CRL & OCSP fetch logic breaks compatibility with the previous
+    version's API.
+
+ * Refactor OCSP/certificate/CRL fetch logic to be more modular and swappable.
+ * Automatically fetch missing issuer certificates if there is an AIA record indicating where to
+   find them
+ * Favour asynchronous I/O throughout the API. ``CertificateValidator.validate_usage``,
+   ``CertificateValidator.validate_tls`` and the ``ValidationContext.retrieve_XYZ`` methods were
+   deprecated in favour of their asynchronous equivalents.
+ * Support two backends for fetching revocation information and certificates: ``requests`` (legacy)
+   and ``aiohttp`` (via the ``async-http`` optional dependency group).
+ * It is expected that using ``aiohttp`` fetchers will yield better performance with the
+     asynchronous APIs, but as these require some resource management on the caller's part,
+     ``requests`` is still the default.
+ * Fetcher backends can be swapped out by means of the ``fetcher_backend`` argument to
+     ``ValidationContext``.
+
+
+.. _certvalidator-release-0.16.0:
+
+0.16.0
+======
+
+*Release date:* 2021-08-22
+
+ * Refactor CertificateRegistry
+ * Change OCSP responder cert selection procedure to give priority to certificates embedded into
+   the response data (if there are any).
+
+
+.. _certvalidator-release-0.15.3:
+
+0.15.3
+======
+
+*Release date:* 2021-07-25
+
+ * Short-circuit anyPolicy when reporting policies
+ * Export PKIXValidationParams
+ * Limit CRL client to HTTP-based URLs
+
+
+.. _certvalidator-release-0.15.2:
+
+0.15.2
+======
+
+*Release date:* 2021-05-22
+
+ * Properly handle missing Content-Type header in server response when fetching CA certificates
+   referenced in a CRL.
+
+
+.. _certvalidator-release-0.15.1:
+
+0.15.1
+======
+
+*Release date:* 2021-05-12
+
+ * Gracefully handle lack of thisUpdate / nextUpdate in OCSP responses.
+
+
+.. _certvalidator-release-0.15.0:
+
+0.15.0
+======
+
+*Release date:* 2021-05-09
+
+ * Use ``pyca/cryptography`` for signature validation. ``oscrypto`` is still included
+   to access the system trust list.
+ * Support RSASSA-PSS and EdDSA certificates.
+ * Support name constraints.
+ * Support all input parameters to the PKIX validation algorithm (acceptable policy set, policy mapping inhibition, ...).
+ * Further increase PKITS coverage.
+
+.. _certvalidator-release-0.14.1:
+
+0.14.1
+======
+
+*Release date:* 2021-04-03
+
+ * No code changes, rerelease because distribution package was polluted due to improper build
+   cache cleanup.
+
+
+.. _certvalidator-release-0.14.0:
+
+0.14.0
+======
+
+*Release date:* 2021-04-03
+
+ * Raise RequestError if CRL / OCSP client returns a status code other than 200.
+   Previously, this would fail with a cryptic ASN.1 deserialisation error instead.
+ * Rename Python package to ``pyhanko_certvalidator`` to avoid the potential name conflict
+   with the upstream ``certvalidator`` package.
+
+
+.. _certvalidator-release-0.13.1:
+
+0.13.1
+======
+
+*Release date:* 2021-03-24
+
+ * Consider SHA-1 weak by default, and do not hard-code the list of potential weak hash algos.
+
+
+.. _certvalidator-release-0.13.0:
+
+0.13.0
+======
+
+*Release date:* 2021-03-19
+
+ * Added an optional ``retroactive_revinfo`` flag to ``ValidationContext`` to ignore the
+   ``thisUpdate`` field in OCSP responses and CRLs.
+   The effect of this is that CRLs and OCSP responses are also considered valid
+   for point-in-time validation with respect to a time in the past.
+   This is useful for some validation profiles. The default state of the flag
+   remains ``False`` nonetheless.
+
+
+.. _certvalidator-release-0.12.1:
+
+0.12.1
+======
+
+*Release date:* 2020-12-05
+
+ * Fixed a packaging error.
+
+
+.. _certvalidator-release-0.12.0:
+
+0.12.0
+======
+
+*Release date:* 2020-12-05
+
+ * Forked from `certvalidator <https://github.com/wbond/certvalidator>`_.
+   to add patches for pyHanko.
+ * Replaced urllib calls with ``requests`` library for universal mocking.
+ * Added a ``time_tolerance`` parameter to the validation context to allow for
+   some time drift on CRLs and OCSP responses.
+ * Deal with no-matches on OCSP and CRLs strictly in hard-fail mode.
+ * Drop support for Python 2, and all Python 3 versions prior to 3.7.
+   It is likely that the code still runs on older Python 3 versions, but I have
+   no interest in maintaining support for those.
 
 
 -----------

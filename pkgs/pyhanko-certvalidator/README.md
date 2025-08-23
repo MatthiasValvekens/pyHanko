@@ -53,7 +53,7 @@ options, including: validation at a specific moment in time, whitelisting and re
 
 ## Current Release
 
-![pypi](https://img.shields.io/pypi/v/pyhanko-certvalidator.svg) - [changelog](changelog.md)
+![pypi](https://img.shields.io/pypi/v/pyhanko-certvalidator.svg)
 
 ## Dependencies
 
