@@ -128,7 +128,7 @@ class CLIConfig:
         """
         vc_config = self._get_validation_settings_raw(name)
 
-        from pyhanko.config.trust import parse_trust_config
+        from ._trust import parse_trust_config
 
         if overrides:
             vc_config.update(overrides)

@@ -49,12 +49,3 @@ pyhanko.config.pkcs11 module
    :members:
    :undoc-members:
    :show-inheritance:
-
-
-pyhanko.config.trust module
------------------------------
-
-.. automodule:: pyhanko.config.trust
-   :members:
-   :undoc-members:
-   :show-inheritance:
