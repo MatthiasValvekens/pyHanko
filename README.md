@@ -1,7 +1,9 @@
 ![pyHanko](docs/images/pyhanko-logo.svg)
 
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pyHanko)
-![pypi](https://img.shields.io/pypi/v/pyHanko.svg)
+![pypi (pyHanko)](https://img.shields.io/pypi/v/pyHanko.svg?label=pyHanko)
+![pypi (pyhanko-certvalidator)](https://img.shields.io/pypi/v/pyhanko-certvalidator.svg?label=pyhanko-certvalidator)
+![pypi (pyhanko-cli)](https://img.shields.io/pypi/v/pyhanko-cli.svg?label=pyhanko-cli)
 
 
 

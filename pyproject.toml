@@ -61,8 +61,9 @@ docs = [
 ]
 docs-build = [
     { include-group = "docs" },
-    "pyhanko[opentype,image-support,pkcs11,async-http,etsi]",
+    "pyhanko[opentype,qr,image-support,pkcs11,async-http,etsi]",
     "pyhanko-certvalidator",
+    "pyhanko-cli",
 ]
 release = ["setuptools>=80.8.0", "tomlkit>=0.13.2", "requests>=2.32.3"]
 lint = ["ruff"]
