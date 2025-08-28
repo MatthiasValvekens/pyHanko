@@ -95,9 +95,10 @@ Note that not all of these are necessarily exposed through the CLI.
     - Authentication through X.509 chain of trust validation
     - LTV validation/sanity check (ad hoc)
     - Difference analysis on files with multiple signatures and/or incremental 
-      updates made after signing (experimental)
+      updates made after signing
     - Signature seed value constraint validation
     - AdES validation (incubating)
+    - Validating against EU trusted lists (incubating)
  - Encryption
     - All encryption methods in PDF 2.0 are supported, except for
       some very outdated message encryption methods in the public-key security handler.
