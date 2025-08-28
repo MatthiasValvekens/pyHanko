@@ -3,7 +3,7 @@ from typing import ClassVar, ContextManager, List, Optional
 
 import click
 from pyhanko.cli._ctx import CLIContext
-from pyhanko.sign import Signer
+from pyhanko.sign.signers.pdf_cms import Signer
 
 __all__ = [
     'SIGNING_PLUGIN_ENTRY_POINT_GROUP',
@@ -87,7 +87,8 @@ class SigningCommandPlugin(abc.ABC):
     ) -> ContextManager[Signer]:
         """
         Instantiate a context manager that creates and potentially
-        also implements a deallocator for a :class:`.Signer` object.
+        also implements a deallocator for a
+        :class:`~pyhanko.sign.signers.pdf_cms.Signer` object.
 
         :param context:
             The active :class:`.CLIContext`.
@@ -96,7 +97,8 @@ class SigningCommandPlugin(abc.ABC):
             resulting from :meth:`click_options` and
             :meth:`click_extra_arguments`.
         :return:
-            A context manager that manages the lifecycle for a :class:`.Signer`.
+            A context manager that manages the lifecycle for a
+            :class:`~pyhanko.sign.signers.pdf_cms.Signer` object.
         """
         raise NotImplementedError
 

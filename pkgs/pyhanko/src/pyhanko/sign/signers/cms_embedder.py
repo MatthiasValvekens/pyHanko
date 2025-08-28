@@ -358,7 +358,7 @@ class PdfCMSEmbedder:
 
     It also takes care of appearance generation and DocMDP configuration,
     but does not otherwise offer any of the conveniences of
-    :class:`.PdfSigner`.
+    :class:`~pyhanko.sign.signers.pdf_signer.PdfSigner`.
 
     :param new_field_spec:
         :class:`.SigFieldSpec` to use when creating new fields on-the-fly.
@@ -393,7 +393,9 @@ class PdfCMSEmbedder:
             that produces full-fledged CMS objects).
 
             In almost every other case, you're better of using
-            :class:`.PdfSigner` instead, with a custom :class:`.Signer`
+            :class:`~pyhanko.sign.signers.pdf_signer.PdfSigner`.
+            instead, with a custom
+            :class:`~pyhanko.sign.signers.pdf_cms.Signer`
             implementation to handle the cryptographic operations if necessary.
 
         The coroutine follows the following specific protocol.

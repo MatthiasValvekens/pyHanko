@@ -1035,7 +1035,8 @@ class PdfSigner:
     :param signature_meta:
         The specification of the signature to add.
     :param signer:
-        :class:`.Signer` object to use to produce the signature object.
+        :class:`~pyhanko.sign.signers.pdf_cms.Signer`
+        object to use to produce the signature object.
     :param timestamper:
         :class:`.TimeStamper` object to use to produce any time stamp tokens
         that might be required.
@@ -2413,7 +2414,8 @@ class PostSignInstructions:
     .. note::
         This setting is not part of :class:`.DSSContentSettings` because
         its value is taken from the corresponding property on the
-        :class:`.Signer` involved, not from the initial configuration.
+        :class:`~pyhanko.sign.signers.pdf_cms.Signer`
+        involved, not from the initial configuration.
     """
 
     file_credential: Optional[SerialisedCredential] = None

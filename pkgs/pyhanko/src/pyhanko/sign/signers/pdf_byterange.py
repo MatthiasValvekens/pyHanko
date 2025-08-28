@@ -257,7 +257,8 @@ class PdfByteRangeDigest(generic.DictionaryObject):
         the actual filling of the placeholder data.
 
         .. danger::
-            This is internal API; you should use use :class:`.PdfSigner`
+            This is internal API; you should use
+            :class:`~pyhanko.sign.signers.pdf_signer.PdfSigner`.
             wherever possible. If you *really* need fine-grained control,
             use :class:`~pyhanko.sign.signers.cms_embedder.PdfCMSEmbedder`
             instead.

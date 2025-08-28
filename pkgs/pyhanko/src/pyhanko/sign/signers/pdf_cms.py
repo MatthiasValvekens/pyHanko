@@ -1076,7 +1076,8 @@ class Signer:
         :param use_cades:
             Construct a CAdES-style CMS object.
         :param timestamper:
-            :class:`.PdfTimeStamper` to use to create a signature timestamp
+            :class:`~pyhanko.sign.signers.pdf_signer.PdfTimeStamper`
+            to use to create a signature timestamp
 
             .. note::
                 If you want to create a *content* timestamp (as opposed to
@@ -1332,7 +1333,8 @@ class Signer:
         :param use_cades:
             Construct a CAdES-style CMS object.
         :param timestamper:
-            :class:`.PdfTimeStamper` to use to create a signature timestamp
+            :class:`~pyhanko.sign.signers.pdf_signer.PdfTimeStamper`
+            to use to create a signature timestamp
 
             .. note::
                 If you want to create a *content* timestamp (as opposed to

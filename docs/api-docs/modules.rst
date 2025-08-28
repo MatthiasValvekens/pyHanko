@@ -21,7 +21,7 @@ refer to the :ref:`CLI user guide <cli-user-guide>`.
 
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 3
 
    pyhanko
    pyhanko_certvalidator

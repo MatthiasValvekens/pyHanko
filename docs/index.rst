@@ -31,7 +31,7 @@ PyHanko is a tool for signing and stamping PDF files.
    :target: https://pypi.org/project/pyhanko-cli/
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :caption: Contents:
 
    cli-guide/index
