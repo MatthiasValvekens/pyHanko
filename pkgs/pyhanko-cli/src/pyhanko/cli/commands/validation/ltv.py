@@ -38,18 +38,20 @@ def lta_update(
     validation_context,
     trust,
     trust_replace,
+    eutl,
     other_certs,
     timestamp_url,
     retroactive_revinfo,
 ):
     with pyhanko_exception_manager():
         vc_kwargs = build_vc_kwargs(
-            ctx.obj.config,
-            validation_context,
-            trust,
-            trust_replace,
-            other_certs,
-            retroactive_revinfo,
+            cli_config=ctx.obj.config,
+            validation_context=validation_context,
+            trust=trust,
+            trust_replace=trust_replace,
+            eutl=eutl,
+            other_certs=other_certs,
+            retroactive_revinfo=retroactive_revinfo,
         )
         timestamper = HTTPTimeStamper(timestamp_url)
         r = PdfFileReader(infile)
@@ -94,6 +96,7 @@ def ltv_fix(
     validation_context,
     trust_replace,
     trust,
+    eutl,
     other_certs,
 ):
     if apply_lta_timestamp and not timestamp_url:
@@ -102,11 +105,12 @@ def ltv_fix(
         )
 
     vc_kwargs = build_vc_kwargs(
-        ctx.obj.config,
-        validation_context,
-        trust,
-        trust_replace,
-        other_certs,
+        cli_config=ctx.obj.config,
+        validation_context=validation_context,
+        trust=trust,
+        trust_replace=trust_replace,
+        other_certs=other_certs,
+        eutl=eutl,
         retroactive_revinfo=False,
         allow_fetching=True,
     )

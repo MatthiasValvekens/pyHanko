@@ -1,14 +1,17 @@
+import dataclasses
 import hashlib
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import Path
 from typing import Iterable, Optional, Union
 
 import pytest
 import yaml
 from asn1crypto import x509
-from pyhanko.cli import config
+from pyhanko.cli import cache, config
 from pyhanko.cli.commands.signing.pkcs11_cli import ModuleConfigWrapper
 from pyhanko.cli.commands.signing.simple import KeyFileConfigWrapper
+from pyhanko.cli.config import CLIConfig
 
 import pyhanko.config.pkcs11
 from pyhanko import stamp
@@ -18,6 +21,7 @@ from pyhanko.config.logging import DEFAULT_ROOT_LOGGER_LEVEL, StdLogOutput
 from pyhanko.config.pkcs11 import TokenCriteria
 from pyhanko.config.trust import (
     DEFAULT_TIME_TOLERANCE,
+    TrustManagerSettings,
     init_validation_context_kwargs,
 )
 from pyhanko.pdf_utils import layout
@@ -27,6 +31,7 @@ from pyhanko.sign.signers.pdf_cms import (
     signer_from_pemder_config,
 )
 from pyhanko.stamp import QRStampStyle, TextStampStyle
+from pyhanko_certvalidator.registry import SimpleTrustManager
 from test_data.samples import CRYPTO_DATA_DIR, TEST_DIR, TESTING_CA_DIR
 
 
@@ -46,12 +51,8 @@ def test_read_vc_kwargs(trust_replace):
     cli_config: config.CLIConfig = _parse_cli_config(config_string)
     vc_kwargs = cli_config.get_validation_context(as_dict=True)
     assert len(vc_kwargs['other_certs']) == 2
-    if trust_replace:
-        assert 'extra_trust_roots' not in vc_kwargs
-        assert len(vc_kwargs['trust_roots']) == 1
-    else:
-        assert 'trust_roots' not in vc_kwargs
-        assert len(vc_kwargs['extra_trust_roots']) == 1
+    tm = vc_kwargs['trust_manager']
+    assert isinstance(tm, SimpleTrustManager)
 
     ku = cli_config.get_signer_key_usages()
     assert ku.key_usage is None
@@ -515,7 +516,11 @@ def test_read_time_tolerance_input_issues():
         cli_config.get_validation_context(as_dict=True)
 
     vc_kwargs = init_validation_context_kwargs(
-        trust=[], trust_replace=False, other_certs=[]
+        cli_config=cli_config,
+        trust_manager_settings=TrustManagerSettings(
+            trust=[], trust_replace=False, eutl=False
+        ),
+        other_certs=[],
     )
     assert 'retroactive_revinfo' not in vc_kwargs
     assert vc_kwargs['time_tolerance'] == DEFAULT_TIME_TOLERANCE
@@ -1235,3 +1240,20 @@ def test_default_stamp_style_fetch():
     from pyhanko.sign import DEFAULT_SIGNING_STAMP_STYLE
 
     assert result == DEFAULT_SIGNING_STAMP_STYLE
+
+
+def test_cache_dir_config():
+    assert cache.get_cache_dir(None) is not None
+    cli_config = CLIConfig(
+        validation_contexts={},
+        stamp_styles={},
+        default_stamp_style="default",
+        default_validation_context="default",
+        time_tolerance=timedelta(seconds=1),
+        retroactive_revinfo=True,
+        cache_dir=None,
+        raw_config={},
+    )
+    assert cache.get_cache_dir(cli_config) is not None
+    cli_config = dataclasses.replace(cli_config, cache_dir="test")
+    assert cache.get_cache_dir(cli_config) == Path("test")

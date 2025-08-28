@@ -211,7 +211,7 @@ jobs:
             tests/test_cms.py
       - name: Run CLI test suite with minimal deps
         # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
-        # the PKCS#11 parts
+        # the PKCS#11 & qualified validation parts
         run: |
           uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing-base \
             pytest $COVERAGE_SCOPE \

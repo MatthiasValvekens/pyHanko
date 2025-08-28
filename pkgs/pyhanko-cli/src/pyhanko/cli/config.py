@@ -1,16 +1,17 @@
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 import yaml
 
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import LogConfig, parse_logging_config
-from pyhanko.config.trust import DEFAULT_TIME_TOLERANCE, parse_trust_config
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.stamp import BaseStampStyle, QRStampStyle, TextStampStyle
 from pyhanko_certvalidator import ValidationContext
+
+DEFAULT_TIME_TOLERANCE: timedelta = timedelta(seconds=30)
 
 
 @dataclass
@@ -82,6 +83,12 @@ class CLIConfig:
     (global default).
     """
 
+    cache_dir: Optional[str]
+    """
+    Location to store cached data. Derived from the platform's
+    user cache dir by default.
+    """
+
     raw_config: dict
     """
     The raw config data parsed into a Python dictionary.
@@ -99,7 +106,10 @@ class CLIConfig:
             )
 
     def get_validation_context(
-        self, name: Optional[str] = None, as_dict: bool = False
+        self,
+        name: Optional[str] = None,
+        as_dict: bool = False,
+        overrides: Optional[Dict[str, Any]] = None,
     ):
         """
         Retrieve a validation context by name.
@@ -112,10 +122,21 @@ class CLIConfig:
             If ``False`` (the default), return a
             :class:`~pyhanko_certvalidator.context.ValidationContext`
             object.
+        :param overrides:
+            Optional overrides for the validation context, e.g.
+            values sourced from command-line arguments.
         """
         vc_config = self._get_validation_settings_raw(name)
+
+        from pyhanko.config.trust import parse_trust_config
+
+        if overrides:
+            vc_config.update(overrides)
         vc_kwargs = parse_trust_config(
-            vc_config, self.time_tolerance, self.retroactive_revinfo
+            vc_config,
+            self.time_tolerance,
+            self.retroactive_revinfo,
+            self,
         )
         return vc_kwargs if as_dict else ValidationContext(**vc_kwargs)
 
@@ -296,6 +317,7 @@ def process_config_dict(config_dict: dict) -> dict:
 
     time_tolerance = timedelta(seconds=time_tolerance_seconds)
     retroactive_revinfo = bool(config_dict.get('retroactive-revinfo', False))
+    cache_dir = config_dict.get('cache-dir', None)
     return dict(
         validation_contexts=vcs,
         default_validation_context=default_vc,
@@ -303,4 +325,5 @@ def process_config_dict(config_dict: dict) -> dict:
         retroactive_revinfo=retroactive_revinfo,
         stamp_styles=stamp_configs,
         default_stamp_style=default_stamp_style,
+        cache_dir=cache_dir,
     )

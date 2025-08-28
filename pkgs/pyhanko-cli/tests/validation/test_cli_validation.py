@@ -1,24 +1,18 @@
-import asyncio
 import datetime
 import getpass
 import re
 from io import BytesIO
-from typing import Optional
 
 import pytest
 from asn1crypto import pem
 from certomancer import PKIArchitecture
-from certomancer.registry import CertLabel, KeyLabel
+from certomancer.registry import CertLabel
 from freezegun import freeze_time
 from pyhanko.cli import cli_root
 
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.pdf_utils.writer import BasePdfFileWriter
-from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
-from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
-from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import (
     MINIMAL,
     MINIMAL_AES256,
@@ -27,70 +21,14 @@ from test_data.samples import (
     TESTING_CA,
 )
 
-from .conftest import (
+from ..conftest import (
     FREEZE_DT,
     INPUT_PATH,
     _const,
     _write_cert,
     _write_config,
 )
-
-
-def _write_input_to_validate(
-    pki_arch: PKIArchitecture,
-    fname: str,
-    w: Optional[BasePdfFileWriter],
-    weakened: bool = False,
-    wrong_key: bool = False,
-):
-    registry = SimpleCertificateStore()
-    registry.register(pki_arch.get_cert(CertLabel('interm')))
-    registry.register(pki_arch.get_cert(CertLabel('root')))
-    signer = SimpleSigner(
-        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
-        cert_registry=registry,
-        signing_key=pki_arch.key_set.get_private_key(
-            KeyLabel('signer1') if not wrong_key else KeyLabel('signer2')
-        ),
-    )
-
-    if weakened:
-        md = 'sha1'
-    else:
-        md = select_suitable_signing_md(signer.signing_cert.public_key)
-    out = BytesIO()
-    if w:
-        sign_pdf(
-            pdf_out=w,
-            signature_meta=PdfSignatureMetadata(
-                field_name='Sig1', md_algorithm=md
-            ),
-            signer=signer,
-            output=out,
-        )
-    else:
-        ci = asyncio.run(
-            signer.async_sign_general_data(
-                MINIMAL,
-                md,
-            )
-        )
-        out.write(ci.dump())
-    with open(fname, 'wb') as outf:
-        outf.write(out.getvalue())
-    return fname
-
-
-@pytest.fixture(params=["regular", "encrypted"])
-def input_to_validate(pki_arch: PKIArchitecture, monkeypatch, request):
-    if request.param == "encrypted":
-        w = IncrementalPdfFileWriter(BytesIO(MINIMAL_AES256))
-        monkeypatch.setattr(getpass, 'getpass', value=_const('ownersecret'))
-        w.encrypt(b"ownersecret")
-    else:
-        w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-
-    return _write_input_to_validate(pki_arch, 'to-validate.pdf', w)
+from .conftest import write_input_to_validate
 
 
 def test_basic_validate(cli_runner, root_cert, input_to_validate):
@@ -114,7 +52,7 @@ def test_validate_encrypted_wrong_password(
     fname = 'encrypted.pdf'
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_AES256))
     w.encrypt("ownersecret")
-    _write_input_to_validate(pki_arch, fname, w)
+    write_input_to_validate(pki_arch, fname, w)
 
     monkeypatch.setattr(getpass, 'getpass', _const("badpassword"))
     result = cli_runner.invoke(
@@ -138,7 +76,7 @@ def test_validate_encrypted_empty_user_password(
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
     w = writer.copy_into_new_writer(r)
     w.encrypt('ownersecret', '')
-    _write_input_to_validate(pki_arch, fname, w)
+    write_input_to_validate(pki_arch, fname, w)
 
     result = cli_runner.invoke(
         cli_root,
@@ -161,7 +99,7 @@ def test_validate_encrypted_empty_user_password_wrong_explicit_password(
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
     w = writer.copy_into_new_writer(r)
     w.encrypt('ownersecret', '')
-    _write_input_to_validate(pki_arch, fname, w)
+    write_input_to_validate(pki_arch, fname, w)
 
     result = cli_runner.invoke(
         cli_root,
@@ -186,7 +124,7 @@ def test_validate_encrypted_explicit_empty_password(
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
     w = writer.copy_into_new_writer(r)
     w.encrypt('ownersecret', '')
-    _write_input_to_validate(pki_arch, fname, w)
+    write_input_to_validate(pki_arch, fname, w)
 
     result = cli_runner.invoke(
         cli_root,
@@ -211,7 +149,7 @@ def test_validate_encrypted_wrong_explicit_empty_password(
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
     w = writer.copy_into_new_writer(r)
     w.encrypt('ownersecret', 'usersecret')
-    _write_input_to_validate(pki_arch, fname, w)
+    write_input_to_validate(pki_arch, fname, w)
 
     result = cli_runner.invoke(
         cli_root,
@@ -341,7 +279,7 @@ def test_basic_validate_untrusted(cli_runner, root_cert, input_to_validate):
 
 def test_basic_validate_with_weak_hash(cli_runner):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    fname = _write_input_to_validate(
+    fname = write_input_to_validate(
         TESTING_CA, 'to_validate.pdf', w, weakened=True
     )
     root_cert = _write_cert(TESTING_CA, CertLabel('root'), 'root.cert.pem')
@@ -361,7 +299,7 @@ def test_basic_validate_with_weak_hash(cli_runner):
 @pytest.mark.parametrize('verbosity', ['default', 'verbose', 'pretty'])
 def test_basic_validate_signed_with_wrong_key(cli_runner, verbosity):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    fname = _write_input_to_validate(
+    fname = write_input_to_validate(
         TESTING_CA, 'to_validate.pdf', w, wrong_key=True
     )
     root_cert = _write_cert(TESTING_CA, CertLabel('root'), 'root.cert.pem')
@@ -525,7 +463,7 @@ def test_basic_validate_context_malformed_cert(cli_runner):
 
 @pytest.fixture(params=['pem', 'der'])
 def detached_input_to_validate(pki_arch: PKIArchitecture, request):
-    outf = _write_input_to_validate(pki_arch, 'detached.sig', w=None)
+    outf = write_input_to_validate(pki_arch, 'detached.sig', w=None)
     if request.param == 'pem':
         with open(outf, 'rb') as derf:
             sig = derf.read()

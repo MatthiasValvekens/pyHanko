@@ -169,6 +169,7 @@ def addsig(
     validation_context,
     trust_replace,
     trust,
+    eutl,
     other_certs,
     style_name,
     stamp_url,
@@ -206,12 +207,13 @@ def addsig(
     key_usage = DEFAULT_SIGNER_KEY_USAGE
     if with_validation_info:
         vc_kwargs = build_vc_kwargs(
-            ctx.obj.config,
-            validation_context,
-            trust,
-            trust_replace,
-            other_certs,
-            retroactive_revinfo,
+            cli_config=ctx.obj.config,
+            validation_context=validation_context,
+            trust=trust,
+            trust_replace=trust_replace,
+            eutl=eutl,
+            other_certs=other_certs,
+            retroactive_revinfo=retroactive_revinfo,
             allow_fetching=True,
         )
         vc = ValidationContext(**vc_kwargs)
@@ -303,16 +305,18 @@ def timestamp(
     validation_context,
     trust,
     trust_replace,
+    eutl,
     other_certs,
     timestamp_url,
 ):
     with pyhanko_exception_manager():
         vc_kwargs = build_vc_kwargs(
-            ctx.obj.config,
-            validation_context,
-            trust,
-            trust_replace,
-            other_certs,
+            cli_config=ctx.obj.config,
+            validation_context=validation_context,
+            trust=trust,
+            trust_replace=trust_replace,
+            eutl=eutl,
+            other_certs=other_certs,
             retroactive_revinfo=True,
         )
         timestamper = HTTPTimeStamper(timestamp_url)

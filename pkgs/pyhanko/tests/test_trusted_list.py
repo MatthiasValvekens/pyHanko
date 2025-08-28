@@ -1,19 +1,15 @@
 import base64
 import dataclasses
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
 
 import pytest
 from aiohttp import web
-from aiohttp.test_utils import TestClient
-from aiohttp.typedefs import StrOrURL
 from asn1crypto import x509
-from certomancer.registry import ArchLabel
+from certomancer.registry import CertLabel, EntityLabel
 from freezegun import freeze_time
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
-from yarl import URL
 
 from pyhanko.generated.etsi import ServiceTypeIdentifier, ts_119612
 from pyhanko.keys import load_cert_from_pemder
@@ -25,7 +21,10 @@ from pyhanko.sign.validation.qualified import (
     q_status,
     tsp,
 )
-from pyhanko.sign.validation.qualified.eutl_fetch import TLCache
+from pyhanko.sign.validation.qualified.eutl_fetch import (
+    FileSystemTLCache,
+    InMemoryTLCache,
+)
 from pyhanko.sign.validation.qualified.eutl_parse import (
     STATUS_GRANTED,
     _interpret_historical_service_info_for_ca,
@@ -48,7 +47,11 @@ from pyhanko_certvalidator.policy_decl import (
     RevocationCheckingPolicy,
     RevocationCheckingRule,
 )
-from test_data.samples import CERTOMANCER, TEST_DIR, TESTING_CA_QUALIFIED
+from test_data.certomancer_trust_lists import (
+    PathRetainingClient,
+    certomancer_lotl,
+)
+from test_data.samples import TEST_DIR, TESTING_CA_QUALIFIED
 from test_utils.signing_commons import ECC_INTERM_CERT, FROM_CA, INTERM_CERT
 
 
@@ -196,16 +199,6 @@ async def serve_tl_file(request: web.Request):
         return web.Response(text=inf.read(), content_type='text/xml')
 
 
-class PathRetainingClient(TestClient):
-
-    def make_url(self, path: StrOrURL) -> URL:
-        components = urlparse(path)
-        # only remember the path part, forget about the host etc.
-        # (this is so we can test with real EUTL files using aiohttp
-        # testing utils)
-        return super().make_url(components.path)
-
-
 @pytest.fixture
 def aiohttp_client_cls():
     return PathRetainingClient
@@ -219,6 +212,21 @@ def _check_lotl_signers(results):
     assert result_set == expected_result_set
 
 
+def test_parse_generated_lotl():
+    url = 'https://example.com/'
+    tl_xml = certomancer_lotl(
+        TESTING_CA_QUALIFIED,
+        EntityLabel('root'),
+        entries=[(CertLabel('interm-qualified'), url)],
+    )
+    result = eutl_parse.validate_and_parse_lotl(
+        tl_xml,
+        lotl_tlso_certs=[TESTING_CA_QUALIFIED.get_cert(CertLabel('root'))],
+    )
+    assert not result.errors
+    assert [r.location_uri for r in result.references] == [url]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('pass_empty_cache', [True, False])
 async def test_bootstrap_signers(aiohttp_client, pass_empty_cache):
@@ -228,7 +236,9 @@ async def test_bootstrap_signers(aiohttp_client, pass_empty_cache):
     with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
         client = await aiohttp_client(app)
         results = await eutl_fetch.bootstrap_lotl_signers(
-            inf.read(), client, cache=TLCache() if pass_empty_cache else None
+            inf.read(),
+            client,
+            cache=InMemoryTLCache() if pass_empty_cache else None,
         )
         _check_lotl_signers(results)
 
@@ -236,7 +246,7 @@ async def test_bootstrap_signers(aiohttp_client, pass_empty_cache):
 @pytest.mark.asyncio
 async def test_bootstrap_signers_with_populated_cache(aiohttp_client):
     app = web.Application()
-    cache = TLCache()
+    cache = InMemoryTLCache()
 
     for pivot in LOTL_PIVOTS:
         url = f"https://ec.europa.eu/tools/lotl/{pivot}"
@@ -1700,3 +1710,71 @@ async def test_conclude_not_qualified_qtst_lacking_qc_statements():
     assert (
         result.service_definition.base_info.service_type == eutl_parse.QTST_URI
     )
+
+
+def test_fs_cache_reload_from_disk(tmp_path):
+    fs = FileSystemTLCache(tmp_path, expire_after=timedelta(minutes=1))
+    fs['foo'] = 'bar'
+    fs['baz'] = 'quux'
+
+    fs2 = FileSystemTLCache(tmp_path, expire_after=timedelta(minutes=1))
+    assert fs2['foo'] == 'bar'
+    assert fs2['baz'] == 'quux'
+
+
+def test_fs_cache_keep_until_expiry(tmp_path):
+    with freeze_time('2025-08-28'):
+        fs = FileSystemTLCache(tmp_path, expire_after=timedelta(days=10))
+        fs['foo'] = 'bar'
+        fs['baz'] = 'quux'
+
+    with freeze_time('2025-08-31'):
+        assert fs['foo'] == 'bar'
+        assert fs['baz'] == 'quux'
+
+
+def test_fs_cache_reload_from_disk_before_expiry(tmp_path):
+    with freeze_time('2025-08-28'):
+        fs = FileSystemTLCache(tmp_path, expire_after=timedelta(days=10))
+        fs['foo'] = 'bar'
+        fs['baz'] = 'quux'
+
+    with freeze_time('2025-08-31'):
+        fs2 = FileSystemTLCache(tmp_path, expire_after=timedelta(days=10))
+        assert fs2['foo'] == 'bar'
+        assert fs2['baz'] == 'quux'
+
+
+def test_fs_cache_expire(tmp_path):
+    with freeze_time('2025-08-28'):
+        fs = FileSystemTLCache(tmp_path, expire_after=timedelta(days=1))
+        fs['foo'] = 'bar'
+        fs['baz'] = 'quux'
+
+    with freeze_time('2025-08-31'):
+        with pytest.raises(KeyError):
+            fs.__getitem__('foo')
+
+
+def test_fs_cache_expire_after_reload(tmp_path):
+    with freeze_time('2025-08-28'):
+        fs = FileSystemTLCache(tmp_path, expire_after=timedelta(days=1))
+        fs['foo'] = 'bar'
+        fs['baz'] = 'quux'
+
+    with freeze_time('2025-08-31'):
+        fs2 = FileSystemTLCache(tmp_path, expire_after=timedelta(days=1))
+        with pytest.raises(KeyError):
+            fs2.__getitem__('foo')
+
+
+def test_fs_cache_io_failure(tmp_path):
+    with freeze_time('2025-08-28'):
+        fs = FileSystemTLCache(tmp_path, expire_after=timedelta(days=10))
+        fs['foo'] = 'bar'
+        fs['baz'] = 'quux'
+
+    (tmp_path / fs._cache['foo'][1]).unlink(missing_ok=False)
+
+    with pytest.raises(KeyError):
+        fs.__getitem__('foo')

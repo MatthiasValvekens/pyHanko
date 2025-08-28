@@ -231,6 +231,7 @@ def validate_signatures(
     validation_context,
     trust,
     trust_replace,
+    eutl,
     other_certs,
     ltv_profile,
     force_revinfo,
@@ -261,12 +262,13 @@ def validate_signatures(
         ltv_profile = RevocationInfoValidationType(ltv_profile)
 
     vc_kwargs = build_vc_kwargs(
-        ctx.obj.config,
-        validation_context,
-        trust,
-        trust_replace,
-        other_certs,
-        retroactive_revinfo,
+        cli_config=ctx.obj.config,
+        validation_context=validation_context,
+        trust=trust,
+        trust_replace=trust_replace,
+        other_certs=other_certs,
+        eutl=eutl,
+        retroactive_revinfo=retroactive_revinfo,
         allow_fetching=False if no_revocation_check else None,
     )
 

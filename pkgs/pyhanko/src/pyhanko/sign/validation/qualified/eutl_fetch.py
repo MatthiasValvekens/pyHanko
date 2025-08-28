@@ -1,5 +1,9 @@
 import asyncio
+import hashlib
+import json
 import logging
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 import aiohttp
@@ -15,7 +19,10 @@ from pyhanko.sign.validation.qualified.tsp import (
 
 __all__ = [
     'TLCache',
+    'InMemoryTLCache',
+    'FileSystemTLCache',
     'bootstrap_lotl_signers',
+    'fetch_lotl',
     'lotl_to_registry',
     'EU_LOTL_LOCATION',
 ]
@@ -36,11 +43,24 @@ class TLCache:
     """
     Cache for trusted lists, intended to speed up downloading lists
     from a list-of-lists.
+    """
+
+    def __getitem__(self, key: str) -> str:
+        raise NotImplementedError
+
+    def __setitem__(self, key: str, value: str) -> None:
+        raise NotImplementedError
+
+
+class InMemoryTLCache(TLCache):
+    """
+    Cache for trusted lists, intended to speed up downloading lists
+    from a list-of-lists.
 
     The cache is keyed by download URL and does not have any eviction mechanism.
     """
 
-    def __init__(self: 'TLCache'):
+    def __init__(self: 'InMemoryTLCache'):
         self._cache: Dict[str, str] = {}
 
     def __getitem__(self, key: str) -> str:
@@ -50,9 +70,68 @@ class TLCache:
         self._cache[key] = value
 
 
-FETCH_TRIES = 4
+class FileSystemTLCache(TLCache):
+    def __init__(self, cache_path: Path, expire_after: timedelta):
+        self._cache: Dict[str, Tuple[datetime, str]] = {}
+        self._root = cache_path
+        self._expire_after = expire_after
+        if not cache_path.exists():
+            cache_path.mkdir(parents=True, exist_ok=True)
+
+        index = cache_path / 'index.json'
+        if index.exists():
+            with index.open('r') as inf:
+                index_data = json.load(inf)
+                for key, entry in index_data.items():
+                    exp_ts = datetime.fromtimestamp(
+                        entry['exp_epoch_seconds'], tz=timezone.utc
+                    )
+                    self._cache[key] = (exp_ts, entry['fname'])
+        logger.info(
+            f"Loaded {len(self._cache)} items from cache at {cache_path.absolute()}"
+        )
+
+    def __getitem__(self, key: str) -> str:
+        exp_ts, fname = self._cache[key]
+        now = datetime.now(timezone.utc)
+        if now > exp_ts:
+            raise KeyError
+        cached_file_path = self._root / fname
+        try:
+            with cached_file_path.open('r') as inf:
+                content = inf.read()
+        except IOError as e:
+            logger.warning(
+                f"Failed to access cached file at {cached_file_path}: {e}",
+                exc_info=e,
+            )
+            raise KeyError
+        return content
+
+    def __setitem__(self, key: str, value: str) -> None:
+        exp_ts = datetime.now(timezone.utc) + self._expire_after
+        fname = hashlib.sha256(key.encode('utf8')).hexdigest()
+        index = self._root / 'index.json'
+        if index.exists():
+            with index.open('r') as inf:
+                index_data = json.load(inf)
+        else:
+            index_data = {}
+        index_data[key] = {
+            'exp_epoch_seconds': exp_ts.timestamp(),
+            'fname': fname,
+        }
+        with index.open('w') as outf:
+            json.dump(index_data, outf)
+        with (self._root / fname).open('w') as outf:
+            outf.write(value)
+        self._cache[key] = (exp_ts, fname)
+
+
+FETCH_TRIES = 3
 FETCH_BASE_DELAY_SECONDS = 2
 FETCH_TIMEOUT_SECONDS = 30
+FETCH_CONNECT_TIMEOUT_SECONDS = 2
 
 
 async def _fetch(
@@ -70,7 +149,10 @@ async def _fetch(
                         ('Accept', eutl_parse.ETSI_TSL_MIME_TYPE),
                     ),
                     raise_for_status=True,
-                    timeout=ClientTimeout(total=FETCH_TIMEOUT_SECONDS),
+                    timeout=ClientTimeout(
+                        total=FETCH_TIMEOUT_SECONDS,
+                        sock_read=FETCH_CONNECT_TIMEOUT_SECONDS,
+                    ),
                 )
                 return await response.text()
             except aiohttp.ClientError as e:
@@ -174,6 +256,29 @@ async def bootstrap_lotl_signers(
     return current_certs
 
 
+async def fetch_lotl(
+    client: aiohttp.ClientSession,
+    cache: Optional[TLCache] = None,
+    url=EU_LOTL_LOCATION,
+):
+    """
+    Fetch the EU list-of-the-lists (LOTL).
+
+    :param client:
+        An :class:`aiohttp.ClientSession` object to use for fetching
+        trust lists.
+    :param cache:
+        An optional :class:`TLCache` to be used while fetching trust lists.
+    :param url:
+        The URL content of the list-of-the-lists. The default is
+        the location specified in :const:`EU_LOTL_LOCATION`.
+    :return:
+    """
+    logger.info(f"Downloading LOTL from {url}...")
+    lotl_xml = await _fetch(cache, url, client)
+    return lotl_xml
+
+
 async def lotl_to_registry(
     lotl_xml: Optional[str],
     client: aiohttp.ClientSession,
@@ -215,8 +320,7 @@ async def lotl_to_registry(
         fetched contents, in addition to any parsing errors encountered.
     """
     if lotl_xml is None:
-        logger.info(f"Downloading LOTL from {EU_LOTL_LOCATION}...")
-        lotl_xml = await _fetch(cache, EU_LOTL_LOCATION, client)
+        lotl_xml = await fetch_lotl(client, cache)
 
     lotl_result = eutl_parse.validate_and_parse_lotl(lotl_xml, lotl_tlso_certs)
     errors = lotl_result.errors
@@ -241,8 +345,16 @@ async def lotl_to_registry(
                 )
             )
             continue
-        _, tl_errors = eutl_parse.trust_list_to_registry(
-            tl_xml, ref.tlso_certs, registry
-        )
-        errors.extend(tl_errors)
+        try:
+            _, tl_errors = eutl_parse.trust_list_to_registry(
+                tl_xml, ref.tlso_certs, registry
+            )
+            errors.extend(tl_errors)
+        except Exception as e:
+            errors.append(
+                TSPServiceParsingError(
+                    f"Failed to parse trusted list for {ref.territory} "
+                    f"at {ref.location_uri}: {e}"
+                )
+            )
     return registry, errors

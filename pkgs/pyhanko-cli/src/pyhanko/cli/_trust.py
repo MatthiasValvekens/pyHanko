@@ -5,32 +5,44 @@ from pyhanko.cli.config import CLIConfig
 from pyhanko.cli.utils import logger, readable_file
 
 from pyhanko.config.errors import ConfigurationError
-from pyhanko.config.trust import init_validation_context_kwargs
+from pyhanko.config.trust import (
+    TrustManagerSettings,
+    init_validation_context_kwargs,
+)
 from pyhanko.keys import load_certs_from_pemder
 
 
 def build_vc_kwargs(
+    *,
     cli_config: Optional[CLIConfig],
     validation_context: Optional[str],
     trust: Union[Iterable[str], str],
     trust_replace: bool,
+    eutl: bool,
     other_certs: Union[Iterable[str], str],
     retroactive_revinfo: bool,
     allow_fetching: Optional[bool] = None,
 ):
+    overrides = {}
+    if retroactive_revinfo:
+        overrides['retroactive_revinfo'] = True
+    if eutl:
+        overrides['eutl'] = True
     try:
         if validation_context is not None:
             if any((trust, other_certs)):
                 raise click.ClickException(
-                    "--validation-context is incompatible with --trust "
-                    "and --other-certs"
+                    "--validation-context is incompatible with other "
+                    "trust-related settings"
                 )
             # load the desired context from config
             if cli_config is None:
                 raise click.ClickException("No config file specified.")
             try:
                 result = cli_config.get_validation_context(
-                    validation_context, as_dict=True
+                    validation_context,
+                    as_dict=True,
+                    overrides=overrides,
                 )
             except ConfigurationError as e:
                 msg = (
@@ -41,33 +53,48 @@ def build_vc_kwargs(
                 logger.error(msg, exc_info=e)
                 raise click.ClickException(msg)
         elif trust or other_certs:
-            # load a validation profile using command line kwargs
+            # always load a validation profile using command
+            # line kwargs if the --trust or --other-certs
+            # arguments are provided
             result = init_validation_context_kwargs(
-                trust=trust,
-                trust_replace=trust_replace,
+                cli_config=cli_config,
+                trust_manager_settings=TrustManagerSettings(
+                    trust=trust,
+                    trust_replace=trust_replace,
+                    eutl=eutl,
+                ),
                 other_certs=other_certs,
                 retroactive_revinfo=retroactive_revinfo,
             )
         elif cli_config is not None:
             # load the default settings from the CLI config
             try:
-                result = cli_config.get_validation_context(as_dict=True)
+                result = cli_config.get_validation_context(
+                    as_dict=True,
+                    overrides=overrides,
+                )
             except ConfigurationError as e:
                 msg = "Failed to load default validation context."
                 logger.error(msg, exc_info=e)
                 raise click.ClickException(msg)
         else:
-            result = {}
+            # load defaults given other arguments
+            result = init_validation_context_kwargs(
+                cli_config=None,
+                trust_manager_settings=TrustManagerSettings(
+                    trust=None,
+                    trust_replace=trust_replace,
+                    eutl=eutl,
+                ),
+                other_certs=[],
+                retroactive_revinfo=retroactive_revinfo,
+            )
 
         if allow_fetching is not None:
             result['allow_fetching'] = allow_fetching
         else:
             result.setdefault('allow_fetching', True)
 
-        # allow CLI --retroactive-revinfo flag to override settings
-        # if necessary
-        if retroactive_revinfo:
-            result['retroactive_revinfo'] = True
         return result
     except click.ClickException:
         raise
@@ -110,6 +137,15 @@ TRUST_OPTIONS = [
     click.Option(
         ('--trust-replace',),
         help='listed trust roots supersede OS-provided trust store',
+        required=False,
+        type=bool,
+        is_flag=True,
+        default=False,
+        show_default=True,
+    ),
+    click.Option(
+        ('--eutl',),
+        help='source trust from EU trusted list (disregard OS trust store)',
         required=False,
         type=bool,
         is_flag=True,

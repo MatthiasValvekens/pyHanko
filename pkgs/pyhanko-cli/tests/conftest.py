@@ -27,6 +27,7 @@ from test_data.samples import (
     TESTING_CA_ECDSA,
     TESTING_CA_ED448,
     TESTING_CA_ED25519,
+    TESTING_CA_QUALIFIED,
 )
 
 INPUT_PATH = 'input.pdf'
@@ -41,16 +42,18 @@ def _const(v):
     return f
 
 
+DEFAULT_CERTOMANCER_ARCHITECTURES = ["rsa", "ecdsa", "ed25519", "ed448"]
 CERTOMANCER_ARCHITECTURES = {
     "rsa": TESTING_CA,
     "ecdsa": TESTING_CA_ECDSA,
     "ed25519": TESTING_CA_ED25519,
     "ed448": TESTING_CA_ED448,
+    "qualified": TESTING_CA_QUALIFIED,
 }
 FREEZE_DT = datetime.datetime(2020, 8, 1, tzinfo=tzlocal.get_localzone())
 
 
-@pytest.fixture(scope="module", params=list(CERTOMANCER_ARCHITECTURES))
+@pytest.fixture(scope="module", params=DEFAULT_CERTOMANCER_ARCHITECTURES)
 def pki_arch_name(request):
     return request.param
 

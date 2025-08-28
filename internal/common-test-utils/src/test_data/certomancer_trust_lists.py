@@ -1,6 +1,11 @@
+from typing import List, Tuple
+from urllib.parse import urlparse
+
+from aiohttp.test_utils import TestClient
+from aiohttp.typedefs import StrOrURL
 from asn1crypto import pem
 from certomancer import PKIArchitecture
-from certomancer.registry import EntityLabel
+from certomancer.registry import CertLabel, EntityLabel
 from cryptography.hazmat.primitives import serialization
 from lxml.etree import fromstring, tostring
 from signxml import SignatureMethod
@@ -8,14 +13,14 @@ from signxml.xades import XAdESSigner
 from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 from xsdata.models.datatype import XmlDateTime
+from yarl import URL
 
-from pyhanko.generated.etsi import ts_119612
-from pyhanko.sign.validation.qualified import eutl_parse
-from pyhanko.sign.validation.qualified.eutl_parse import STATUS_GRANTED
+from pyhanko.generated.etsi import MimeType, ts_119612
+from pyhanko.sign.validation.qualified.eutl_parse import (
+    ETSI_TSL_MIME_TYPE,
+    STATUS_GRANTED,
+)
 from pyhanko.sign.validation.qualified.tsp import CA_QC_URI, QTST_URI
-from pyhanko.sign.validation.report.tools import NAMESPACES
-from test_data.samples import TESTING_CA
-from test_utils.signing_commons import FROM_CA
 
 
 def _certomancer_pki_as_service_definitions(pki_arch: PKIArchitecture):
@@ -89,21 +94,12 @@ def _certomancer_pki_as_service_definitions(pki_arch: PKIArchitecture):
         )
 
 
-def certomancer_pki_as_trusted_list(
-    pki_arch: PKIArchitecture, tlso_entity: EntityLabel
+def _sign_tl(
+    xml_root: ts_119612.TrustServiceStatusList,
+    pki_arch: PKIArchitecture,
+    tlso_entity: EntityLabel,
 ):
 
-    xml_root = ts_119612.TrustServiceStatusList(
-        scheme_information=ts_119612.SchemeInformation(),
-        trust_service_provider_list=ts_119612.TrustServiceProviderList(
-            trust_service_provider=tuple(
-                ts_119612.TrustServiceProvider(
-                    tspservices=ts_119612.TSPServices((svc,))
-                )
-                for svc in _certomancer_pki_as_service_definitions(pki_arch)
-            )
-        ),
-    )
     tlso_cert_label = pki_arch.get_unique_cert_for_entity(tlso_entity)
     tlso_cert_spec = pki_arch.get_cert_spec(tlso_cert_label)
     tlso_priv_key = pki_arch.key_set.get_private_key(tlso_cert_spec.subject_key)
@@ -123,3 +119,77 @@ def certomancer_pki_as_trusted_list(
         ),
     )
     return tostring(signed).decode('utf8')
+
+
+def certomancer_pki_as_trusted_list(
+    pki_arch: PKIArchitecture, tlso_entity: EntityLabel
+):
+
+    xml_root = ts_119612.TrustServiceStatusList(
+        scheme_information=ts_119612.SchemeInformation(),
+        trust_service_provider_list=ts_119612.TrustServiceProviderList(
+            trust_service_provider=tuple(
+                ts_119612.TrustServiceProvider(
+                    tspservices=ts_119612.TSPServices((svc,))
+                )
+                for svc in _certomancer_pki_as_service_definitions(pki_arch)
+            )
+        ),
+    )
+    return _sign_tl(xml_root, pki_arch, tlso_entity)
+
+
+def certomancer_lotl(
+    pki_arch: PKIArchitecture,
+    lotl_tlso_entity: EntityLabel,
+    entries: List[Tuple[CertLabel, str]],
+):
+    pointers = [
+        ts_119612.OtherTSLPointer(
+            tsllocation=url,
+            service_digital_identities=ts_119612.ServiceDigitalIdentities(
+                service_digital_identity=(
+                    ts_119612.ServiceDigitalIdentity(
+                        (
+                            ts_119612.DigitalIdentityType(
+                                x509_certificate=pki_arch.get_cert(
+                                    tlso_cert
+                                ).dump()
+                            ),
+                        )
+                    ),
+                )
+            ),
+            additional_information=ts_119612.AdditionalInformation(
+                other_information=(
+                    ts_119612.AnyType(
+                        content=(
+                            ts_119612.SchemeTerritory('eu'),
+                            MimeType(ETSI_TSL_MIME_TYPE),
+                        )
+                    ),
+                ),
+            ),
+        )
+        for tlso_cert, url in entries
+    ]
+
+    xml_root = ts_119612.TrustServiceStatusList(
+        scheme_information=ts_119612.SchemeInformation(
+            scheme_information_uri=ts_119612.SchemeInformationURI(uri=tuple()),
+            pointers_to_other_tsl=ts_119612.PointersToOtherTSL(
+                other_tslpointer=tuple(pointers)
+            ),
+        ),
+    )
+    return _sign_tl(xml_root, pki_arch, lotl_tlso_entity)
+
+
+class PathRetainingClient(TestClient):
+
+    def make_url(self, path: StrOrURL) -> URL:
+        components = urlparse(path)
+        # only remember the path part, forget about the host etc.
+        # (this is so we can test with real EUTL files using aiohttp
+        # testing utils)
+        return super().make_url(components.path)
