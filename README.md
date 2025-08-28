@@ -13,7 +13,7 @@ The lack of open-source CLI tooling to handle digitally signing and stamping PDF
 
 ### Documentation
 
-The [documentation for pyHanko is hosted on ReadTheDocs](https://pyhanko.readthedocs.io/en/latest/)
+The [documentation for pyHanko is hosted on ReadTheDocs](https://docs.pyhanko.eu/en/latest/)
 and includes information on CLI usage, library usage, and API reference documentation derived from
 inline docstrings.
 
@@ -120,7 +120,7 @@ Note that not all of these are necessarily exposed through the CLI.
 
 ### Some TODOs and known limitations
 
-See the [known issues](https://pyhanko.readthedocs.io/en/latest/known-issues.html)
+See the [known issues](https://docs.pyhanko.eu/en/latest/known-issues.html)
 page in the documentation.
 
 

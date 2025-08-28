@@ -11,7 +11,7 @@ pip install pyhanko-cli
 
 ### Documentation
 
-The [documentation for pyHanko is hosted on ReadTheDocs](https://pyhanko.readthedocs.io/en/latest/)
+The [documentation for pyHanko is hosted on ReadTheDocs](https://docs.pyhanko.eu/en/latest/)
 and includes information on CLI usage, library usage, and API reference documentation derived from
 inline docstrings.
 

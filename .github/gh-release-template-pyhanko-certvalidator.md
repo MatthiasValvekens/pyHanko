@@ -2,4 +2,4 @@ The release artifacts have been published to [PyPI](https://pypi.org/project/pyh
 
 ## Change log
 
-The release notes for the :VERSION release are available [on the Release History page](https://pyhanko.readthedocs.io/en/latest/changelog.html#certvalidator-release-:VERSION)
+The release notes for the :VERSION release are available [on the Release History page](https://docs.pyhanko.eu/en/latest/changelog.html#certvalidator-release-:VERSION)

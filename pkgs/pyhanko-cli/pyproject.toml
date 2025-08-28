@@ -47,8 +47,8 @@ content-type = "text/markdown"
 
 [project.urls]
 Homepage = "https://github.com/MatthiasValvekens/pyHanko"
-Documentation = "https://pyhanko.readthedocs.io/"
-Changes = "https://pyhanko.readthedocs.io/en/latest/changelog.html"
+Documentation = "https://docs.pyhanko.eu/"
+Changes = "https://docs.pyhanko.eu/en/latest/changelog.html"
 "Source Code" = "https://github.com/MatthiasValvekens/pyHanko"
 "Issue Tracker" = "https://github.com/MatthiasValvekens/pyHanko/issues"
 
