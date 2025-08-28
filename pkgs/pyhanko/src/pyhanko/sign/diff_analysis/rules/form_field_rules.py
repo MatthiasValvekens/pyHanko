@@ -27,11 +27,11 @@ from ..policy_api import ModificationLevel, SuspiciousModification
 from ..rules_api import Context, ReferenceUpdate, RelativeContext, WhitelistRule
 
 __all__ = [
+    'BaseFieldModificationRule',
     'DSSCompareRule',
+    'GenericFieldModificationRule',
     'SigFieldCreationRule',
     'SigFieldModificationRule',
-    'GenericFieldModificationRule',
-    'BaseFieldModificationRule',
 ]
 
 
@@ -345,12 +345,15 @@ class SigFieldCreationRule(FieldMDPRule):
                 else ModificationLevel.LTA_UPDATES
             )
             if context.old.is_ref_available(sigfield_ref):
-                yield mod_level, FormUpdate(
-                    updated_ref=sigfield_ref,
-                    field_name=fq_name,
-                    valid_when_locked=not visible,
-                    valid_when_certifying=(
-                        not visible or self.allow_new_visible_after_certify
+                yield (
+                    mod_level,
+                    FormUpdate(
+                        updated_ref=sigfield_ref,
+                        field_name=fq_name,
+                        valid_when_locked=not visible,
+                        valid_when_certifying=(
+                            not visible or self.allow_new_visible_after_certify
+                        ),
                     ),
                 )
             # checked by field listing routine already
@@ -382,10 +385,13 @@ class SigFieldCreationRule(FieldMDPRule):
                 if isinstance(
                     kids_arr_ref, generic.IndirectObject
                 ) and old.is_ref_available(kids_arr_ref.reference):
-                    yield mod_level, FormUpdate(
-                        updated_ref=kids_arr_ref.reference,
-                        field_name=fq_name,
-                        valid_when_locked=not visible,
+                    yield (
+                        mod_level,
+                        FormUpdate(
+                            updated_ref=kids_arr_ref.reference,
+                            field_name=fq_name,
+                            valid_when_locked=not visible,
+                        ),
                     )
                 kid_refs = _arr_to_refs(
                     kids_arr_ref.get_object(), SuspiciousModification
@@ -398,10 +404,13 @@ class SigFieldCreationRule(FieldMDPRule):
                     if '/T' not in kid.get_object():
                         field_ref_reverse[kid] = fq_name
                         if old.is_ref_available(kid):
-                            yield mod_level, FormUpdate(
-                                updated_ref=kid,
-                                field_name=fq_name,
-                                valid_when_locked=not visible,
+                            yield (
+                                mod_level,
+                                FormUpdate(
+                                    updated_ref=kid,
+                                    field_name=fq_name,
+                                    valid_when_locked=not visible,
+                                ),
                             )
                         # pull in appearance dependencies
                         yield from _handle_deps(kid.get_object(), '/AP')
@@ -673,10 +682,13 @@ class SigFieldModificationRule(BaseFieldModificationRule):
             valid_when_locked = False
 
         # first, whitelist the actual signature object
-        yield sig_whitelist, FormUpdate(
-            updated_ref=current_value_ref,
-            field_name=fq_name,
-            valid_when_locked=valid_when_locked,
+        yield (
+            sig_whitelist,
+            FormUpdate(
+                updated_ref=current_value_ref,
+                field_name=fq_name,
+                valid_when_locked=valid_when_locked,
+            ),
         )
 
         # since apparently Acrobat didn't get the memo about not having

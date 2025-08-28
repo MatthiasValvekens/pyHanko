@@ -2,8 +2,8 @@ from asn1crypto import keys, x509
 from cryptography.hazmat.primitives import serialization
 
 __all__ = [
-    'translate_pyca_cryptography_key_to_asn1',
     'translate_pyca_cryptography_cert_to_asn1',
+    'translate_pyca_cryptography_key_to_asn1',
 ]
 
 

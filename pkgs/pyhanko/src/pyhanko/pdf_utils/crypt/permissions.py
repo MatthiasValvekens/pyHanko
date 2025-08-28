@@ -3,7 +3,7 @@ import struct
 from enum import Flag
 from functools import reduce
 
-__all__ = ['PdfPermissions', 'StandardPermissions', 'PubKeyPermissions']
+__all__ = ['PdfPermissions', 'PubKeyPermissions', 'StandardPermissions']
 
 
 class PdfPermissions(Flag):

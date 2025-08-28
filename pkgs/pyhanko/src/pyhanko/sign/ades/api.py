@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from asn1crypto import cms
-
 from pyhanko.sign.timestamps import TimeStamper
 
 from ..attributes import CMSAttributeProvider, TSTProvider
@@ -15,7 +14,7 @@ from .cades_asn1 import (
     SignerAttributesV2,
 )
 
-__all__ = ['GenericCommitment', 'CAdESSignedAttrSpec', 'SignerAttrSpec']
+__all__ = ['CAdESSignedAttrSpec', 'GenericCommitment', 'SignerAttrSpec']
 
 
 # TODO add semantics explanations from the standard

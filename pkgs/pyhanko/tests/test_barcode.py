@@ -1,7 +1,6 @@
 from io import BytesIO
 
 from freezegun import freeze_time
-
 from pyhanko import stamp
 from pyhanko.pdf_utils import barcodes, generic
 from pyhanko.pdf_utils.generic import pdf_name

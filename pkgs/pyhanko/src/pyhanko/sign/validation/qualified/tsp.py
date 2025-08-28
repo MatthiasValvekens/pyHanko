@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Dict, FrozenSet, Generator, Iterable, Optional, Set, Tuple
 
 from asn1crypto import x509
-
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko_certvalidator.authority import (
     Authority,
@@ -19,26 +18,26 @@ from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.registry import TrustManager
 
 __all__ = [
-    'QualifiedServiceInformation',
-    'CAServiceInformation',
-    'QTSTServiceInformation',
-    'TSPRegistry',
-    'TSPTrustManager',
-    'QcCertType',
+    'CA_QC_URI',
+    'QTST_URI',
     'AdditionalServiceInformation',
     'BaseServiceInformation',
-    'Qualifier',
-    'Criterion',
-    'Qualification',
-    'KeyUsageCriterion',
-    'PolicySetCriterion',
+    'CAServiceInformation',
     'CertSubjectDNCriterion',
     'CriteriaCombination',
     'CriteriaList',
+    'Criterion',
+    'KeyUsageCriterion',
+    'PolicySetCriterion',
+    'QTSTServiceInformation',
+    'QcCertType',
     'Qualification',
+    'Qualification',
+    'QualifiedServiceInformation',
+    'Qualifier',
+    'TSPRegistry',
     'TSPServiceParsingError',
-    'CA_QC_URI',
-    'QTST_URI',
+    'TSPTrustManager',
 ]
 
 # noinspection HttpUrlsUsage

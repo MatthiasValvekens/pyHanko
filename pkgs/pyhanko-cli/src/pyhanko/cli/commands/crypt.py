@@ -4,7 +4,6 @@ import click
 from pyhanko.cli._root import cli_root
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import _warn_empty_passphrase, readable_file
-
 from pyhanko.keys import load_certs_from_pemder
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.crypt import StandardSecurityHandler
@@ -179,10 +178,8 @@ def _decrypt_pubkey(
                 if (
                     not force
                     and auth_result.permission_flags
-                    and not (
-                        PubKeyPermissions.ALLOW_ENCRYPTION_CHANGE
-                        in auth_result.permission_flags
-                    )
+                    and PubKeyPermissions.ALLOW_ENCRYPTION_CHANGE
+                    not in auth_result.permission_flags
                 ):
                     raise click.ClickException(
                         "Change of encryption is typically not allowed with "

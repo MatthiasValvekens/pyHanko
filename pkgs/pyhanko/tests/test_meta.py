@@ -6,7 +6,6 @@ from io import BytesIO
 import pytest
 import tzlocal
 from freezegun import freeze_time
-
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import EncryptedObjAccess
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -468,7 +467,7 @@ def test_xmp_str():
     result = xmp_xml.parse_xmp(inp)[0]
     r = repr(result)
     assert "artificial" in r
-    assert "lang': \'en\'" in r
+    assert "lang': 'en'" in r
 
 
 # noinspection HttpUrlsUsage

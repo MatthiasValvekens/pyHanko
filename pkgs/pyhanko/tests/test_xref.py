@@ -3,7 +3,6 @@ import os
 from io import BytesIO
 
 import pytest
-
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader

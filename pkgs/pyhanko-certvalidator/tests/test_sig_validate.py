@@ -1,6 +1,5 @@
 import pytest
 from asn1crypto import algos, keys
-
 from pyhanko_certvalidator.errors import (
     AlgorithmNotSupported,
     DSAParametersUnavailable,

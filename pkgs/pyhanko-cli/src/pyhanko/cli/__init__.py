@@ -1,11 +1,11 @@
 from pyhanko.cli._root import cli_root
-from pyhanko.cli.commands.crypt import *
-from pyhanko.cli.commands.fields import *
-from pyhanko.cli.commands.signing import *
-from pyhanko.cli.commands.stamp import *
-from pyhanko.cli.commands.validation import *
+from pyhanko.cli.commands.crypt import *  # noqa: F403
+from pyhanko.cli.commands.fields import *  # noqa: F403
+from pyhanko.cli.commands.signing import *  # noqa: F403
+from pyhanko.cli.commands.stamp import *  # noqa: F403
+from pyhanko.cli.commands.validation import *  # noqa: F403
 
-__all__ = ['launch', 'cli_root']
+__all__ = ['cli_root', 'launch']
 
 
 def launch():

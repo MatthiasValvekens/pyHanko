@@ -36,7 +36,7 @@ from pyhanko_certvalidator.revinfo.validate_ocsp import (
 )
 from pyhanko_certvalidator.util import ConsList
 
-__all__ = ['time_slide', 'ades_gather_prima_facie_revinfo']
+__all__ = ['ades_gather_prima_facie_revinfo', 'time_slide']
 
 
 async def ades_gather_prima_facie_revinfo(

@@ -5,13 +5,12 @@ from dataclasses import dataclass
 from typing import Any, Iterable, List, Optional, Set, Union
 
 from asn1crypto import algos, x509
-
 from pyhanko.config import api
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
 from pyhanko.pdf_utils.misc import get_and_apply
 
-__all__ = ['TokenCriteria', 'PKCS11PinEntryMode', 'PKCS11SignatureConfig']
+__all__ = ['PKCS11PinEntryMode', 'PKCS11SignatureConfig', 'TokenCriteria']
 
 
 @dataclass(frozen=True)

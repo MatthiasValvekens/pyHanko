@@ -7,9 +7,8 @@ from io import BytesIO
 from itertools import product
 from typing import Tuple
 
-import pytest
-
 import pyhanko.pdf_utils.extensions
+import pytest
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.content import (
     PdfResources,
@@ -28,7 +27,17 @@ from pyhanko.pdf_utils.reader import (
     read_next_end_line,
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
-from test_data.samples import *
+from test_data.samples import (
+    FILE_WITH_EMBEDDED_FONT,
+    MINIMAL,
+    MINIMAL_ONE_FIELD,
+    MINIMAL_TWO_FIELDS,
+    PDF_DATA_DIR,
+    VECTOR_IMAGE_PDF,
+    VECTOR_IMAGE_PDF_DECOMP,
+    VECTOR_IMAGE_VARIANT_PDF,
+    simple_page,
+)
 
 try:
     import zoneinfo
@@ -2099,7 +2108,7 @@ def test_merge_resources():
     assert not direct_mod
 
     r = PdfFileReader(f)
-    res = w.root['/Pages']['/Kids'][0]['/Resources']
+    res = r.root['/Pages']['/Kids'][0]['/Resources']
     assert '/Text' in res['/ProcSet']
     assert '/PDF' in res['/ProcSet']
 

@@ -6,7 +6,7 @@ from typing import Dict, Optional, Union
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils.misc import get_and_apply
 
-__all__ = ['StdLogOutput', 'LogConfig', 'parse_logging_config']
+__all__ = ['LogConfig', 'StdLogOutput', 'parse_logging_config']
 
 
 class StdLogOutput(enum.Enum):

@@ -16,19 +16,19 @@ from ..authority import Authority
 from ..util import get_ac_extension_value
 
 __all__ = [
-    'unpack_cert_content',
-    'format_ocsp_request',
-    'process_ocsp_response_data',
-    'queue_fetch_task',
-    'crl_job_results_as_completed',
-    'ocsp_job_get_earliest',
-    'complete_certificate_fetch_jobs',
-    'gather_aia_issuer_urls',
-    'enumerate_delivery_point_urls',
-    'ACCEPTABLE_STRICT_CERT_CONTENT_TYPES',
+    'ACCEPTABLE_CERT_DER_ALIASES',
     'ACCEPTABLE_CERT_PEM_ALIASES',
     'ACCEPTABLE_PKCS7_DER_ALIASES',
-    'ACCEPTABLE_CERT_DER_ALIASES',
+    'ACCEPTABLE_STRICT_CERT_CONTENT_TYPES',
+    'complete_certificate_fetch_jobs',
+    'crl_job_results_as_completed',
+    'enumerate_delivery_point_urls',
+    'format_ocsp_request',
+    'gather_aia_issuer_urls',
+    'ocsp_job_get_earliest',
+    'process_ocsp_response_data',
+    'queue_fetch_task',
+    'unpack_cert_content',
 ]
 
 logger = logging.getLogger(__name__)
@@ -238,34 +238,32 @@ async def queue_fetch_task(
     try:
         result = results[tag]
         logger.debug(
-            f"Result for fetch job with tag {repr(tag)} was available in cache."
+            f"Result for fetch job with tag {tag!r} was available in cache."
         )
         return _return_or_raise(result)
     except KeyError:
         pass
     try:
         wait_event: asyncio.Event = running_jobs[tag]
-        logger.debug(f"Waiting for fetch job with tag {repr(tag)} to return...")
+        logger.debug(f"Waiting for fetch job with tag {tag!r} to return...")
         # there's a fetch job running, wait for it to finish and then
         # return the result
         await wait_event.wait()
-        logger.debug(
-            f"Received completion signal for job with tag {repr(tag)}."
-        )
+        logger.debug(f"Received completion signal for job with tag {tag!r}.")
         return _return_or_raise(results[tag])
     except KeyError:
-        logger.debug(f"Starting new fetch job with tag {repr(tag)}...")
+        logger.debug(f"Starting new fetch job with tag {tag!r}...")
         # no fetch job running, run the task and store the result
         running_jobs[tag] = wait_event = asyncio.Event()
         try:
             result = await async_fun()
         except Exception as e:
             logger.debug(
-                f"New fetch job with tag {repr(tag)} threw an exception: {e}"
+                f"New fetch job with tag {tag!r} threw an exception: {e}"
             )
             result = e
         results[tag] = result
-        logger.debug(f"New fetch job with tag {repr(tag)} returned.")
+        logger.debug(f"New fetch job with tag {tag!r} returned.")
         # deregister event, notify waiters
         del running_jobs[tag]
         wait_event.set()
@@ -347,8 +345,7 @@ async def complete_certificate_fetch_jobs(fetch_jobs):
             certs_fetched = await fetch_job
         except errors.CertificateFetchError as e:
             logger.warning(
-                f'Error during certificate fetch job, skipping... '
-                f'(Error: {e})',
+                f'Error during certificate fetch job, skipping... (Error: {e})',
             )
             continue
         for cert in certs_fetched:

@@ -9,14 +9,12 @@ from typing import List, Optional, Set, Tuple, Union
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
-
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.misc import (
     OrderedEnum,
-    PdfError,
     PdfReadError,
     PdfWriteError,
     get_and_apply,
@@ -30,28 +28,28 @@ from pyhanko_certvalidator.errors import InvalidCertificateError
 from pyhanko_certvalidator.path import ValidationPath
 
 __all__ = [
-    'SigFieldSpec',
-    'SigSeedValFlags',
-    'SigCertConstraints',
-    'SigSeedValueSpec',
-    'SigCertConstraintFlags',
-    'SigSeedSubFilter',
-    'SeedValueDictVersion',
-    'SeedLockDocument',
-    'SigCertKeyUsage',
-    'MDPPerm',
     'FieldMDPAction',
     'FieldMDPSpec',
-    'SignatureFormField',
     'InvisSigSettings',
+    'MDPPerm',
+    'SeedLockDocument',
+    'SeedValueDictVersion',
+    'SigCertConstraintFlags',
+    'SigCertConstraints',
+    'SigCertKeyUsage',
+    'SigFieldSpec',
+    'SigSeedSubFilter',
+    'SigSeedValFlags',
+    'SigSeedValueSpec',
+    'SignatureFormField',
     'VisibleSigSettings',
-    'enumerate_sig_fields',
-    'append_signature_field',
-    'ensure_sig_flags',
-    'prepare_sig_field',
-    'apply_sig_field_spec_properties',
     'annot_width_height',
+    'append_signature_field',
+    'apply_sig_field_spec_properties',
+    'ensure_sig_flags',
+    'enumerate_sig_fields',
     'get_sig_field_annot',
+    'prepare_sig_field',
 ]
 
 logger = logging.getLogger(__name__)
@@ -1661,7 +1659,7 @@ def enumerate_sig_fields_in(
             with_name is not None and with_name.startswith(fq_name)
         )
         # /FT is inheritable, so go up the chain
-        current_path = (field,) + parents
+        current_path = (field, *parents)
         for parent_field in current_path:
             try:
                 field_type = parent_field['/FT']

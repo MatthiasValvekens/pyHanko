@@ -10,7 +10,6 @@ import typing
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union, cast
 
 from asn1crypto import x509
-
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler,
@@ -50,8 +49,8 @@ __all__ = [
     'BasePdfFileWriter',
     'PageObject',
     'PdfFileWriter',
-    'init_xobject_dictionary',
     'copy_into_new_writer',
+    'init_xobject_dictionary',
 ]
 
 logger = logging.getLogger(__name__)
@@ -445,7 +444,7 @@ class BasePdfFileWriter(PdfHandler):
             self.objs_in_streams[idnum] = obj
         else:
             raise PdfWriteError(
-                f'Stream {repr(obj_stream)} is unknown to this PDF writer.'
+                f'Stream {obj_stream!r} is unknown to this PDF writer.'
             )
 
         if preallocated:
@@ -1182,7 +1181,6 @@ class PdfFileWriter(BasePdfFileWriter):
 
 
 class _ObjectImporter:
-
     def __init__(
         self,
         source: PdfHandler,

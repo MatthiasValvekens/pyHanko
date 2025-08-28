@@ -3,7 +3,6 @@ import logging
 import os
 
 import pytest
-
 from pyhanko.pdf_utils.reader import PdfFileReader
 from test_utils.csc_utils.csc_dummy_client import CSCDummy
 from test_utils.signing_commons import async_val_trusted
@@ -35,7 +34,7 @@ async def test_simple_sign_with_dummy():
     from io import BytesIO
 
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-    from pyhanko.sign import PdfSignatureMetadata, async_sign_pdf
+    from pyhanko.sign.signers import PdfSignatureMetadata, async_sign_pdf
     from test_data.samples import MINIMAL_ONE_FIELD
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -70,7 +69,7 @@ async def test_implicit_batch_sign_with_dummy(
     from io import BytesIO
 
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-    from pyhanko.sign import PdfSignatureMetadata, async_sign_pdf
+    from pyhanko.sign.signers import PdfSignatureMetadata, async_sign_pdf
     from test_data.samples import MINIMAL_ONE_FIELD
 
     async with CSCDummy(

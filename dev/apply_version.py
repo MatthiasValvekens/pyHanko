@@ -86,7 +86,6 @@ def apply_version(root: Path, project: str, version: str):
 
     # walk through dependent project to set the version in the downstream dependency declarations
     for other_proj in _other_projects(root, project):
-
         with open(other_proj / "pyproject.toml", "r") as pyproj:
             pyproj_content = tomlkit.load(pyproj)
 

@@ -3,7 +3,6 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional, Type, Union
 
 import yaml
-
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import LogConfig, parse_logging_config
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE

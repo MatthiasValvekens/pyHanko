@@ -17,36 +17,36 @@ from typing import Callable, Generator, Iterable, Optional, TypeVar, Union
 from pyhanko_certvalidator.util import CancelableAsyncIterator, ConsList
 
 __all__ = [
+    'DEFAULT_CHUNK_SIZE',
+    'ConsList',
+    'IndirectObjectExpected',
+    'OrderedEnum',
     'PdfError',
     'PdfReadError',
+    'PdfStreamError',
     'PdfStrictReadError',
     'PdfWriteError',
-    'PdfStreamError',
-    'IndirectObjectExpected',
-    'get_and_apply',
-    'OrderedEnum',
-    'StringWithLanguage',
-    'is_regular_character',
-    'read_non_whitespace',
-    'read_until_whitespace',
-    'read_until_delimiter',
-    'read_until_regex',
-    'skip_over_whitespace',
-    'skip_over_comment',
-    'instance_test',
-    'peek',
-    'assert_writable_and_random_access',
-    'prepare_rw_output_stream',
-    'finalise_output',
-    'DEFAULT_CHUNK_SIZE',
-    'chunked_write',
-    'chunked_digest',
-    'chunk_stream',
-    'ConsList',
     'Singleton',
-    'rd',
+    'StringWithLanguage',
+    'assert_writable_and_random_access',
+    'chunk_stream',
+    'chunked_digest',
+    'chunked_write',
+    'finalise_output',
+    'get_and_apply',
+    'instance_test',
+    'is_regular_character',
     'isoparse',
     'lift_iterable_async',
+    'peek',
+    'prepare_rw_output_stream',
+    'rd',
+    'read_non_whitespace',
+    'read_until_delimiter',
+    'read_until_regex',
+    'read_until_whitespace',
+    'skip_over_comment',
+    'skip_over_whitespace',
 ]
 
 DEFAULT_CHUNK_SIZE = 4096
@@ -54,7 +54,9 @@ DEFAULT_CHUNK_SIZE = 4096
 Default chunk size for stream I/O.
 """
 
-rd = lambda x: round(x, 4)
+
+def rd(x):
+    return round(x, 4)
 
 
 def instance_test(cls):

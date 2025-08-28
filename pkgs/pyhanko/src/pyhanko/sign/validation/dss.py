@@ -8,7 +8,6 @@ from asn1crypto import crl as asn1_crl
 from asn1crypto import ocsp as asn1_ocsp
 from asn1crypto import x509
 from asn1crypto.x509 import Certificate
-
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter

@@ -2,7 +2,6 @@ import os
 
 import pytest
 from asn1crypto import cms, core, x509
-
 from pyhanko_certvalidator.fetchers.common_utils import (
     ACCEPTABLE_CERT_DER_ALIASES,
     ACCEPTABLE_PKCS7_DER_ALIASES,

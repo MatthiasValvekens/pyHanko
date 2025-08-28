@@ -5,7 +5,7 @@ In principle, these aren't relevant to the high-level validation API.
 """
 
 import logging
-from typing import Callable, FrozenSet, Generator, Optional, Set, Tuple, TypeVar
+from typing import Callable, FrozenSet, Generator, Optional, Tuple, TypeVar
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import PdfObject, Reference
@@ -17,12 +17,12 @@ from .rules_api import ReferenceUpdate
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    'assert_not_stream',
+    'compare_dicts',
+    'compare_key_refs',
     'qualify',
     'qualify_transforming',
     'safe_whitelist',
-    'compare_key_refs',
-    'compare_dicts',
-    'assert_not_stream',
 ]
 
 TwoVersions = Tuple[Optional[generic.PdfObject], Optional[generic.PdfObject]]
@@ -228,7 +228,7 @@ def compare_dicts(
     if new_dict_keys != old_dict_keys:
         if raise_exc:
             raise SuspiciousModification(
-                f"Dict keys differ: {new_dict_keys} vs. " f"{old_dict_keys}."
+                f"Dict keys differ: {new_dict_keys} vs. {old_dict_keys}."
             )
         else:
             return False

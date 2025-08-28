@@ -17,11 +17,11 @@ from .font.basic import get_courier
 from .generic import pdf_name, pdf_string
 
 __all__ = [
-    'embed_file',
     'EmbeddedFileObject',
     'EmbeddedFileParams',
     'FileSpec',
     'RelatedFileSpec',
+    'embed_file',
     'wrap_encrypted_payload',
 ]
 

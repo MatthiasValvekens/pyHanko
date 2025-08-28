@@ -9,8 +9,6 @@ from typing import Any, Dict, Optional, cast
 
 from asn1crypto import tsp
 from cryptography.hazmat.primitives import hashes
-from xsdata.models.datatype import XmlDateTime
-
 from pyhanko.generated.etsi import ts_11910202, xades
 from pyhanko.generated.w3c import xmldsig_core
 from pyhanko.sign.ades import cades_asn1
@@ -32,6 +30,7 @@ from pyhanko.sign.validation.pdf_embedded import EmbeddedPdfSignature
 from pyhanko.sign.validation.status import PdfSignatureStatus
 from pyhanko_certvalidator.ltv.poe import ValidationObject, ValidationObjectType
 from pyhanko_certvalidator.util import get_pyca_cryptography_hash
+from xsdata.models.datatype import XmlDateTime
 
 __all__ = ['generate_report']
 

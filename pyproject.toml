@@ -65,7 +65,7 @@ docs-build = [
     "pyhanko-certvalidator",
 ]
 release = ["setuptools>=80.8.0", "tomlkit>=0.13.2", "requests>=2.32.3"]
-lint = ["isort", "black"]
+lint = ["ruff"]
 dev = [
     { include-group = "docs" },
     { include-group = "mypy" },
@@ -78,6 +78,20 @@ members = ["pkgs/*", "internal/*"]
 
 [tool.isort]
 src_paths = ["pkgs/*/src", "internal/*/src"]
+
+[tool.ruff]
+line-length = 80
+exclude = ["docs/*.py", "dev/*.py"]
+
+[tool.ruff.format]
+quote-style = "preserve"
+
+[tool.ruff.lint]
+extend-select = [
+    "F",  # pyflakes
+    "I",  # isort
+]
+
 
 [tool.uv.sources]
 pyhanko = { workspace = true }

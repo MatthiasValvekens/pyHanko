@@ -6,7 +6,6 @@ from typing import Iterator, Optional, TypeVar
 
 from asn1crypto import cms
 from asn1crypto import pdf as asn1_pdf
-
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.policy_decl import (
@@ -44,10 +43,10 @@ from .status import (
 __all__ = [
     'RevocationInfoValidationType',
     'apply_adobe_revocation_info',
-    'retrieve_adobe_revocation_info',
-    'get_timestamp_chain',
     'async_validate_pdf_ltv_signature',
     'establish_timestamp_trust',
+    'get_timestamp_chain',
+    'retrieve_adobe_revocation_info',
 ]
 
 

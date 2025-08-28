@@ -27,9 +27,9 @@ from pyhanko_certvalidator.util import (
 )
 
 __all__ = [
-    'SignatureValidator',
-    'SignatureValidationContext',
     'DefaultSignatureValidator',
+    'SignatureValidationContext',
+    'SignatureValidator',
 ]
 
 

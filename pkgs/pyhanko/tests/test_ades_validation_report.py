@@ -4,7 +4,6 @@ import pytest
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel
 from freezegun import freeze_time
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers

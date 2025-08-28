@@ -3,9 +3,8 @@ from io import BytesIO
 
 import aiohttp
 import pytest
-from asn1crypto import tsp
+from asn1crypto import cms, tsp
 from freezegun import freeze_time
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers
@@ -14,7 +13,7 @@ from pyhanko.sign.timestamps import HTTPTimeStamper, TimestampRequestError
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.timestamps.common_utils import handle_tsp_response
 from pyhanko_certvalidator import ValidationContext
-from test_data.samples import *
+from test_data.samples import MINIMAL_ONE_FIELD
 from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_TS,

@@ -10,14 +10,14 @@ from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 
 __all__ = [
-    'LayoutError',
-    'BoxSpecificationError',
-    'BoxConstraints',
     'AxisAlignment',
-    'Margins',
+    'BoxConstraints',
+    'BoxSpecificationError',
     'InnerScaling',
-    'SimpleBoxLayoutRule',
+    'LayoutError',
+    'Margins',
     'Positioning',
+    'SimpleBoxLayoutRule',
 ]
 
 logger = logging.getLogger(__name__)
@@ -76,9 +76,9 @@ class BoxConstraints:
         elif aspect_ratio is not None:
             self._ar = aspect_ratio
             if int_height is not None:
-                self._width = int(round(int_height * aspect_ratio))
+                self._width = round(int_height * aspect_ratio)
             elif int_width is not None:
-                self._height = int(round(int_width / aspect_ratio))
+                self._height = round(int_width / aspect_ratio)
 
         self._fully_specified = fully_specified
 

@@ -7,7 +7,6 @@ from typing import Optional
 
 import tzlocal
 from asn1crypto import cms
-
 from pyhanko.pdf_utils import embed
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.fields import SigFieldSpec
@@ -17,7 +16,7 @@ from pyhanko.sign.timestamps import TimeStamper
 from .pdf_cms import Signer
 from .pdf_signer import PdfSignatureMetadata, PdfSigner
 
-__all__ = ['sign_pdf', 'async_sign_pdf', 'embed_payload_with_cms']
+__all__ = ['async_sign_pdf', 'embed_payload_with_cms', 'sign_pdf']
 
 
 def sign_pdf(

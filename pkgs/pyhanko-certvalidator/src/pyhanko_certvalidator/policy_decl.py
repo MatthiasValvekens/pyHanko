@@ -6,26 +6,26 @@ import abc
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import FrozenSet, Iterable, Optional
+from typing import FrozenSet, Optional
 
 from asn1crypto import algos, keys
 
 from .name_trees import PKIXSubtrees
 
 __all__ = [
-    'RevocationCheckingRule',
-    'RevocationCheckingPolicy',
-    'FreshnessReqType',
-    'CertRevTrustPolicy',
-    'PKIXValidationParams',
+    'DEFAULT_WEAK_HASH_ALGOS',
+    'NO_REVOCATION',
+    'REQUIRE_REVINFO',
+    'AcceptAllAlgorithms',
     'AlgorithmUsageConstraint',
     'AlgorithmUsagePolicy',
+    'CertRevTrustPolicy',
     'DisallowWeakAlgorithmsPolicy',
-    'AcceptAllAlgorithms',
+    'FreshnessReqType',
     'NonRevokedStatusAssertion',
-    'DEFAULT_WEAK_HASH_ALGOS',
-    'REQUIRE_REVINFO',
-    'NO_REVOCATION',
+    'PKIXValidationParams',
+    'RevocationCheckingPolicy',
+    'RevocationCheckingRule',
 ]
 
 

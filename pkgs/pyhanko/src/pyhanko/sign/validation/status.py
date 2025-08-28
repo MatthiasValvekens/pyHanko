@@ -17,7 +17,6 @@ from typing import (
 )
 
 from asn1crypto import cms, core, crl, keys, x509
-
 from pyhanko_certvalidator.errors import (
     PathBuildingError,
     PathValidationError,
@@ -38,20 +37,20 @@ from .qualified.q_status import QualificationResult
 from .settings import KeyUsageConstraints
 
 __all__ = [
-    'SignatureStatus',
-    'TimestampSignatureStatus',
-    'X509AttributeInfo',
-    'CertifiedAttributeInfo',
-    'ClaimedAttributes',
-    'CertifiedAttributes',
     'CAdESSignerAttributeAssertions',
-    'StandardCMSSignatureStatus',
-    'SignatureCoverageLevel',
+    'CertifiedAttributeInfo',
+    'CertifiedAttributes',
+    'ClaimedAttributes',
+    'DocumentTimestampStatus',
     'ModificationInfo',
     'PdfSignatureStatus',
-    'DocumentTimestampStatus',
     'RevocationDetails',
+    'SignatureCoverageLevel',
+    'SignatureStatus',
     'SignerAttributeStatus',
+    'StandardCMSSignatureStatus',
+    'TimestampSignatureStatus',
+    'X509AttributeInfo',
 ]
 
 logger = logging.getLogger(__name__)

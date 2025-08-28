@@ -42,10 +42,10 @@ from .xref import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    'PdfFileReader',
     'HistoricalResolver',
-    'parse_catalog_version',
+    'PdfFileReader',
     'RawPdfPath',
+    'parse_catalog_version',
     'process_data_at_eof',
 ]
 
@@ -504,7 +504,7 @@ class PdfFileReader(PdfHandler):
                 if self.strict:  # pragma: nocover
                     raise PdfStrictReadError(
                         f'Expected endobj marker at position {obj_data_end} '
-                        f'but found {repr(endobj)}'
+                        f'but found {endobj!r}'
                     )
             else:
                 generic.read_non_whitespace(self.stream, seek_back=True)
@@ -833,7 +833,7 @@ class RawPdfPath:
         return ''.join(map(RawPdfPath._fmt_node, self.path))
 
     def __repr__(self):  # pragma: nocover
-        return f"PathInRevision('{str(self)}')"
+        return f"PathInRevision('{self!s}')"
 
 
 class HistoricalResolver(PdfHandler):

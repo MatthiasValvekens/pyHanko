@@ -63,13 +63,16 @@ class CatalogModificationRule(QualifiedWhitelistRule):
                 ),
             )
 
-        yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
-            new.root_ref,
-            # Things like /Data in a MDP policy can point to root
-            # and since we checked with compare_dicts, doing a blanket
-            # approval is much easier than figuring out all the ways
-            # in which /Root can be cross-referenced.
-            context_checked=None,
+        yield (
+            ModificationLevel.LTA_UPDATES,
+            ReferenceUpdate(
+                new.root_ref,
+                # Things like /Data in a MDP policy can point to root
+                # and since we checked with compare_dicts, doing a blanket
+                # approval is much easier than figuring out all the ways
+                # in which /Root can be cross-referenced.
+                context_checked=None,
+            ),
         )
 
 

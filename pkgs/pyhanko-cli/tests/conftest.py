@@ -12,7 +12,6 @@ from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, ServiceLabel
 from click.testing import CliRunner
 from freezegun import freeze_time
-
 from pyhanko.pdf_utils.misc import PdfStrictReadError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import (
@@ -161,7 +160,7 @@ def _validate_last_sig_in(arch: PKIArchitecture, pdf_file, *, strict):
                 last_sig, signer_validation_context=vc
             )
         assert status.bottom_line, status.pretty_print_details()
-        logger.info(f"Validation successful")
+        logger.info("Validation successful")
 
 
 @pytest.fixture

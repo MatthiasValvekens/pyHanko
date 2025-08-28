@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import List, Optional, Union
 
 from asn1crypto import cms, x509
-
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.reader import PdfFileReader, process_data_at_eof
@@ -57,13 +56,13 @@ from .status import (
 from .utils import CMSAlgorithmUsagePolicy
 
 __all__ = [
-    'EmbeddedPdfSignature',
     'DocMDPInfo',
-    'read_certification_data',
+    'EmbeddedPdfSignature',
     'async_validate_pdf_signature',
     'async_validate_pdf_timestamp',
-    'report_seed_value_validation',
     'extract_contents',
+    'read_certification_data',
+    'report_seed_value_validation',
 ]
 
 

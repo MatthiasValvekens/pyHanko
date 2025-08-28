@@ -10,7 +10,6 @@ import pytest
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 from freezegun import freeze_time
-
 from pyhanko_certvalidator import PKIXValidationParams
 from pyhanko_certvalidator.authority import Authority, CertTrustAnchor
 from pyhanko_certvalidator.context import ValidationContext
@@ -711,7 +710,6 @@ class ReturnPredeterminedCRLs(CRLFetcher):
     'test_case', nist_revocation_tests(), ids=lambda case: str(case.test_info)
 )
 def test_nist_pkits_with_simulated_crl_downloads(test_case: PKITSTestCase):
-
     fetchers = Fetchers(
         ocsp_fetcher=MockOCSPFetcher(),
         crl_fetcher=ReturnPredeterminedCRLs(test_case.crls),
@@ -1047,7 +1045,6 @@ def test_fail_validation_if_required_delta_crl_not_available():
 
 
 def test_context_retrieve_all_crls():
-
     cert = load_nist_cert('InvaliddeltaCRLTest4EE.crt')
     ca_certs = [load_nist_cert('TrustAnchorRootCertificate.crt')]
     other_certs = [load_nist_cert('deltaCRLCA1Cert.crt')]

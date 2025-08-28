@@ -25,9 +25,9 @@ def asn1crypto_setup():
         ContentType._reverse_map['pdf_mac_integrity_info'] = (
             '1.0.32004.1.0'  # pragma: nocover
         )
-    EncapsulatedContentInfo._oid_specs['pdf_mac_integrity_info'] = (
-        ContentInfo._oid_specs['pdf_mac_integrity_info']
-    ) = PdfMacIntegrityInfo
+    EncapsulatedContentInfo._oid_specs[
+        'pdf_mac_integrity_info'
+    ] = ContentInfo._oid_specs['pdf_mac_integrity_info'] = PdfMacIntegrityInfo
 
     # This OID represents the key derivation function defined in ISO 32004
     # to derive the MAC key encryption key from the PDF's file encryption key

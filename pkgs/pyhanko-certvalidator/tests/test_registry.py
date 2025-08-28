@@ -1,6 +1,5 @@
 # coding: utf-8
 import pytest
-
 from pyhanko_certvalidator import PathBuildingError
 from pyhanko_certvalidator.authority import (
     CertTrustAnchor,

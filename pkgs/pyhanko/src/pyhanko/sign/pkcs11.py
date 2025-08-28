@@ -15,7 +15,6 @@ import pkcs11
 from asn1crypto import algos, core, x509
 from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
-
 from pyhanko.config.pkcs11 import (
     PKCS11PinEntryMode,
     PKCS11SignatureConfig,
@@ -49,9 +48,9 @@ except ImportError as e:  # pragma: nocover
 
 __all__ = [
     'PKCS11Signer',
-    'open_pkcs11_session',
     'PKCS11SigningContext',
     'find_token',
+    'open_pkcs11_session',
     'select_pkcs11_signing_params',
 ]
 
@@ -625,7 +624,6 @@ class PKCS11Signer(Signer):
         label: Optional[str],
         cert_id: Optional[bytes],
     ):
-
         query_params = self.single_cert_fetch_params(label, cert_id)
         q = self.pkcs11_session.get_objects(query_params)
 

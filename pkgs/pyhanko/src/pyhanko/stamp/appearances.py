@@ -4,7 +4,7 @@ from typing import Optional
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 
-__all__ = ['CoordinateSystem', 'AnnotAppearances']
+__all__ = ['AnnotAppearances', 'CoordinateSystem']
 
 
 class CoordinateSystem(enum.Enum):

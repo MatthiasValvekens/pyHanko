@@ -3,12 +3,12 @@ from typing import Optional
 from asn1crypto import cms, core, x509
 
 __all__ = [
+    'AAControls',
+    'AttrSpec',
+    'SequenceOfTargets',
     'Target',
     'TargetCert',
     'Targets',
-    'SequenceOfTargets',
-    'AttrSpec',
-    'AAControls',
 ]
 
 

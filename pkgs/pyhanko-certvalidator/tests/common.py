@@ -2,7 +2,6 @@ import base64
 import os
 
 from asn1crypto import crl, ocsp, pem, x509
-
 from pyhanko_certvalidator import authority
 from pyhanko_certvalidator.path import ValidationPath
 

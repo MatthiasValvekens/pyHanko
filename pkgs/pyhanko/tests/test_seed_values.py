@@ -1,11 +1,9 @@
 from io import BytesIO
 
 import pytest
-from asn1crypto import algos
+from asn1crypto import algos, x509
 from asn1crypto import pdf as asn1_pdf
-from asn1crypto import x509
 from freezegun.api import freeze_time
-
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter

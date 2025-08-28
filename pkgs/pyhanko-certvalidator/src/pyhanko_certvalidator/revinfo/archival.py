@@ -17,14 +17,14 @@ from pyhanko_certvalidator.policy_decl import (
 )
 
 __all__ = [
-    'RevinfoUsabilityRating',
-    'RevinfoUsability',
-    'RevinfoContainer',
-    'OCSPContainer',
     'CRLContainer',
-    'sort_freshest_first',
+    'OCSPContainer',
+    'RevinfoContainer',
+    'RevinfoUsability',
+    'RevinfoUsabilityRating',
     'process_legacy_crl_input',
     'process_legacy_ocsp_input',
+    'sort_freshest_first',
 ]
 
 

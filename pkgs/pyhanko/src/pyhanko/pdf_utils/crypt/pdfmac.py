@@ -7,7 +7,6 @@ from asn1crypto import algos, cms, core
 from asn1crypto.core import VOID
 from cryptography.hazmat.primitives import hashes, hmac, keywrap
 from cryptography.hazmat.primitives.kdf import hkdf
-
 from pyhanko.pdf_utils import generic, misc
 from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
@@ -37,11 +36,11 @@ from ..writer import BasePdfFileWriter
 from ._iso32004_asn1 import PdfMacIntegrityInfo
 
 __all__ = [
-    'PdfMacTokenHandler',
-    'validate_pdf_mac',
-    'add_standalone_mac',
-    'ISO32004',
     'ALLOWED_MD_ALGS',
+    'ISO32004',
+    'PdfMacTokenHandler',
+    'add_standalone_mac',
+    'validate_pdf_mac',
 ]
 
 

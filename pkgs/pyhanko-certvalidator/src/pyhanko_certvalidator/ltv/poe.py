@@ -9,11 +9,11 @@ from asn1crypto import core, x509
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 
 __all__ = [
-    'ValidationObjectType',
-    'ValidationObject',
-    'POEType',
     'KnownPOE',
     'POEManager',
+    'POEType',
+    'ValidationObject',
+    'ValidationObjectType',
     'digest_for_poe',
 ]
 

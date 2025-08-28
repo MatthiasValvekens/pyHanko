@@ -2,9 +2,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from pyhanko.cli.config import CLIConfig
-
-from pyhanko.sign import PdfSignatureMetadata
 from pyhanko.sign.fields import SigFieldSpec
+from pyhanko.sign.signers import PdfSignatureMetadata
 from pyhanko.stamp import BaseStampStyle
 
 

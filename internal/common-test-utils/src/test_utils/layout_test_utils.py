@@ -6,7 +6,7 @@ import tempfile
 
 import pytest
 
-__all__ = ['with_layout_comparison', 'compare_output']
+__all__ = ['compare_output', 'with_layout_comparison']
 
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 

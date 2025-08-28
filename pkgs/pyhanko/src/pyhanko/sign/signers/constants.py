@@ -13,13 +13,13 @@ from pyhanko.stamp import STAMP_ART_CONTENT, TextStampStyle
 
 __all__ = [
     'DEFAULT_MD',
-    'DEFAULT_SIG_SUBFILTER',
     'DEFAULT_SIGNER_KEY_USAGE',
-    'SIG_DETAILS_DEFAULT_TEMPLATE',
     'DEFAULT_SIGNING_STAMP_STYLE',
+    'DEFAULT_SIG_SUBFILTER',
     'ESIC_EXTENSION_1',
     'ISO32001',
     'ISO32002',
+    'SIG_DETAILS_DEFAULT_TEMPLATE',
 ]
 
 
@@ -44,7 +44,7 @@ Default key usage bits required for the signer's certificate.
 
 
 SIG_DETAILS_DEFAULT_TEMPLATE = (
-    'Digitally signed by %(signer)s.\n' 'Timestamp: %(ts)s.'
+    'Digitally signed by %(signer)s.\nTimestamp: %(ts)s.'
 )
 """
 Default template string for signature appearances.

@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import FrozenSet, Iterable, List, Optional, Set, Tuple, Union
 
 from asn1crypto import x509
-
 from pyhanko.sign.ades import qualified_asn1
 from pyhanko.sign.ades.report import AdESIndeterminate
 from pyhanko.sign.validation.errors import SignatureValidationError
@@ -290,8 +289,7 @@ def enforce_requirements(
     err_strs = []
     if not status.qualified:
         raise QualificationPolicyError(
-            f"Certificate for {cert.subject.human_friendly} is "
-            f"not qualified",
+            f"Certificate for {cert.subject.human_friendly} is not qualified",
             ades_subindication=AdESIndeterminate.SIG_CONSTRAINTS_FAILURE,
         )
     assert qualification_result.service_definition is not None

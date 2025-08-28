@@ -20,25 +20,25 @@ from pyhanko.pdf_utils.misc import PdfReadError, PdfStrictReadError, peek
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
 __all__ = [
-    'XRefCache',
-    'XRefBuilder',
-    'XRefType',
-    'XRefEntry',
+    'OBJSTREAM_FORBIDDEN',
     'ObjStreamRef',
     'ObjectHeaderReadError',
+    'ObjectStream',
+    'PositionDict',
+    'TrailerDictionary',
+    'XRefBuilder',
+    'XRefCache',
+    'XRefEntry',
     'XRefSection',
     'XRefSectionData',
-    'XRefSectionType',
     'XRefSectionMetaInfo',
-    'TrailerDictionary',
-    'read_object_header',
+    'XRefSectionType',
+    'XRefStream',
+    'XRefType',
     'parse_xref_stream',
     'parse_xref_table',
+    'read_object_header',
     'write_xref_table',
-    'ObjectStream',
-    'XRefStream',
-    'OBJSTREAM_FORBIDDEN',
-    'PositionDict',
 ]
 
 logger = logging.getLogger(__name__)
@@ -462,8 +462,7 @@ def _check_freed_refs(
             data = section_.xref_data
             if as_tuple in data.explicit_refs_in_revision:
                 raise misc.PdfStrictReadError(
-                    "XRef stream objects must not be clobbered in strict "
-                    "mode."
+                    "XRef stream objects must not be clobbered in strict mode."
                 )
 
     # For all free refs, check that _if_ redefined, they're

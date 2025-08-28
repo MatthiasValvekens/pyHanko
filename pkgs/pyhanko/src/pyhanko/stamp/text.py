@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Optional
 
 import tzlocal
-
 from pyhanko.pdf_utils import layout
 from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.text import DEFAULT_BOX_LAYOUT, TextBox, TextBoxStyle
@@ -11,7 +10,7 @@ from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 from .base import BaseStamp, BaseStampStyle
 
-__all__ = ['TextStampStyle', 'TextStamp']
+__all__ = ['TextStamp', 'TextStampStyle']
 
 
 @dataclass(frozen=True)
@@ -132,9 +131,12 @@ class TextStamp(BaseStamp):
         command_stream = [b'q']
 
         # compute the inner bounding box
-        inn_commands, (
-            inn_width,
-            inn_height,
+        (
+            inn_commands,
+            (
+                inn_width,
+                inn_height,
+            ),
         ) = self._inner_layout_natural_size()
 
         inner_layout = self._inner_content_layout_rule()

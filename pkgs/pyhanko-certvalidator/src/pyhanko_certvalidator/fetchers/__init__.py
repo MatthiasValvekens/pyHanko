@@ -1,11 +1,17 @@
-from .api import *
+from .api import (
+    CertificateFetcher,
+    CRLFetcher,
+    FetcherBackend,
+    Fetchers,
+    OCSPFetcher,
+)
 
 __all__ = [
-    'Fetchers',
-    'FetcherBackend',
-    'OCSPFetcher',
     'CRLFetcher',
     'CertificateFetcher',
+    'FetcherBackend',
+    'Fetchers',
+    'OCSPFetcher',
     'default_fetcher_backend',
 ]
 

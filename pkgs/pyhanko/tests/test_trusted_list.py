@@ -8,9 +8,6 @@ from aiohttp import web
 from asn1crypto import x509
 from certomancer.registry import CertLabel, EntityLabel
 from freezegun import freeze_time
-from xsdata.formats.dataclass.parsers import XmlParser
-from xsdata.formats.dataclass.parsers.config import ParserConfig
-
 from pyhanko.generated.etsi import ServiceTypeIdentifier, ts_119612
 from pyhanko.keys import load_cert_from_pemder
 from pyhanko.sign.validation.errors import SignatureValidationError
@@ -53,6 +50,8 @@ from test_data.certomancer_trust_lists import (
 )
 from test_data.samples import TEST_DIR, TESTING_CA_QUALIFIED
 from test_utils.signing_commons import ECC_INTERM_CERT, FROM_CA, INTERM_CERT
+from xsdata.formats.dataclass.parsers import XmlParser
+from xsdata.formats.dataclass.parsers.config import ParserConfig
 
 
 def _read_cas_from_file(path: Path):
@@ -317,8 +316,8 @@ def test_validate_and_parse_lotl_default_certs():
 @pytest.mark.asyncio
 async def test_parse_services_from_real_tl_via_lotl(aiohttp_client):
     app = web.Application()
-    app.router.add_get(f"/tools/lotl/eu-lotl.xml", serve_tl_file)
-    app.router.add_get(f"/tsl-be.xml", serve_tl_file)
+    app.router.add_get("/tools/lotl/eu-lotl.xml", serve_tl_file)
+    app.router.add_get("/tsl-be.xml", serve_tl_file)
 
     client = await aiohttp_client(app)
     registry, errors = await eutl_fetch.lotl_to_registry(
@@ -333,8 +332,8 @@ async def test_parse_services_from_real_tl_via_lotl(aiohttp_client):
 @pytest.mark.asyncio
 async def test_parse_services_from_real_tl_via_selective_lotl(aiohttp_client):
     app = web.Application()
-    app.router.add_get(f"/tools/lotl/eu-lotl.xml", serve_tl_file)
-    app.router.add_get(f"/tsl-be.xml", serve_tl_file)
+    app.router.add_get("/tools/lotl/eu-lotl.xml", serve_tl_file)
+    app.router.add_get("/tsl-be.xml", serve_tl_file)
 
     client = await aiohttp_client(app)
     registry, errors = await eutl_fetch.lotl_to_registry(
@@ -352,7 +351,7 @@ NAMESPACES = ' '.join(
         f'xmlns="{ETSI_NS}/02231/v2#"',
         f'xmlns:xades="{ETSI_NS}/01903/v1.3.2#"',
         f'xmlns:q="{ETSI_NS}/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#"',
-        f'xmlns:extra="http://uri.etsi.org/02231/v2/additionaltypes#"',
+        'xmlns:extra="http://uri.etsi.org/02231/v2/additionaltypes#"',
     ]
 )
 

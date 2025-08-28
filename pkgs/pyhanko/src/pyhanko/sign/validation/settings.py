@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Iterable, Optional, Set
 
 from asn1crypto import x509
-
 from pyhanko.config.api import (
     ConfigurableMixin,
     process_bit_string_flags,

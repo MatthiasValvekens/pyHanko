@@ -12,12 +12,12 @@ from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.version import __version__
 
 __all__ = [
-    'OCSPFetcher',
+    'DEFAULT_USER_AGENT',
     'CRLFetcher',
     'CertificateFetcher',
-    'Fetchers',
     'FetcherBackend',
-    'DEFAULT_USER_AGENT',
+    'Fetchers',
+    'OCSPFetcher',
 ]
 
 DEFAULT_USER_AGENT = 'pyhanko_certvalidator %s' % __version__

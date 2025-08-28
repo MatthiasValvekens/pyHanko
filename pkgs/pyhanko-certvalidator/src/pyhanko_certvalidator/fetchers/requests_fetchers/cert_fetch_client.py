@@ -116,7 +116,7 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
             content_type = response.headers['Content-Type'].strip()
             if content_type not in acceptable_cts:
                 ct_err = (
-                    f"Unacceptable content type '{repr(content_type)}' "
+                    f"Unacceptable content type '{content_type!r}' "
                     f"when fetching issuer certificate for {url_origin_type} "
                     f"from URL {url}."
                 )

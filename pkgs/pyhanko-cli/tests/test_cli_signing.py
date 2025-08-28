@@ -9,7 +9,6 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from cryptography.hazmat.primitives import serialization
 from pyhanko.cli import cli_root
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import async_validate_detached_cms
@@ -565,7 +564,6 @@ def test_cli_addsig_p12_passfile(cli_runner, p12_keys):
 def test_cli_sign_pkcs12_visible_while_creating_field(
     cli_runner, monkeypatch, p12_keys, post_validate
 ):
-
     monkeypatch.setattr(getpass, 'getpass', value=_const(DUMMY_PASSPHRASE))
     result = cli_runner.invoke(
         cli_root,
@@ -1015,7 +1013,7 @@ def test_cli_sign_visible_with_undefined_default_style(
         ],
     )
     assert result.exit_code == 1
-    assert "There is no stamp style named \'undefined\'" in result.output
+    assert "There is no stamp style named 'undefined'" in result.output
 
 
 def test_cli_sign_visible_with_style_but_no_config(

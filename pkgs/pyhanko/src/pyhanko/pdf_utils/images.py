@@ -38,7 +38,7 @@ except ImportError as e:  # pragma: nocover
     )
 
 
-__all__ = ['pil_image', 'PdfImage']
+__all__ = ['PdfImage', 'pil_image']
 
 
 def pil_image(img: Image.Image, writer: BasePdfFileWriter):

@@ -14,10 +14,10 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install --upgrade uv
-      - name: Check import order
-        run: uv run --group lint isort --profile black --line-length 80 --check --diff pkgs/* internal/*
-      - name: Run Black
-        run: uv run --group lint black -S --line-length 80 --check pkgs internal
+      - name: Check formatting
+        run: uv run --group lint ruff format --check --diff
+      - name: Check linting rules
+        run: uv run --group lint ruff check
   mypy:
     runs-on: ubuntu-latest
     steps:

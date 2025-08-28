@@ -5,9 +5,11 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
+import pyhanko.config.pkcs11
 import pytest
 import yaml
 from asn1crypto import x509
+from pyhanko import stamp
 from pyhanko.cli import cache, config
 from pyhanko.cli._trust import (
     DEFAULT_TIME_TOLERANCE,
@@ -17,9 +19,6 @@ from pyhanko.cli._trust import (
 from pyhanko.cli.commands.signing.pkcs11_cli import ModuleConfigWrapper
 from pyhanko.cli.commands.signing.simple import KeyFileConfigWrapper
 from pyhanko.cli.config import CLIConfig
-
-import pyhanko.config.pkcs11
-from pyhanko import stamp
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import DEFAULT_ROOT_LOGGER_LEVEL, StdLogOutput
@@ -139,7 +138,7 @@ def test_read_qr_config():
 
 
 def test_read_bad_config():
-    config_string = f"""
+    config_string = """
     stamp-styles:
         default:
             type: qr
@@ -151,7 +150,7 @@ def test_read_bad_config():
 
 
 def test_read_bad_background_config():
-    config_string = f"""
+    config_string = """
     stamp-styles:
         default:
             type: text
@@ -685,7 +684,7 @@ def test_read_pkcs11_config_slot_no():
 
 def test_read_pkcs11_nothing_to_pull():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -700,7 +699,7 @@ def test_read_pkcs11_nothing_to_pull():
 
 def test_read_pkcs11_config_ids():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -766,7 +765,7 @@ def test_read_pkcs11_config_bad_serial():
 
 def test_read_pkcs11_config_no_cert_spec_or_key_spec():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -779,7 +778,7 @@ def test_read_pkcs11_config_no_cert_spec_or_key_spec():
 
 def test_read_pkcs11_config_cert_label_from_key_label():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -793,7 +792,7 @@ def test_read_pkcs11_config_cert_label_from_key_label():
 
 def test_read_pkcs11_config_cert_id_from_key_id():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -807,7 +806,7 @@ def test_read_pkcs11_config_cert_id_from_key_id():
 
 def test_read_pkcs11_config_key_id_from_cert_id():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -821,7 +820,7 @@ def test_read_pkcs11_config_key_id_from_cert_id():
 
 def test_read_pkcs11_config_key_label_from_cert_label():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -835,7 +834,7 @@ def test_read_pkcs11_config_key_label_from_cert_label():
 
 def test_read_pkcs11_config_key_label_not_from_cert_label_if_key_id_defined():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -880,7 +879,7 @@ def test_read_pkcs11_prompt_pin(literal, exp_val):
 
 def test_read_pkcs11_prompt_pin_default():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -895,7 +894,7 @@ def test_read_pkcs11_prompt_pin_default():
 
 def test_read_pkcs11_prompt_pin_invalid():
     cli_config = _parse_cli_config(
-        f"""
+        """
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
@@ -1045,7 +1044,7 @@ def test_read_pkcs12_config_wrong_passphrase():
             ),
         ),
         (
-            f"""
+            """
         y-align: bottom
         x-align: mid
         margins:
@@ -1059,7 +1058,7 @@ def test_read_pkcs12_config_wrong_passphrase():
             ),
         ),
         (
-            f"""
+            """
         y-align: bottom
         x-align: mid
         margins: [10, 10, 0, 0]
@@ -1071,7 +1070,7 @@ def test_read_pkcs12_config_wrong_passphrase():
             ),
         ),
         (
-            f"""
+            """
         y-align: bottom
         x-align: mid
         inner-content-scaling: none

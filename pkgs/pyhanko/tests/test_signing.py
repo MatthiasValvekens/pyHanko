@@ -4,14 +4,14 @@ import os
 from datetime import datetime
 from io import BytesIO
 
-import pytest
-from asn1crypto.algos import SignedDigestAlgorithm
-from certomancer.integrations.illusionist import Illusionist
-from certomancer.registry import CertLabel, KeyLabel
-from freezegun import freeze_time
-
 import pyhanko.pdf_utils.content
 import pyhanko.sign.fields
+import pytest
+from asn1crypto import cms
+from asn1crypto.algos import SignedDigestAlgorithm
+from certomancer.integrations.illusionist import Illusionist
+from certomancer.registry import ArchLabel, CertLabel, KeyLabel
+from freezegun import freeze_time
 from pyhanko import stamp
 from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
 from pyhanko.pdf_utils import embed, generic, layout
@@ -61,7 +61,15 @@ from pyhanko_certvalidator.registry import (
     SimpleTrustManager,
 )
 from pyhanko_certvalidator.util import get_pyca_cryptography_hash
-from test_data.samples import *
+from test_data.samples import (
+    CERTOMANCER,
+    CRYPTO_DATA_DIR,
+    MINIMAL,
+    MINIMAL_ONE_FIELD,
+    PDF_DATA_DIR,
+    TESTING_CA,
+    VECTOR_IMAGE_PDF,
+)
 from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_TS,
@@ -73,14 +81,14 @@ from test_utils.signing_commons import (
     FROM_ED25519_CA,
     REVOKED_SIGNER,
     SELF_SIGN,
-    SIMPLE_ED448_V_CONTEXT,
-    SIMPLE_ED25519_V_CONTEXT,
-    SIMPLE_V_CONTEXT,
     TRUST_ROOTS,
     TSA_CERT,
     async_val_trusted,
     dummy_ocsp_vc,
     live_testing_vc,
+    simple_ed448_v_context,
+    simple_ed25519_v_context,
+    simple_v_context,
     val_trusted,
     val_untrusted,
 )
@@ -144,7 +152,7 @@ def test_simple_sign_tamper():
     out.seek(0)
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
-    tampered = validate_pdf_signature(emb, SIMPLE_V_CONTEXT())
+    tampered = validate_pdf_signature(emb, simple_v_context())
     assert not tampered.intact
     assert tampered.valid
     assert tampered.summary() == 'INVALID'
@@ -759,7 +767,7 @@ def test_sig_delete_type():
     with pytest.raises(
         SignatureValidationError, match='.*must be /DocTimeStamp.*'
     ):
-        validate_pdf_timestamp(emb, validation_context=SIMPLE_V_CONTEXT())
+        validate_pdf_timestamp(emb, validation_context=simple_v_context())
 
 
 def test_timestamp_wrong_type():
@@ -775,7 +783,7 @@ def test_timestamp_wrong_type():
     with pytest.raises(
         SignatureValidationError, match='.*must be /DocTimeStamp.*'
     ):
-        validate_pdf_timestamp(emb, validation_context=SIMPLE_V_CONTEXT())
+        validate_pdf_timestamp(emb, validation_context=simple_v_context())
 
 
 @pytest.mark.parametrize(
@@ -1343,7 +1351,7 @@ async def test_interrupted_with_delayed_signing_no_prevalidation():
         signers.PdfSignatureMetadata(
             field_name='SigNew',
             embed_validation_info=True,
-            validation_context=SIMPLE_V_CONTEXT(),
+            validation_context=simple_v_context(),
         ),
         signer=ExternalSigner(
             signing_cert=None,
@@ -1593,7 +1601,7 @@ def test_allow_hybrid_sign_validate_allow():
     r = PdfFileReader(out, strict=False)
     s = r.embedded_signatures[0]
 
-    vc = SIMPLE_V_CONTEXT()
+    vc = simple_v_context()
     val_status = validate_pdf_signature(s, vc)
     assert val_status.bottom_line
 
@@ -1625,7 +1633,7 @@ def test_ed25519_trust():
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_trusted(s, vc=SIMPLE_ED25519_V_CONTEXT())
+    val_trusted(s, vc=simple_ed25519_v_context())
 
 
 @freeze_time('2020-11-01')
@@ -1656,7 +1664,7 @@ def test_ed448_trust():
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_trusted(s, vc=SIMPLE_ED448_V_CONTEXT())
+    val_trusted(s, vc=simple_ed448_v_context())
 
 
 @freeze_time('2020-11-01')
@@ -1855,7 +1863,6 @@ def test_sign_reject_econtent_if_detached():
 
 
 def test_do_not_enforce_key_usage_if_signer_is_root():
-
     signer_with_bogus_key_usage = signers.SimpleSigner.load(
         f"{CRYPTO_DATA_DIR}/keys-rsa/signer.key.pem",
         f"{CRYPTO_DATA_DIR}/testing-ca/interm/decrypter1.cert.pem",

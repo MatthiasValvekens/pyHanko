@@ -16,7 +16,6 @@ from asn1crypto import algos, cms, crl, keys, ocsp
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto.core import VOID
 from cryptography.hazmat.primitives import hashes
-
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt import pdfmac
 from pyhanko.pdf_utils.generic import pdf_name
@@ -68,18 +67,18 @@ from .pdf_byterange import (
 from .pdf_cms import PdfCMSSignedAttributes, Signer, select_suitable_signing_md
 
 __all__ = [
-    'PdfSignatureMetadata',
     'DSSContentSettings',
-    'TimestampDSSContentSettings',
     'GeneralDSSContentSettings',
-    'SigDSSPlacementPreference',
-    'PdfTimeStamper',
+    'PdfPostSignatureDocument',
+    'PdfSignatureMetadata',
     'PdfSigner',
     'PdfSigningSession',
     'PdfTBSDocument',
-    'PdfPostSignatureDocument',
-    'PreSignValidationStatus',
+    'PdfTimeStamper',
     'PostSignInstructions',
+    'PreSignValidationStatus',
+    'SigDSSPlacementPreference',
+    'TimestampDSSContentSettings',
 ]
 
 from ...pdf_utils.crypt import SerialisedCredential
@@ -1197,7 +1196,7 @@ class PdfSigner:
             sig_algo = sig_mech.signature_algo
         except (SigningError, ValueError) as e:
             logger.debug(
-                f"Failed to introspect signature mechanism: {str(e)}. "
+                f"Failed to introspect signature mechanism: {e!s}. "
                 f"Will forgo algorithm-based automatic extension registration.",
             )
             return

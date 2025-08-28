@@ -8,6 +8,12 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, EntityLabel
 from cryptography.hazmat.primitives import serialization
 from lxml.etree import fromstring, tostring
+from pyhanko.generated.etsi import MimeType, ts_119612
+from pyhanko.sign.validation.qualified.eutl_parse import (
+    ETSI_TSL_MIME_TYPE,
+    STATUS_GRANTED,
+)
+from pyhanko.sign.validation.qualified.tsp import CA_QC_URI, QTST_URI
 from signxml import SignatureMethod
 from signxml.xades import XAdESSigner
 from xsdata.formats.dataclass.serializers import XmlSerializer
@@ -15,16 +21,8 @@ from xsdata.formats.dataclass.serializers.config import SerializerConfig
 from xsdata.models.datatype import XmlDateTime
 from yarl import URL
 
-from pyhanko.generated.etsi import MimeType, ts_119612
-from pyhanko.sign.validation.qualified.eutl_parse import (
-    ETSI_TSL_MIME_TYPE,
-    STATUS_GRANTED,
-)
-from pyhanko.sign.validation.qualified.tsp import CA_QC_URI, QTST_URI
-
 
 def _certomancer_pki_as_service_definitions(pki_arch: PKIArchitecture):
-
     # register all self-issued certs as CAs
     for iss, certs in pki_arch.enumerate_certs_by_issuer():
         for cert_spec in certs:
@@ -99,7 +97,6 @@ def _sign_tl(
     pki_arch: PKIArchitecture,
     tlso_entity: EntityLabel,
 ):
-
     tlso_cert_label = pki_arch.get_unique_cert_for_entity(tlso_entity)
     tlso_cert_spec = pki_arch.get_cert_spec(tlso_cert_label)
     tlso_priv_key = pki_arch.key_set.get_private_key(tlso_cert_spec.subject_key)
@@ -124,7 +121,6 @@ def _sign_tl(
 def certomancer_pki_as_trusted_list(
     pki_arch: PKIArchitecture, tlso_entity: EntityLabel
 ):
-
     xml_root = ts_119612.TrustServiceStatusList(
         scheme_information=ts_119612.SchemeInformation(),
         trust_service_provider_list=ts_119612.TrustServiceProviderList(
@@ -186,7 +182,6 @@ def certomancer_lotl(
 
 
 class PathRetainingClient(TestClient):
-
     def make_url(self, path: StrOrURL) -> URL:
         components = urlparse(path)
         # only remember the path part, forget about the host etc.

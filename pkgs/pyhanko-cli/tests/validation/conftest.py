@@ -6,7 +6,6 @@ from typing import Optional
 import pytest
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf

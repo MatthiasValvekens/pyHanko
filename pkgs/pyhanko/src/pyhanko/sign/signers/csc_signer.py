@@ -93,7 +93,6 @@ from typing import Any, Dict, FrozenSet, List, Optional
 import tzlocal
 from asn1crypto import algos, x509
 from cryptography.hazmat.primitives import hashes
-
 from pyhanko.sign import Signer
 from pyhanko.sign.general import SigningError
 from pyhanko_certvalidator.registry import (
@@ -108,13 +107,13 @@ except ImportError:  # pragma: nocover
     raise ImportError("Install pyHanko with [async_http]")
 
 __all__ = [
-    'CSCSigner',
-    'CSCServiceSessionInfo',
-    'CSCCredentialInfo',
-    'fetch_certs_in_csc_credential',
     'CSCAuthorizationInfo',
     'CSCAuthorizationManager',
+    'CSCCredentialInfo',
+    'CSCServiceSessionInfo',
+    'CSCSigner',
     'PrefetchedSADAuthorizationManager',
+    'fetch_certs_in_csc_credential',
 ]
 
 logger = logging.getLogger(__name__)
@@ -726,8 +725,7 @@ class CSCSigner(Signer):
             # There's a commit going on, wait for it to finish
             await self._current_batch.notifier.wait()
             logger.debug(
-                f"Done waiting for commit: "
-                f"new batch: {repr(self._current_batch)})"
+                f"Done waiting for commit: new batch: {self._current_batch!r})"
             )
             # ...and start a new batch right after (unless someone else
             # already did, or the new batch is somehow already full/already

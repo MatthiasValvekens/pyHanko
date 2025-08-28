@@ -7,10 +7,10 @@ from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 
 __all__ = [
+    'DiffPolicy',
+    'DiffResult',
     'ModificationLevel',
     'SuspiciousModification',
-    'DiffResult',
-    'DiffPolicy',
 ]
 
 

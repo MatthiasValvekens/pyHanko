@@ -6,7 +6,7 @@ import aiohttp
 from ..api import DEFAULT_USER_AGENT
 from ..common_utils import queue_fetch_task
 
-__all__ = ['LazySession', 'AIOHttpMixin']
+__all__ = ['AIOHttpMixin', 'LazySession']
 
 
 class LazySession:

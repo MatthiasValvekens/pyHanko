@@ -4,7 +4,6 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
-
 from pyhanko.pdf_utils import generic, layout, writer
 from pyhanko.pdf_utils.content import ImportedPdfPage, RawContent
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
@@ -29,7 +28,7 @@ from pyhanko.stamp import (
     qr_stamp_file,
     text_stamp_file,
 )
-from test_data.samples import *
+from test_data.samples import MINIMAL_PATH, PDF_DATA_DIR, TEST_DIR
 from test_utils.layout_test_utils import compare_output, with_layout_comparison
 
 FONT_DIR = f'{TEST_DIR}/data/fonts'
@@ -264,8 +263,7 @@ def test_stamp_with_unscaled_bitmap_bg():
     w = empty_page()
 
     long_text = '\n'.join(
-        'Test test test test test test test test test '
-        'on a bitmap background!'
+        'Test test test test test test test test test on a bitmap background!'
         for _ in range(60)
     )
     style = TextStampStyle(

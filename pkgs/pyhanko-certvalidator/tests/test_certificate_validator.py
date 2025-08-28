@@ -5,7 +5,6 @@ from datetime import datetime
 import pytest
 from asn1crypto.util import timezone
 from freezegun import freeze_time
-
 from pyhanko_certvalidator import (
     CertificateValidator,
     PKIXValidationParams,

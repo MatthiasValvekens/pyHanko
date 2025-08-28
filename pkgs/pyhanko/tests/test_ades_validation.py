@@ -16,7 +16,6 @@ from certomancer.registry import (
     ServiceLabel,
 )
 from freezegun import freeze_time
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import PdfTimeStamper, signers, timestamps
@@ -186,7 +185,6 @@ ESEAL_SIGNER = signers.SimpleSigner(
 
 
 def _testing_ca_registry():
-
     tl_xml = certomancer_pki_as_trusted_list(
         TESTING_CA_QUALIFIED, EntityLabel('root')
     )
@@ -467,7 +465,7 @@ async def test_embedded_cades_with_time_fail_qualification_requirements(
 @pytest.mark.asyncio
 async def test_embedded_cades_with_time_non_qtst_tsa_fail(requests_mock):
     tsa = timestamps.HTTPTimeStamper(
-        f'http://pyhanko.tests/testing-ca-qualified/tsa/tsa-qualified',
+        'http://pyhanko.tests/testing-ca-qualified/tsa/tsa-qualified',
         https=False,
     )
     # remove the QTST registrations from the registry
@@ -506,7 +504,7 @@ async def test_embedded_cades_with_time_non_qtst_tsa_fail(requests_mock):
 @pytest.mark.asyncio
 async def test_embedded_cades_with_time_non_qtst_tsa_pass(requests_mock):
     tsa = timestamps.HTTPTimeStamper(
-        f'http://pyhanko.tests/testing-ca-qualified/tsa/tsa-qualified',
+        'http://pyhanko.tests/testing-ca-qualified/tsa/tsa-qualified',
         https=False,
     )
     # remove the QTST registrations from the registry
@@ -680,8 +678,9 @@ async def test_simulate_future_lta_happy_path(requests_mock, with_lta):
     [True, False],
 )
 @freeze_time('2020-11-20')
-async def test_simulate_future_lta_happy_path(requests_mock, with_requirements):
-
+async def test_simulate_future_lta_happy_path_eseal(
+    requests_mock, with_requirements
+):
     signer = ESEAL_SIGNER
 
     spec = PdfSignatureValidationSpec(

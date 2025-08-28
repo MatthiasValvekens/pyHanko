@@ -8,7 +8,6 @@ from asn1crypto import cms, core, tsp
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
-
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -87,13 +86,13 @@ from test_utils.signing_commons import (
     FROM_ECC_CA,
     INTERM_CERT,
     ROOT_CERT,
-    SIMPLE_ECC_V_CONTEXT,
-    SIMPLE_V_CONTEXT,
     TRUST_ROOTS,
     async_val_trusted,
     dummy_ocsp_vc,
     live_ac_vcs,
     live_testing_vc,
+    simple_ecc_v_context,
+    simple_v_context,
     val_trusted,
 )
 
@@ -672,7 +671,7 @@ def test_pades_lta_sign_twice_post_expiry(requests_mock):
     with freeze_time('2020-10-10'):
         # intentionally load a VC in which the original TS does
         # not validate
-        vc = SIMPLE_ECC_V_CONTEXT()
+        vc = simple_ecc_v_context()
         with pytest.raises(SigningError, match=".*most recent timestamp.*"):
             signers.sign_pdf(
                 w,
@@ -982,7 +981,7 @@ async def test_sign_with_wrong_content_sig():
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     status = await async_validate_pdf_signature(
-        embedded_sig=emb, signer_validation_context=SIMPLE_V_CONTEXT()
+        embedded_sig=emb, signer_validation_context=simple_v_context()
     )
     assert not status.bottom_line
     assert status.valid
@@ -2393,14 +2392,16 @@ async def test_interrupted_nonstrict_with_psi():
             field_name='SigNew',
             subfilter=PADES,
             embed_validation_info=True,
-            validation_context=SIMPLE_V_CONTEXT(),
+            validation_context=simple_v_context(),
         ),
         signer=FROM_CA,
         timestamper=DUMMY_TS,
     )
-    prep_digest, tbs_document, output = (
-        await pdf_signer.async_digest_doc_for_signing(w)
-    )
+    (
+        prep_digest,
+        tbs_document,
+        output,
+    ) = await pdf_signer.async_digest_doc_for_signing(w)
     md_algorithm = tbs_document.md_algorithm
     assert tbs_document.post_sign_instructions is not None
 

@@ -1,18 +1,17 @@
 from typing import Optional, Type
 
-from asn1crypto.algos import DigestAlgorithmId
 from asn1crypto.core import ObjectIdentifier
 
 from ..ades.report import AdESIndeterminate, AdESStatus, AdESSubIndic
 from ..general import ValueErrorWithMessage
 
 __all__ = [
-    'SignatureValidationError',
+    'CMSAlgorithmProtectionError',
     'DisallowedAlgorithmError',
-    'ValidationInfoReadingError',
     'NoDSSFoundError',
     'SigSeedValueValidationError',
-    'CMSAlgorithmProtectionError',
+    'SignatureValidationError',
+    'ValidationInfoReadingError',
 ]
 
 

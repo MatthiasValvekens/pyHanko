@@ -8,7 +8,6 @@ from asn1crypto import x509
 from pyhanko.cli.cache import get_eutl_cache_dir
 from pyhanko.cli.config import DEFAULT_TIME_TOLERANCE, CLIConfig
 from pyhanko.cli.utils import logger, readable_file
-
 from pyhanko.config import api
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.keys import load_certs_from_pemder
@@ -25,10 +24,10 @@ from pyhanko.sign.validation.qualified.tsp import (
 from pyhanko_certvalidator.registry import SimpleTrustManager, TrustManager
 
 __all__ = [
-    'init_validation_context_kwargs',
-    'init_trust_manager',
-    'parse_trust_config',
     'TrustManagerSettings',
+    'init_trust_manager',
+    'init_validation_context_kwargs',
+    'parse_trust_config',
 ]
 
 
@@ -51,7 +50,6 @@ async def init_trust_manager(
     settings: TrustManagerSettings,
     cli_config: Optional[CLIConfig],
 ):
-
     if isinstance(settings.trust, str):
         trust = {settings.trust}
     elif settings.trust is not None:
@@ -73,7 +71,6 @@ async def init_trust_manager(
     if settings.eutl:
         # TODO check availability of imported stuff and return a nice error
         import aiohttp
-
         from pyhanko.sign.validation.qualified.eutl_fetch import (
             EU_LOTL_LOCATION,
             FileSystemTLCache,
@@ -379,7 +376,7 @@ def trust_options(f: FC) -> FC:
 def _prepare_vc(vc_kwargs, soft_revocation_check, force_revinfo):
     if soft_revocation_check and force_revinfo:
         raise click.ClickException(
-            "--soft-revocation-check is incompatible with " "--force-revinfo"
+            "--soft-revocation-check is incompatible with --force-revinfo"
         )
     if force_revinfo:
         rev_mode = 'require'

@@ -5,7 +5,7 @@ from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 from .base import BaseStamp, BaseStampStyle
 
-__all__ = ['StaticStampStyle', 'StaticContentStamp']
+__all__ = ['StaticContentStamp', 'StaticStampStyle']
 
 
 @dataclass(frozen=True)

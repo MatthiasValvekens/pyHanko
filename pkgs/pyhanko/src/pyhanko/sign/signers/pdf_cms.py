@@ -12,9 +12,8 @@ from datetime import datetime
 from typing import IO, Callable, Iterable, List, Optional, Union
 
 import tzlocal
-from asn1crypto import algos, cms, core, keys
+from asn1crypto import algos, cms, core, keys, x509
 from asn1crypto import pdf as asn1_pdf
-from asn1crypto import x509
 from asn1crypto.algos import SignedDigestAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.dsa import DSAPrivateKey
@@ -27,7 +26,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
-
 from pyhanko.pdf_utils import misc
 from pyhanko.sign import attributes
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
@@ -64,13 +62,13 @@ from ...keys.internal import (
 from . import constants
 
 __all__ = [
-    'Signer',
-    'SimpleSigner',
     'ExternalSigner',
     'PdfCMSSignedAttributes',
+    'Signer',
+    'SimpleSigner',
+    'asyncify_signer',
     'format_attributes',
     'format_signed_attributes',
-    'asyncify_signer',
     'select_suitable_signing_md',
     'signer_from_p12_config',
     'signer_from_pemder_config',
@@ -608,7 +606,7 @@ class Signer:
         signing_cert = self.signing_cert
         if signing_cert is None:
             raise SigningError(
-                "The signer\'s certificate must be available for "
+                "The signer's certificate must be available for "
                 "SignerInfo assembly to proceed."
             )
         # build the signer info object that goes into the PKCS7 signature

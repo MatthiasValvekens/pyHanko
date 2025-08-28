@@ -8,9 +8,9 @@ from pyhanko.sign.validation.qualified.tsp import (
 )
 
 __all__ = [
+    'QcPrivateKeyManagementType',
     'QualificationResult',
     'QualifiedStatus',
-    'QcPrivateKeyManagementType',
 ]
 
 

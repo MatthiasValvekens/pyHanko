@@ -5,7 +5,6 @@ from itertools import product
 
 import pytest
 from freezegun.api import freeze_time
-
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name
@@ -41,16 +40,29 @@ from pyhanko.sign.validation import (
     validate_pdf_signature,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
-from test_data.samples import *
-from test_data.samples import MINIMAL, PDF_DATA_DIR
+from test_data.samples import (
+    MINIMAL,
+    MINIMAL_ONE_FIELD,
+    MINIMAL_ONE_FIELD_TAGGED,
+    MINIMAL_TWO_FIELDS,
+    MINIMAL_TWO_FIELDS_TAGGED,
+    MINIMAL_TWO_PAGES,
+    MINIMAL_XREF,
+    PDF_DATA_DIR,
+    SIMPLE_FORM,
+    TEST_DIR,
+    TEXTFIELD_GROUP,
+    TEXTFIELD_GROUP_VAR,
+    read_all,
+)
 from test_utils.signing_commons import (
     DUMMY_TS,
     FROM_CA,
     FROM_ECC_CA,
-    NOTRUST_V_CONTEXT,
     SELF_SIGN,
-    SIMPLE_V_CONTEXT,
     live_testing_vc,
+    notrust_v_context,
+    simple_v_context,
     val_trusted,
     val_trusted_but_modified,
     val_untrusted,
@@ -214,7 +226,7 @@ def test_double_sig_create_deep_field_post_sign():
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
     status = validate_pdf_signature(
-        s, signer_validation_context=SIMPLE_V_CONTEXT()
+        s, signer_validation_context=simple_v_context()
     )
     # the /Kids array of NewSigs was modified, which we don't allow (right now)
     assert status.modification_level == ModificationLevel.OTHER
@@ -286,7 +298,7 @@ def test_no_field_type():
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
     status = validate_pdf_signature(
-        s, signer_validation_context=SIMPLE_V_CONTEXT()
+        s, signer_validation_context=simple_v_context()
     )
     assert status.modification_level == ModificationLevel.OTHER
 
@@ -1513,16 +1525,19 @@ def test_sign_reject_freed(forbid_freeing):
         def apply_qualified(
             self, old: HistoricalResolver, new: HistoricalResolver
         ):
-            yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
-                freed.reference,
-                context_checked=Context.from_absolute(
-                    old, RawPdfPath('/Root', '/Pages')
+            yield (
+                ModificationLevel.LTA_UPDATES,
+                ReferenceUpdate(
+                    freed.reference,
+                    context_checked=Context.from_absolute(
+                        old, RawPdfPath('/Root', '/Pages')
+                    ),
                 ),
             )
 
     val_status = validate_pdf_signature(
         sig,
-        SIMPLE_V_CONTEXT(),
+        simple_v_context(),
         diff_policy=StandardDiffPolicy(
             DEFAULT_DIFF_POLICY.global_rules + [AdHocRule()],
             DEFAULT_DIFF_POLICY.form_rule,
@@ -1634,7 +1649,7 @@ def test_orphan(ignored):
         form_rule=None,
         ignore_orphaned_objects=ignored,
     )
-    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), diff_policy=policy)
+    status = validate_pdf_signature(s, simple_v_context(), diff_policy=policy)
     if ignored:
         assert status.modification_level == ModificationLevel.LTA_UPDATES
         assert status.docmdp_ok
@@ -2014,13 +2029,13 @@ def test_skip_diff_scenario_1():
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     # should be OK with skip_diff
-    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), skip_diff=True)
+    status = validate_pdf_signature(s, simple_v_context(), skip_diff=True)
     assert status.docmdp_ok is None
     assert status.bottom_line
     assert 'skipped' in status.pretty_print_details()
 
     # ... but not otherwise
-    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+    status = validate_pdf_signature(s, simple_v_context())
     assert status.docmdp_ok is False
     assert not status.bottom_line
     assert (
@@ -2053,13 +2068,13 @@ def test_skip_diff_scenario_2():
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     # should be OK with skip_diff
-    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), skip_diff=True)
+    status = validate_pdf_signature(s, simple_v_context(), skip_diff=True)
     assert status.docmdp_ok is None
     assert status.bottom_line
     assert 'skipped' in status.pretty_print_details()
 
     # ... but not otherwise
-    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+    status = validate_pdf_signature(s, simple_v_context())
     assert status.docmdp_ok is False
     assert not status.bottom_line
     report = status.pretty_print_details()
@@ -2088,7 +2103,7 @@ def test_diff_analysis_circular_page_tree():
     with pytest.raises(
         misc.PdfReadError, match='Circular reference in page.*mapping'
     ):
-        validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+        validate_pdf_signature(s, simple_v_context())
 
     # manually call _walk_page_tree_annots to test the defence-in-depth function
     old = r.get_historical_resolver(1)
@@ -2130,7 +2145,7 @@ def test_diff_analysis_circular_structure_tree():
     with pytest.raises(
         misc.PdfReadError, match='Circular reference in struct.*mapping'
     ):
-        validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+        validate_pdf_signature(s, simple_v_context())
 
 
 LENIENT_KU = KeyUsageConstraints(key_usage=set())
@@ -2154,7 +2169,7 @@ def test_anomalous_coverage(fname, expected_level):
         r = PdfFileReader(inf)
         s = r.embedded_signatures[0]
         status = validate_pdf_signature(
-            s, SIMPLE_V_CONTEXT(), key_usage_settings=LENIENT_KU
+            s, simple_v_context(), key_usage_settings=LENIENT_KU
         )
         assert status.valid
         assert status.intact
@@ -2333,7 +2348,7 @@ def test_sign_with_hybrid():
     # turn off orphan detection to make sure the xref rule is actually called
     status = validate_pdf_signature(
         s,
-        SIMPLE_V_CONTEXT(),
+        simple_v_context(),
         diff_policy=StandardDiffPolicy(
             DEFAULT_DIFF_POLICY.global_rules,
             DEFAULT_DIFF_POLICY.form_rule,
@@ -2386,7 +2401,7 @@ def test_sign_with_hybrid_sneaky_edit():
     # turn off orphan detection to make sure the xref rule is actually called
     status = validate_pdf_signature(
         s,
-        SIMPLE_V_CONTEXT(),
+        simple_v_context(),
         diff_policy=StandardDiffPolicy(
             DEFAULT_DIFF_POLICY.global_rules,
             DEFAULT_DIFF_POLICY.form_rule,
@@ -2438,7 +2453,7 @@ def test_diff_analysis_modify_type_entry():
 
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    val_status = validate_pdf_signature(s, notrust_v_context())
     assert '/Type of form field altered' in str(val_status.diff_result)
 
 
@@ -2453,7 +2468,7 @@ def test_diff_analysis_remove_type_entry():
 
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    val_status = validate_pdf_signature(s, notrust_v_context())
     assert '/Type of form field deleted' in str(val_status.diff_result)
 
 
@@ -2470,7 +2485,7 @@ def test_diff_analysis_add_invalid_type_entry():
 
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    val_status = validate_pdf_signature(s, notrust_v_context())
     assert '/Type of form field set to something other than /Annot' in str(
         val_status.diff_result
     )
@@ -2489,7 +2504,7 @@ def test_diff_analysis_add_valid_type_entry():
 
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    val_status = validate_pdf_signature(s, notrust_v_context())
     assert val_status.modification_level == ModificationLevel.FORM_FILLING
 
 
@@ -2514,7 +2529,7 @@ def test_appearance_update_edge_cases(fname):
     with open(path, 'rb') as inf:
         r = PdfFileReader(inf)
         s = r.embedded_signatures[0]
-        val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+        val_status = validate_pdf_signature(s, notrust_v_context())
         assert val_status.modification_level == ModificationLevel.FORM_FILLING
 
 
@@ -2534,7 +2549,7 @@ def test_disallow_appearance_stream_override_if_clobbers(fname):
     with open(path, 'rb') as inf:
         r = PdfFileReader(inf)
         s = r.embedded_signatures[0]
-        val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+        val_status = validate_pdf_signature(s, notrust_v_context())
         assert val_status.modification_level == ModificationLevel.OTHER
         assert '.FooBar' in str(val_status.diff_result)
 
@@ -2590,7 +2605,7 @@ def test_allow_identical_object_replacement(obj):
 
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    val_status = validate_pdf_signature(s, notrust_v_context())
     assert val_status.modification_level == ModificationLevel.LTA_UPDATES
 
 
@@ -2614,7 +2629,7 @@ def test_stream_and_dict_not_considered_identical():
 
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    val_status = validate_pdf_signature(s, notrust_v_context())
     assert val_status.modification_level == ModificationLevel.OTHER
     assert '.Root.Foo' in str(val_status.diff_result)
 
@@ -2637,7 +2652,7 @@ def test_allow_identical_object_replacement_nonsensical_obj_nonstrict():
 
     r = PdfFileReader(out, strict=False)
     s = r.embedded_signatures[0]
-    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    val_status = validate_pdf_signature(s, notrust_v_context())
     assert val_status.modification_level == ModificationLevel.LTA_UPDATES
 
 

@@ -6,7 +6,6 @@ import pytest
 from asn1crypto import pem
 from certomancer.registry import CertLabel, EntityLabel
 from pyhanko.cli import cli_root
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from test_data.samples import CERTOMANCER, MINIMAL_ONE_FIELD, TESTING_CA_ECDSA
 

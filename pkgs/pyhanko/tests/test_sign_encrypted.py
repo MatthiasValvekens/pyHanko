@@ -2,7 +2,6 @@ from io import BytesIO
 
 import pytest
 from freezegun import freeze_time
-
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.crypt import AuthStatus
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -30,9 +29,9 @@ from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     FROM_CA,
     FROM_ED25519_CA,
-    SIMPLE_ED25519_V_CONTEXT,
-    SIMPLE_V_CONTEXT,
     live_testing_vc,
+    simple_ed25519_v_context,
+    simple_v_context,
     val_trusted,
 )
 
@@ -123,7 +122,7 @@ def test_sign_encrypted_with_extensions():
     result = r.decrypt('secret')
     assert result.status == AuthStatus.OWNER
     s = r.embedded_signatures[0]
-    val_trusted(s, vc=SIMPLE_ED25519_V_CONTEXT())
+    val_trusted(s, vc=simple_ed25519_v_context())
 
 
 @freeze_time('2020-11-01')
@@ -255,7 +254,7 @@ def test_copy_encrypted_signed_file():
     assert not r.encrypted
     s = r.embedded_signatures[0]
     s.compute_integrity_info()
-    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), skip_diff=True)
+    status = validate_pdf_signature(s, simple_v_context(), skip_diff=True)
     assert not status.intact
 
 
@@ -266,7 +265,6 @@ def test_copy_file_with_mdp_signature_and_backref():
 
     fname = f"{PDF_DATA_DIR}/signed-encrypted-pubkey-with-catalog-ref.pdf"
     with open(fname, 'rb') as inf:
-
         r = PdfFileReader(inf)
         r.decrypt_pubkey(PUBKEY_SELFSIGNED_DECRYPTER)
 
@@ -278,5 +276,5 @@ def test_copy_file_with_mdp_signature_and_backref():
     assert not r.encrypted
     s = r.embedded_signatures[0]
     s.compute_integrity_info()
-    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), skip_diff=True)
+    status = validate_pdf_signature(s, simple_v_context(), skip_diff=True)
     assert not status.intact

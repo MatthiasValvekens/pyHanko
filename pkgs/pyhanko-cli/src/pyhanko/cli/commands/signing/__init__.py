@@ -10,7 +10,6 @@ from pyhanko.cli._trust import (
 from pyhanko.cli.commands.signing.plugin import command_from_plugin
 from pyhanko.cli.commands.stamp import select_style
 from pyhanko.cli.utils import parse_field_location_spec
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import DEFAULT_SIGNER_KEY_USAGE, fields, signers
 from pyhanko.sign.signers.pdf_byterange import BuildProps
@@ -21,7 +20,7 @@ from pyhanko_certvalidator import ValidationContext
 from ..._ctx import CLIContext
 from ...plugin_api import SigningCommandPlugin
 
-__all__ = ['signing', 'addsig', 'register']
+__all__ = ['addsig', 'register', 'signing']
 
 from ...runtime import pyhanko_exception_manager
 
@@ -272,7 +271,6 @@ def register(plugins: List[SigningCommandPlugin]):
         if signer_plugin.is_available():
             addsig.add_command(command_from_plugin(signer_plugin))
         else:
-
             addsig.add_command(
                 click.Command(
                     name=signer_plugin.subcommand_name,

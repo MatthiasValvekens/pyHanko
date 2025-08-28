@@ -3,6 +3,7 @@ import getpass
 from datetime import datetime
 
 import click
+import pyhanko.sign
 from asn1crypto import cms, pem
 from pyhanko.cli._trust import (
     _get_key_usage_settings,
@@ -13,8 +14,6 @@ from pyhanko.cli._trust import (
 from pyhanko.cli.commands.signing import signing
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import logger
-
-import pyhanko.sign
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.misc import isoparse
 from pyhanko.pdf_utils.reader import PdfFileReader

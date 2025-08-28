@@ -9,7 +9,6 @@ from asn1crypto import algos
 from certomancer.registry import CertLabel
 from csc_dummy.csc_dummy_server import CSCWithCertomancer, DummyServiceParams
 from freezegun import freeze_time
-
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import csc_signer
 from pyhanko_certvalidator.sig_validate import DefaultSignatureValidator

@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Optional
 
 from asn1crypto import algos, cms, keys
-
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsageConstraint,
     AlgorithmUsagePolicy,

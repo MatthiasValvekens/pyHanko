@@ -29,10 +29,10 @@ from .pdf_byterange import PdfSignedData
 
 __all__ = [
     'PdfCMSEmbedder',
-    'SigMDPSetup',
-    'SigObjSetup',
     'SigAppearanceSetup',
     'SigIOSetup',
+    'SigMDPSetup',
+    'SigObjSetup',
 ]
 
 

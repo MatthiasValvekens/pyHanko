@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import FrozenSet, Generator, List, Optional, Union
 
 from asn1crypto import x509
-
 from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
 from pyhanko.sign.validation import KeyUsageConstraints
 from pyhanko.sign.validation.qualified.q_status import (
@@ -38,13 +37,13 @@ from pyhanko_certvalidator.policy_decl import NonRevokedStatusAssertion
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 
 __all__ = [
-    'SignatureValidationSpec',
-    'PdfSignatureValidationSpec',
-    'RevinfoOnlineFetchingRule',
-    'LocalKnowledge',
-    'RevocationInfoGatheringSpec',
     'CMSAlgorithmUsagePolicy',
+    'LocalKnowledge',
+    'PdfSignatureValidationSpec',
     'QualificationRequirements',
+    'RevinfoOnlineFetchingRule',
+    'RevocationInfoGatheringSpec',
+    'SignatureValidationSpec',
     'bootstrap_validation_data_handlers',
 ]
 

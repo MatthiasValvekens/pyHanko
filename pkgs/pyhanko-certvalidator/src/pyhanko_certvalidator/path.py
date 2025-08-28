@@ -9,7 +9,6 @@ from .asn1_types import AAControls
 from .authority import (
     Authority,
     AuthorityWithCert,
-    CertTrustAnchor,
     TrustAnchor,
 )
 from .util import get_ac_extension_value, get_issuer_dn

@@ -169,8 +169,8 @@ In addition, keep in mind the following when writing test cases:
 
 ## Code style
 
-PyHanko uses Black, with the line length set to 80 characters and
-string literal standardisation turned off.
+PyHanko uses ruff (i.e. the Black style), with the line length set to
+80 characters and string literal standardisation turned off.
 
 Here are some additional pointers.
 
@@ -185,8 +185,8 @@ Here are some additional pointers.
    is permissible in documentation files.
  * Generally prefer double-quoted literals for strings intended for human consumption.
    Other strings should use single quotes. This distinction is not strictly enforced.
- * Check for Black conformance using `black -S --line-length 80 --check`
- * Format imports using `isort --profile black --line-length 80`.
+ * Check for formatting issues using `ruff format --check`
+ * Check for other linting failures using `ruff check`
  * Check for whitespace errors using `git diff-index --check --cached HEAD`.
 
 You can put the last three in a pre-commit hook to avoid getting yelled at by the

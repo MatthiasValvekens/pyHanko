@@ -4,7 +4,6 @@ import os
 import pytest
 from asn1crypto import cms, crl, ocsp, x509
 from freezegun import freeze_time
-
 from pyhanko_certvalidator import PathBuildingError, validate
 from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.context import ACTargetDescription, ValidationContext
@@ -446,7 +445,7 @@ async def test_match_holder_ac_mismatch():
 
 @freeze_time('2022-05-01')
 @pytest.mark.asyncio
-async def test_ac_revoked():
+async def test_ac_revoked_crl():
     ac = load_attr_cert(
         os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
     )
@@ -454,6 +453,12 @@ async def test_ac_revoked():
     root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
     interm = load_cert(os.path.join(basic_aa_dir, 'root', 'interm-role.crt'))
     role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
+    root_crl = load_crl(
+        os.path.join(basic_aa_dir, 'root', 'root-some-revoked.crl')
+    )
+    interm_crl = load_crl(
+        os.path.join(basic_aa_dir, 'interm', 'interm-some-revoked.crl')
+    )
 
     role_aa_crl = load_crl(
         os.path.join(basic_aa_dir, 'role-aa-some-revoked.crl')
@@ -462,7 +467,7 @@ async def test_ac_revoked():
     vc = ValidationContext(
         trust_roots=[root],
         other_certs=[interm, role_aa],
-        crls=[role_aa_crl],
+        crls=[root_crl, interm_crl, role_aa_crl],
         moment=datetime.datetime(
             year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
         ),
@@ -476,7 +481,7 @@ async def test_ac_revoked():
 
 @freeze_time('2022-05-01')
 @pytest.mark.asyncio
-async def test_ac_unrevoked():
+async def test_ac_unrevoked_crl():
     ac = load_attr_cert(
         os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
     )
@@ -485,12 +490,16 @@ async def test_ac_unrevoked():
     interm = load_cert(os.path.join(basic_aa_dir, 'root', 'interm-role.crt'))
     role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
+    root_crl = load_crl(os.path.join(basic_aa_dir, 'root', 'root-all-good.crl'))
+    interm_crl = load_crl(
+        os.path.join(basic_aa_dir, 'interm', 'interm-all-good.crl')
+    )
     role_aa_crl = load_crl(os.path.join(basic_aa_dir, 'role-aa-all-good.crl'))
 
     vc = ValidationContext(
         trust_roots=[root],
         other_certs=[interm, role_aa],
-        crls=[role_aa_crl],
+        crls=[root_crl, interm_crl, role_aa_crl],
         moment=datetime.datetime(
             year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
         ),
@@ -503,13 +512,19 @@ async def test_ac_unrevoked():
 
 @freeze_time('2022-05-01')
 @pytest.mark.asyncio
-async def test_ac_revoked_full_path_validation():
+async def test_ac_revoked_full_path_validation_crl():
     ac = load_attr_cert(
         os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
     )
 
     root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
     interm = load_cert(os.path.join(basic_aa_dir, 'root', 'interm-role.crt'))
+    root_crl = load_crl(
+        os.path.join(basic_aa_dir, 'root', 'root-some-revoked.crl')
+    )
+    interm_crl = load_crl(
+        os.path.join(basic_aa_dir, 'interm', 'interm-some-revoked.crl')
+    )
     role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
     role_aa_crl = load_crl(
@@ -519,7 +534,7 @@ async def test_ac_revoked_full_path_validation():
     vc = ValidationContext(
         trust_roots=[root],
         other_certs=[interm, role_aa],
-        crls=[role_aa_crl],
+        crls=[root_crl, interm_crl, role_aa_crl],
         moment=datetime.datetime(
             year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
         ),
@@ -578,7 +593,7 @@ async def test_ac_revoked_complex_crls_full_path_validation():
 
 @freeze_time('2022-05-01')
 @pytest.mark.asyncio
-async def test_ac_unrevoked_full_path_validation():
+async def test_ac_unrevoked_full_path_validation_crl():
     ac = load_attr_cert(
         os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
     )
@@ -587,12 +602,16 @@ async def test_ac_unrevoked_full_path_validation():
     interm = load_cert(os.path.join(basic_aa_dir, 'root', 'interm-role.crt'))
     role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
+    root_crl = load_crl(os.path.join(basic_aa_dir, 'root', 'root-all-good.crl'))
+    interm_crl = load_crl(
+        os.path.join(basic_aa_dir, 'interm', 'interm-all-good.crl')
+    )
     role_aa_crl = load_crl(os.path.join(basic_aa_dir, 'role-aa-all-good.crl'))
 
     vc = ValidationContext(
         trust_roots=[root],
         other_certs=[interm, role_aa],
-        crls=[role_aa_crl],
+        crls=[root_crl, interm_crl, role_aa_crl],
         moment=datetime.datetime(
             year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
         ),
@@ -692,7 +711,7 @@ async def test_ac_unrevoked_complex_crls_full_path_validation():
 
 @freeze_time('2022-05-01')
 @pytest.mark.asyncio
-async def test_ac_revoked():
+async def test_ac_revoked_ocsp():
     ac = load_attr_cert(
         os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
     )
@@ -722,7 +741,7 @@ async def test_ac_revoked():
 
 @freeze_time('2022-05-01')
 @pytest.mark.asyncio
-async def test_ac_unrevoked():
+async def test_ac_unrevoked_oscp():
     ac = load_attr_cert(
         os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
     )
@@ -786,7 +805,7 @@ async def test_ac_revoked_full_path_validation():
 
 @freeze_time('2022-05-01')
 @pytest.mark.asyncio
-async def test_ac_unrevoked_full_path_validation():
+async def test_ac_unrevoked_full_path_validation_ocsp():
     ac = load_attr_cert(
         os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
     )

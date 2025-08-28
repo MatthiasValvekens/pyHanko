@@ -4,15 +4,14 @@ from typing import Optional
 
 from asn1crypto import cms, tsp
 from cryptography.hazmat.primitives import hashes
-
 from pyhanko_certvalidator.registry import CertificateStore
 from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 __all__ = [
     'TimestampRequestError',
-    'get_nonce',
-    'extract_ts_certs',
     'dummy_digest',
+    'extract_ts_certs',
+    'get_nonce',
     'handle_tsp_response',
     'set_tsp_headers',
 ]
@@ -67,7 +66,7 @@ def handle_tsp_response(
         fail_info = '; '.join(fail_infos)
         raise TimestampRequestError(
             f'Timestamp server refused our request: statusString '
-            f'\"{status_string}\", failInfo \"{fail_info}\"'
+            f'"{status_string}", failInfo "{fail_info}"'
         )
     tst = response['time_stamp_token']
     tst_info = tst['content']['encap_content_info']['content']

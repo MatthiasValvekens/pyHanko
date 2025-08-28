@@ -7,7 +7,6 @@ from asn1crypto import ocsp
 from asn1crypto.algos import DigestAlgorithm, DigestInfo
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
-
 from pyhanko.sign import signers, timestamps
 from pyhanko.sign.ades.cades_asn1 import SignaturePolicyId
 from pyhanko.sign.diff_analysis import ModificationLevel
@@ -106,21 +105,37 @@ TRUST_ROOTS = [TESTING_CA.get_cert(CertLabel('root'))]
 FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
     TESTING_CA_DIR + '/interm/signer1.pfx', passphrase=None
 )
-NOTRUST_V_CONTEXT = lambda: ValidationContext(trust_roots=[])
-SIMPLE_V_CONTEXT = lambda: ValidationContext(trust_roots=[ROOT_CERT])
-SIMPLE_ECC_V_CONTEXT = lambda: ValidationContext(trust_roots=[ECC_ROOT_CERT])
-SIMPLE_DSA_V_CONTEXT = lambda: ValidationContext(
-    trust_roots=[DSA_ROOT_CERT],
-    algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
-        dsa_key_size_threshold=1024
-    ),
-)
-SIMPLE_ED25519_V_CONTEXT = lambda: ValidationContext(
-    trust_roots=[ED25519_ROOT_CERT]
-)
-SIMPLE_ED448_V_CONTEXT = lambda: ValidationContext(
-    trust_roots=[ED448_ROOT_CERT]
-)
+
+
+def notrust_v_context():
+    return ValidationContext(trust_roots=[])
+
+
+def simple_v_context():
+    return ValidationContext(trust_roots=[ROOT_CERT])
+
+
+def simple_ecc_v_context():
+    return ValidationContext(trust_roots=[ECC_ROOT_CERT])
+
+
+def simple_dsa_v_context():
+    return ValidationContext(
+        trust_roots=[DSA_ROOT_CERT],
+        algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
+            dsa_key_size_threshold=1024
+        ),
+    )
+
+
+def simple_ed25519_v_context():
+    return ValidationContext(trust_roots=[ED25519_ROOT_CERT])
+
+
+def simple_ed448_v_context():
+    return ValidationContext(trust_roots=[ED448_ROOT_CERT])
+
+
 OCSP_KEY = TESTING_CA.key_set.get_private_key('interm-ocsp')
 DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_cert=TSA_CERT,
@@ -175,7 +190,7 @@ def dummy_ocsp_vc():
 
 def live_testing_vc(requests_mock, with_extra_tsa=False, **kwargs):
     if with_extra_tsa:
-        trust_roots = TRUST_ROOTS + [UNRELATED_TSA.get_cert(CertLabel('root'))]
+        trust_roots = [*TRUST_ROOTS, UNRELATED_TSA.get_cert(CertLabel('root'))]
     else:
         trust_roots = TRUST_ROOTS
     vc = ValidationContext(
@@ -213,7 +228,7 @@ def live_ac_vcs(requests_mock, with_authorities=False):
 
 def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False, vc=None):
     if vc is None:
-        vc = SIMPLE_V_CONTEXT()
+        vc = simple_v_context()
     val_status = validate_pdf_signature(embedded_sig, vc, skip_diff=not extd)
     return _val_trusted_check_status(val_status, extd)
 
@@ -222,7 +237,7 @@ async def async_val_trusted(
     embedded_sig: EmbeddedPdfSignature, extd=False, vc=None
 ):
     if vc is None:
-        vc = SIMPLE_V_CONTEXT()
+        vc = simple_v_context()
     val_status = await async_validate_pdf_signature(
         embedded_sig, vc, skip_diff=not extd
     )
@@ -248,7 +263,7 @@ def _val_trusted_check_status(val_status, extd):
 
 
 def val_untrusted(embedded_sig: EmbeddedPdfSignature, extd=False):
-    val_status = validate_pdf_signature(embedded_sig, NOTRUST_V_CONTEXT())
+    val_status = validate_pdf_signature(embedded_sig, notrust_v_context())
     assert val_status.intact
     assert val_status.valid
     if not extd:
@@ -264,7 +279,7 @@ def val_untrusted(embedded_sig: EmbeddedPdfSignature, extd=False):
 
 
 def val_trusted_but_modified(embedded_sig: EmbeddedPdfSignature):
-    val_status = validate_pdf_signature(embedded_sig, SIMPLE_V_CONTEXT())
+    val_status = validate_pdf_signature(embedded_sig, simple_v_context())
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted

@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    'FormUpdatingRule',
-    'FormUpdate',
-    'FieldMDPRule',
-    'FieldComparisonSpec',
     'FieldComparisonContext',
+    'FieldComparisonSpec',
+    'FieldMDPRule',
+    'FormUpdate',
+    'FormUpdatingRule',
 ]
 
 
@@ -356,11 +356,14 @@ def _list_fields(
             field_path = old_path + field_index
         else:
             field_path = None
-        yield field_name, FieldComparisonSpec(
-            field_type=common_ft,
-            old_field_ref=old_field_ref,
-            new_field_ref=new_field_ref,
-            old_canonical_path=field_path,
+        yield (
+            field_name,
+            FieldComparisonSpec(
+                field_type=common_ft,
+                old_field_ref=old_field_ref,
+                new_field_ref=new_field_ref,
+                old_canonical_path=field_path,
+            ),
         )
 
         # recursively descend into /Kids if necessary

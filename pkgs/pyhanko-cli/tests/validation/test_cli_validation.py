@@ -9,7 +9,6 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
 from pyhanko.cli import cli_root
-
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader

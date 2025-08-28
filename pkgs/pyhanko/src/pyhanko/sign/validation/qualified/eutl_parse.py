@@ -20,13 +20,6 @@ from asn1crypto import x509
 from cryptography.x509 import load_der_x509_certificate
 from lxml import etree
 from lxml.etree import QName
-from signxml.exceptions import SignXMLException as InvalidXmlSignature
-from signxml.xades import XAdESSignatureConfiguration, XAdESVerifier
-from xsdata.formats.dataclass.parsers import XmlParser
-from xsdata.formats.dataclass.parsers.config import ParserConfig
-from xsdata.formats.dataclass.parsers.handlers import LxmlEventHandler
-from xsdata.formats.dataclass.parsers.handlers.lxml import EVENTS
-
 from pyhanko.generated.etsi import (
     MimeType,
     OtherTSLPointer,
@@ -66,15 +59,21 @@ from pyhanko.sign.validation.qualified.tsp import (
     TSPServiceParsingError,
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
+from signxml.exceptions import SignXMLException as InvalidXmlSignature
+from signxml.xades import XAdESSignatureConfiguration, XAdESVerifier
+from xsdata.formats.dataclass.parsers import XmlParser
+from xsdata.formats.dataclass.parsers.config import ParserConfig
+from xsdata.formats.dataclass.parsers.handlers import LxmlEventHandler
+from xsdata.formats.dataclass.parsers.handlers.lxml import EVENTS
 
 __all__ = [
+    'latest_known_lotl_tlso_certs',
+    'ojeu_bootstrap_lotl_tlso_certs',
+    'parse_lotl_unsafe',
+    'read_qualified_service_definitions',
     'trust_list_to_registry',
     'trust_list_to_registry_unsafe',
     'validate_and_parse_lotl',
-    'parse_lotl_unsafe',
-    'latest_known_lotl_tlso_certs',
-    'ojeu_bootstrap_lotl_tlso_certs',
-    'read_qualified_service_definitions',
 ]
 
 logger = logging.getLogger(__name__)
@@ -168,12 +167,12 @@ def _process_criteria_list_entries(
             key_usage_must_have = frozenset(
                 _required(bit.name, "Key usage bit type name").name.lower()
                 for bit in ku_criterion.key_usage_bit
-                if bit.value == True
+                if bit.value is True
             )
             key_usage_forbidden = frozenset(
                 _required(bit.name, "Key usage bit type name").name.lower()
                 for bit in ku_criterion.key_usage_bit
-                if bit.value == False
+                if bit.value is False
             )
             yield KeyUsageCriterion(
                 settings=KeyUsageConstraints(
@@ -490,7 +489,6 @@ def _interpret_service_info_for_tsps(
 
 
 class _RestrictedLxmlEventHandler(LxmlEventHandler):
-
     # Disable xinclude support and entity resolution
 
     def parse(self, source: Any, ns_map: dict[Optional[str], str]) -> Any:
@@ -619,13 +617,12 @@ def _validate_and_extract_tl_data(
             break
     if not tl_signed_xml:
         raise SignatureValidationError(
-            f"Failed to identify trusted list in signed data",
+            "Failed to identify trusted list in signed data",
             ades_subindication=AdESFailure.FORMAT_FAILURE,
         )
 
     logger.debug(
-        f"Validated TL data with TLSO certificate %s\n"
-        f"(SHA-256 fingerprint %s)",
+        "Validated TL data with TLSO certificate %s\n(SHA-256 fingerprint %s)",
         tlso_cert.subject.human_friendly,
         tlso_cert.sha256_fingerprint,
     )

@@ -5,10 +5,10 @@ from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 __all__ = [
-    'ShapeResult',
     'FontEngine',
-    'FontSubsetCollection',
     'FontEngineFactory',
+    'FontSubsetCollection',
+    'ShapeResult',
 ]
 
 ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'

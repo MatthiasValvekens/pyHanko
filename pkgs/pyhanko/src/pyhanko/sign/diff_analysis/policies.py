@@ -40,9 +40,9 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    'StandardDiffPolicy',
     'DEFAULT_DIFF_POLICY',
     'NO_CHANGES_DIFF_POLICY',
+    'StandardDiffPolicy',
 ]
 
 
@@ -347,7 +347,7 @@ class StandardDiffPolicy(DiffPolicy):
                 "Unexplained xrefs in revision %d:\n%s", new.revision, msg
             )
             unexplained_overrides = [
-                f" - {repr(ref)} is also used in "
+                f" - {ref!r} is also used in "
                 f"{', '.join(str(p) for p in paths_remaining)} in the prior "
                 f"revision."
                 for ref, (_, paths_remaining) in old_usages_to_clear.items()

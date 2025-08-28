@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    'QualifiedWhitelistRule',
-    'WhitelistRule',
-    'ReferenceUpdate',
-    'Context',
-    'RelativeContext',
     'AbsoluteContext',
+    'Context',
+    'QualifiedWhitelistRule',
+    'ReferenceUpdate',
+    'RelativeContext',
+    'WhitelistRule',
 ]
 
 

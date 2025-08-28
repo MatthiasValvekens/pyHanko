@@ -3,15 +3,14 @@ from typing import ClassVar, ContextManager, List, Optional
 
 import click
 from pyhanko.cli._ctx import CLIContext
-
 from pyhanko.sign import Signer
 
 __all__ = [
+    'SIGNING_PLUGIN_ENTRY_POINT_GROUP',
+    'SIGNING_PLUGIN_REGISTRY',
+    'CLIContext',
     'SigningCommandPlugin',
     'register_signing_plugin',
-    'CLIContext',
-    'SIGNING_PLUGIN_REGISTRY',
-    'SIGNING_PLUGIN_ENTRY_POINT_GROUP',
 ]
 
 

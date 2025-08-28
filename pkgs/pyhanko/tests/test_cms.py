@@ -18,7 +18,6 @@ from asn1crypto.algos import (
 from certomancer import PKIArchitecture
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import attributes, fields, signers, timestamps
@@ -92,12 +91,12 @@ from test_utils.signing_commons import (
     FROM_ECC_CA,
     INTERM_CERT,
     ROOT_CERT,
-    SIMPLE_DSA_V_CONTEXT,
-    SIMPLE_ECC_V_CONTEXT,
-    SIMPLE_V_CONTEXT,
     async_val_trusted,
     live_ac_vcs,
     live_testing_vc,
+    simple_dsa_v_context,
+    simple_ecc_v_context,
+    simple_v_context,
     val_trusted,
     val_untrusted,
 )
@@ -776,7 +775,7 @@ def test_sign_weak_digest_prevention():
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1',
         md_algorithm='md5',
-        validation_context=SIMPLE_V_CONTEXT(),
+        validation_context=simple_v_context(),
     )
     with pytest.raises(SigningError, match='md5 is not allowed'):
         signers.sign_pdf(w, meta, signer=FROM_CA)
@@ -894,7 +893,7 @@ async def test_sign_weak_sig_digest_mismatch_allowed():
 
     val_status = await async_validate_pdf_signature(
         emb,
-        SIMPLE_V_CONTEXT(),
+        simple_v_context(),
         skip_diff=True,
         algorithm_policy=_AllowEverything(),
     )
@@ -939,7 +938,7 @@ async def test_sign_digest_mismatch_allowed_but_inner_banned():
     with pytest.raises(SignatureValidationError, match="md5.*not allowed"):
         await async_validate_pdf_signature(
             emb,
-            SIMPLE_V_CONTEXT(),
+            simple_v_context(),
             skip_diff=True,
             algorithm_policy=_AllowMismatches(policy),
         )
@@ -960,7 +959,7 @@ async def test_sign_digest_mismatch_allowed_but_outer_banned():
     with pytest.raises(SignatureValidationError, match="sha256.*not allowed"):
         await async_validate_pdf_signature(
             emb,
-            SIMPLE_V_CONTEXT(),
+            simple_v_context(),
             skip_diff=True,
             algorithm_policy=_AllowMismatches(policy),
         )
@@ -1181,7 +1180,7 @@ def test_sign_with_ecdsa_trust():
     assert s.field_name == 'Sig1'
     si = s.signer_info
     assert si['signature_algorithm']['algorithm'].native == 'sha384_ecdsa'
-    val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
+    val_trusted(s, vc=simple_ecc_v_context())
 
 
 @freeze_time('2020-11-01')
@@ -1195,7 +1194,7 @@ def test_sign_with_dsa_trust():
     assert s.field_name == 'Sig1'
     si = s.signer_info
     assert si['signature_algorithm']['algorithm'].native == 'sha256_dsa'
-    val_trusted(s, vc=SIMPLE_DSA_V_CONTEXT())
+    val_trusted(s, vc=simple_dsa_v_context())
 
 
 @freeze_time('2020-11-01')
@@ -1221,7 +1220,7 @@ def test_sign_with_explicit_ecdsa_implied_hash():
     assert si['signature_algorithm']['algorithm'].native == 'ecdsa'
     assert si['digest_algorithm']['algorithm'].native == 'sha384'
     assert s.field_name == 'Sig1'
-    val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
+    val_trusted(s, vc=simple_ecc_v_context())
 
 
 @freeze_time('2020-11-01')
@@ -1244,7 +1243,7 @@ def test_sign_with_explicit_dsa_implied_hash():
     si = s.signer_info
     assert si['signature_algorithm']['algorithm'].native == 'dsa'
     assert s.field_name == 'Sig1'
-    val_trusted(s, vc=SIMPLE_DSA_V_CONTEXT())
+    val_trusted(s, vc=simple_dsa_v_context())
 
 
 def test_sign_pss():
@@ -1592,7 +1591,6 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
         ),
     )
     from certomancer.integrations.illusionist import Illusionist
-
     from pyhanko_certvalidator.fetchers.requests_fetchers import (
         RequestsFetcherBackend,
     )
@@ -1847,7 +1845,7 @@ BASIC_AC_ISSUER_SETUP = '''
 
 @pytest.mark.asyncio
 async def test_parse_ac_with_malformed_attribute(requests_mock):
-    attr_cert_cfg = f'''
+    attr_cert_cfg = '''
     test-ac:
       holder:
           name: signer1
@@ -1938,7 +1936,7 @@ async def test_detached_cms_with_invalid_cn():
     status = await async_validate_detached_cms(
         b'Hello world!',
         signature['content'],
-        signer_validation_context=SIMPLE_V_CONTEXT(),
+        signer_validation_context=simple_v_context(),
     )
     assert status.valid
     assert status.intact
@@ -1974,7 +1972,7 @@ async def test_detached_cms_with_invalid_cn_in_ca_wrong_cert():
         await async_validate_detached_cms(
             b'Hello world!',
             signature['content'],
-            signer_validation_context=SIMPLE_V_CONTEXT(),
+            signer_validation_context=simple_v_context(),
         )
 
 
@@ -2014,7 +2012,7 @@ async def test_detached_cms_with_invalid_cn_in_ca():
     status = await async_validate_detached_cms(
         b'Hello world!',
         signature['content'],
-        signer_validation_context=SIMPLE_V_CONTEXT(),
+        signer_validation_context=simple_v_context(),
     )
     assert status.valid
     assert status.intact
@@ -2187,8 +2185,6 @@ def test_ed448_no_length():
 
 @freeze_time('2020-11-01')
 def test_ed448_invalid_hash_algo_validation():
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-
     with pytest.raises(
         DisallowedAlgorithmError, match='algorithm.*does not match'
     ):

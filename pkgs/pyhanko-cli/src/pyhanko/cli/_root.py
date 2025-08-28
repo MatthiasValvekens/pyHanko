@@ -11,7 +11,6 @@ from pyhanko.cli.plugin_api import (
 )
 from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE, logging_setup
 from pyhanko.cli.version import __version__ as cli_version
-
 from pyhanko.config.logging import LogConfig, parse_logging_config
 from pyhanko.version import __version__ as lib_version
 
@@ -26,8 +25,7 @@ full_version = f"{lib_version} (CLI {cli_version})"
 @click.option(
     '--config',
     help=(
-        'YAML file to load configuration from'
-        f'[default: {DEFAULT_CONFIG_FILE}]'
+        f'YAML file to load configuration from[default: {DEFAULT_CONFIG_FILE}]'
     ),
     required=False,
     type=click.File('r'),
@@ -58,14 +56,14 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
             pass
         except IOError as e:
             raise click.ClickException(
-                f"Failed to read {DEFAULT_CONFIG_FILE}: {str(e)}"
+                f"Failed to read {DEFAULT_CONFIG_FILE}: {e!s}"
             )
     else:
         try:
             config_text = config.read()
         except IOError as e:
             raise click.ClickException(
-                f"Failed to read configuration: {str(e)}",
+                f"Failed to read configuration: {e!s}",
             )
 
     ctx.ensure_object(CLIContext)

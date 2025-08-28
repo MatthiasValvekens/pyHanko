@@ -10,7 +10,7 @@ from pyhanko.pdf_utils.writer import BasePdfFileWriter, init_xobject_dictionary
 from .appearances import CoordinateSystem
 from .text import TextStamp, TextStampStyle
 
-__all__ = ["QRPosition", "QRStampStyle", "QRStamp", "DEFAULT_QR_SCALE"]
+__all__ = ["DEFAULT_QR_SCALE", "QRPosition", "QRStamp", "QRStampStyle"]
 
 
 class QRPosition(enum.Enum):
@@ -89,9 +89,7 @@ class QRStampStyle(TextStampStyle):
     """
 
     stamp_text: str = (
-        "Digital version available at\n"
-        "this url: %(url)s\n"
-        "Timestamp: %(ts)s"
+        "Digital version available at\nthis url: %(url)s\nTimestamp: %(ts)s"
     )
     """
     Text template for the stamp.
@@ -169,9 +167,12 @@ class QRStamp(TextStamp):
         return style.qr_position.value
 
     def _inner_layout_natural_size(self) -> Tuple[List[bytes], Tuple[int, int]]:
-        text_commands, (
-            text_width,
-            text_height,
+        (
+            text_commands,
+            (
+                text_width,
+                text_height,
+            ),
         ) = super()._inner_layout_natural_size()
 
         qr_ref, natural_qr_size = self._qr_xobject()
@@ -206,7 +207,7 @@ class QRStamp(TextStamp):
             )
             qr_size = min_dim - 2 * innsep
         else:
-            qr_size = int(round(DEFAULT_QR_SCALE * natural_qr_size))
+            qr_size = round(DEFAULT_QR_SCALE * natural_qr_size)
 
         qr_innunits_scale = qr_size / natural_qr_size
         qr_padded = qr_size + 2 * innsep
@@ -280,7 +281,6 @@ class QRStamp(TextStamp):
 
     def _qr_xobject(self):
         import qrcode
-
         from pyhanko.pdf_utils.qr import PdfFancyQRImage, PdfStreamQRImage
 
         is_fancy = self.style.qr_inner_content is not None

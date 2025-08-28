@@ -42,7 +42,6 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import (
 from cryptography.hazmat.primitives.kdf import KeyDerivationFunction
 from cryptography.hazmat.primitives.kdf.x963kdf import X963KDF
 from cryptography.hazmat.primitives.serialization import pkcs12
-
 from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 from .. import generic, misc
@@ -1396,8 +1395,7 @@ class PubKeySecurityHandler(SecurityHandler):
 
         if cfc is not None and subfilter != PubKeyAdbeSubFilter.S5:
             raise misc.PdfReadError(
-                "Crypt filters require /adbe.pkcs7.s5 as the declared "
-                "handler."
+                "Crypt filters require /adbe.pkcs7.s5 as the declared handler."
             )
         elif cfc is None and subfilter == PubKeyAdbeSubFilter.S5:
             raise misc.PdfReadError(
@@ -1551,7 +1549,6 @@ class PubKeySecurityHandler(SecurityHandler):
         for cf in self.crypt_filter_config.standard_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
-            recp: cms.ContentInfo
             result = cf.authenticate(actual_credential)
             if result.status == AuthStatus.FAILED:
                 return result

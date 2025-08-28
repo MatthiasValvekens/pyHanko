@@ -2,13 +2,12 @@ import click
 from pyhanko.cli.commands.signing import signing
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import parse_field_location_spec
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields
 
-__all__ = ['list_sigfields', 'add_sig_field']
+__all__ = ['add_sig_field', 'list_sigfields']
 
 
 @signing.command(name='list', help='list signature fields')

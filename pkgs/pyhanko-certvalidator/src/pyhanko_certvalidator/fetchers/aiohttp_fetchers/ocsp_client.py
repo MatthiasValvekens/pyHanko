@@ -31,7 +31,7 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
         if certid_hash_algo not in ('sha1', 'sha256'):
             raise ValueError(
                 f'certid_hash_algo must be one of "sha1", "sha256", not '
-                f'{repr(certid_hash_algo)}'
+                f'{certid_hash_algo!r}'
             )
         self.certid_hash_algo = certid_hash_algo
         self.request_nonces = request_nonces

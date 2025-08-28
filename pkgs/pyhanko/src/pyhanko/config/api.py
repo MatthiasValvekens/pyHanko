@@ -16,12 +16,12 @@ from asn1crypto.core import BitString, ObjectIdentifier
 from .errors import ConfigurationError
 
 __all__ = [
+    'OID_REGEX',
     'ConfigurableMixin',
     'check_config_keys',
-    'OID_REGEX',
+    'process_bit_string_flags',
     'process_oid',
     'process_oids',
-    'process_bit_string_flags',
 ]
 
 _noneType = type(None)
@@ -95,7 +95,7 @@ class ConfigurableMixin:
             except ConfigurationError as e:
                 raise ConfigurationError(
                     f"Error while processing configurable field '{f.name}': "
-                    f"{repr(e)}"
+                    f"{e!r}"
                 ) from e
             config_dict[f.name] = field_value
 
@@ -204,7 +204,7 @@ def process_oid(
 ):
     if not isinstance(id_string, str):
         raise ConfigurationError(
-            f"Identifier '{repr(id_string)}' in '{param_name}' is not a string."
+            f"Identifier '{id_string!r}' in '{param_name}' is not a string."
         )
     if OID_REGEX.fullmatch(id_string):
         # Attempt to translate OID strings to human-readable form
@@ -225,8 +225,7 @@ def process_oid(
 
 def _ensure_strings(strings, param_name):
     err_msg = (
-        f"'{param_name}' must be specified as a "
-        "list of strings, or a string."
+        f"'{param_name}' must be specified as a list of strings, or a string."
     )
     if isinstance(strings, str):
         strings = (strings,)
@@ -250,11 +249,11 @@ def process_bit_string_flags(
     for flag_string in strings:
         if not isinstance(flag_string, str):
             raise ConfigurationError(
-                f"Flag identifier '{repr(flag_string)}' is not a string."
+                f"Flag identifier '{flag_string!r}' is not a string."
             )
         elif flag_string not in valid_values:
             raise ConfigurationError(
-                f"'{repr(flag_string)}' is not a valid "
+                f"'{flag_string!r}' is not a valid "
                 f"{asn1crypto_class.__name__} flag name."
             )
         # Use yield to keep the API consistent with process_oids, we don't

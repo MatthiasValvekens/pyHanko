@@ -2,7 +2,6 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
 from pyhanko_certvalidator.policy_decl import (

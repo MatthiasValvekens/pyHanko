@@ -2,14 +2,13 @@ import click
 from pyhanko.cli._trust import build_vc_kwargs, trust_options
 from pyhanko.cli.commands.signing import signing
 from pyhanko.cli.runtime import pyhanko_exception_manager
-
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers, validation
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko_certvalidator import ValidationContext
 
-__all__ = ['ltv_fix', 'lta_update']
+__all__ = ['lta_update', 'ltv_fix']
 
 
 @trust_options

@@ -11,11 +11,11 @@ from .validate import async_validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
 
 __all__ = [
+    'CertificateValidator',
+    'PKIXValidationParams',
+    'ValidationContext',
     '__version__',
     '__version_info__',
-    'CertificateValidator',
-    'ValidationContext',
-    'PKIXValidationParams',
     'find_valid_path',
 ]
 

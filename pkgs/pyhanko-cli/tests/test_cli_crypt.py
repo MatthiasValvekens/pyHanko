@@ -6,7 +6,6 @@ from cryptography import x509 as pyca_x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko.cli import cli_root
-
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.crypt import (
     AuthStatus,
@@ -298,7 +297,6 @@ def pubkey_decryption(request):
 
 
 def _sample_with_forbidden_encryption_change(h):
-
     r = PdfFileReader(BytesIO(MINIMAL))
     w = writer.copy_into_new_writer(r)
 

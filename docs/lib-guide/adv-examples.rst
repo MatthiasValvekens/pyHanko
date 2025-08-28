@@ -38,7 +38,7 @@ about ``aiohttp`` usage and resource management.
     from cryptography.hazmat.primitives import hashes
 
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-    from pyhanko.sign import Signer, signers
+    from pyhanko.sign import signers
     from pyhanko.sign.general import (
         get_pyca_cryptography_hash,
         load_cert_from_pemder,
@@ -46,7 +46,7 @@ about ``aiohttp`` usage and resource management.
     from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 
-    class AsyncKMSSigner(Signer):
+    class AsyncKMSSigner(signers.Signer):
         def __init__(
             self,
             session: aioboto3.session,
@@ -163,7 +163,8 @@ The name of the key in the keyring is ``my-test-key`` in the example below.
     from pyhanko.config.pkcs11 import PKCS11SignatureConfig
     from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-    from pyhanko.sign import pkcs11, sign_pdf, PdfSignatureMetadata
+    from pyhanko.sign import pkcs11
+    from pyhanko.sign.signers import sign_pdf, PdfSignatureMetadata
 
     MODULE="/path/to/libkmsp11.so"
 
@@ -281,7 +282,7 @@ to use this sample implementation.
                 self.version_id,
             )
 
-    class GCPKMSSigner(Signer):
+    class GCPKMSSigner(signers.Signer):
 
         def __init__(
             self, *, signing_cert: x509.Certificate, kms_key: GCPKMSKey, **kwargs

@@ -10,8 +10,8 @@ from .api import FontEngine, FontEngineFactory, ShapeResult
 pdf_name = generic.NameObject
 
 __all__ = [
-    'SimpleFontEngineFactory',
     'SimpleFontEngine',
+    'SimpleFontEngineFactory',
     'SimpleFontMeta',
     'get_courier',
 ]

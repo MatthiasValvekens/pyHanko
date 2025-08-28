@@ -6,9 +6,8 @@ import click
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli._trust import grab_certs
 from pyhanko.cli.config import CLIConfig
-from pyhanko.cli.plugin_api import SigningCommandPlugin, register_signing_plugin
+from pyhanko.cli.plugin_api import SigningCommandPlugin
 from pyhanko.cli.utils import _warn_empty_passphrase, logger, readable_file
-
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.local_keys import (
     PemDerSignatureConfig,
@@ -20,7 +19,7 @@ from pyhanko.sign.signers.pdf_cms import (
     signer_from_pemder_config,
 )
 
-__all__ = ['PemderPlugin', 'PKCS12Plugin']
+__all__ = ['PKCS12Plugin', 'PemderPlugin']
 
 
 class KeyFileConfigWrapper:
@@ -58,7 +57,7 @@ class PemderPlugin(SigningCommandPlugin):
             ),
             click.Option(
                 ('--cert',),
-                help='file containing the signer\'s certificate ' '(PEM/DER)',
+                help='file containing the signer\'s certificate (PEM/DER)',
                 type=readable_file,
                 required=False,
             ),
@@ -81,7 +80,7 @@ class PemderPlugin(SigningCommandPlugin):
             #  (for advanced scripting setups)
             click.Option(
                 ('--passfile',),
-                help='file containing the passphrase ' 'for the private key',
+                help='file containing the passphrase for the private key',
                 required=False,
                 type=click.File('r'),
                 show_default='stdin',

@@ -14,7 +14,6 @@ from certomancer.registry import CertLabel
 from freezegun import freeze_time
 from pkcs11 import Mechanism, PKCS11Error
 from pkcs11 import types as p11_types
-
 from pyhanko.config.pkcs11 import PKCS11PinEntryMode, PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -30,14 +29,14 @@ from pyhanko.sign.pkcs11 import (
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import MINIMAL, TESTING_CA
 from test_utils.signing_commons import (
-    SIMPLE_DSA_V_CONTEXT,
-    SIMPLE_ECC_V_CONTEXT,
-    SIMPLE_ED448_V_CONTEXT,
-    SIMPLE_ED25519_V_CONTEXT,
     SOFTHSM,
     async_val_trusted,
     pkcs11_only,
     pkcs11_test_module,
+    simple_dsa_v_context,
+    simple_ecc_v_context,
+    simple_ed448_v_context,
+    simple_ed25519_v_context,
     val_trusted,
 )
 
@@ -383,7 +382,7 @@ def test_simple_sign_dsa(bulk_fetch):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
+    val_trusted(emb, vc=simple_dsa_v_context())
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
@@ -406,7 +405,7 @@ def test_simple_sign_ecdsa(bulk_fetch):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    val_trusted(emb, vc=SIMPLE_ECC_V_CONTEXT())
+    val_trusted(emb, vc=simple_ecc_v_context())
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
@@ -426,7 +425,7 @@ def test_simple_sign_ed25519(bulk_fetch):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    val_trusted(emb, vc=SIMPLE_ED25519_V_CONTEXT())
+    val_trusted(emb, vc=simple_ed25519_v_context())
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
@@ -446,7 +445,7 @@ def test_simple_sign_ed448(bulk_fetch):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    val_trusted(emb, vc=SIMPLE_ED448_V_CONTEXT())
+    val_trusted(emb, vc=simple_ed448_v_context())
 
 
 @freeze_time('2020-11-01')
@@ -571,7 +570,7 @@ def test_simple_sign_with_raw_dsa(bulk_fetch):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
+    val_trusted(emb, vc=simple_dsa_v_context())
 
 
 def test_no_raw_pss():

@@ -21,7 +21,6 @@ from typing import (
 from asn1crypto import algos, cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
-
 from pyhanko.sign.general import (
     CMSExtractionError,
     CMSStructuralError,
@@ -81,19 +80,19 @@ from .utils import (
 )
 
 __all__ = [
-    'validate_sig_integrity',
     'async_validate_cms_signature',
-    'collect_timing_info',
-    'validate_tst_signed_data',
     'async_validate_detached_cms',
     'cms_basic_validation',
-    'compute_signature_tst_digest',
-    'extract_tst_data',
-    'extract_self_reported_ts',
-    'extract_certs_for_validation',
     'collect_signer_attr_status',
-    'validate_algorithm_protection',
+    'collect_timing_info',
+    'compute_signature_tst_digest',
+    'extract_certs_for_validation',
+    'extract_self_reported_ts',
+    'extract_tst_data',
     'get_signing_cert_attr',
+    'validate_algorithm_protection',
+    'validate_sig_integrity',
+    'validate_tst_signed_data',
 ]
 
 logger = logging.getLogger(__name__)

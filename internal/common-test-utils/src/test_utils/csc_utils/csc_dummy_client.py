@@ -2,7 +2,6 @@ import asyncio
 from typing import List
 
 import aiohttp
-
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers.csc_signer import (
     CSCAuthorizationInfo,

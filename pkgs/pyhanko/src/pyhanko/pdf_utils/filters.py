@@ -18,9 +18,9 @@ from .crypt.api import SecurityHandler
 from .misc import PdfStreamError, Singleton
 
 __all__ = [
-    'Decoder',
     'ASCII85Decode',
     'ASCIIHexDecode',
+    'Decoder',
     'FlateDecode',
     'get_generic_decoder',
 ]

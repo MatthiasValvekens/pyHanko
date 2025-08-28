@@ -37,28 +37,28 @@ if typing.TYPE_CHECKING:
     from .crypt.api import SecurityHandler
 
 __all__ = [
-    'Dereferenceable',
-    'Reference',
-    'TrailerReference',
-    'PdfObject',
-    'IndirectObject',
-    'NullObject',
-    'BooleanObject',
-    'FloatObject',
-    'NumberObject',
-    'ByteStringObject',
-    'TextStringObject',
-    'NameObject',
     'ArrayObject',
+    'BooleanObject',
+    'ByteStringObject',
+    'DecryptedObjectProxy',
+    'Dereferenceable',
     'DictionaryObject',
+    'EncryptedObjAccess',
+    'FloatObject',
+    'IndirectObject',
+    'NameObject',
+    'NullObject',
+    'NumberObject',
+    'PdfObject',
+    'Reference',
     'StreamObject',
-    'read_object',
+    'TextStringEncoding',
+    'TextStringObject',
+    'TrailerReference',
+    'pdf_date',
     'pdf_name',
     'pdf_string',
-    'pdf_date',
-    'TextStringEncoding',
-    'EncryptedObjAccess',
-    'DecryptedObjectProxy',
+    'read_object',
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -1054,7 +1054,7 @@ def _decode_name(name_bytes: bytes) -> 'NameObject':
                     digit2 = next(name_iter)
                 except StopIteration:
                     raise PdfReadError(
-                        f"Unterminated escape in PDF name /{repr(name_bytes)}"
+                        f"Unterminated escape in PDF name /{name_bytes!r}"
                     )
 
                 cur_byte = _as_hex_digit(digit1) * 16 + _as_hex_digit(digit2)
@@ -1106,8 +1106,7 @@ class NameObject(str, PdfObject):
         byte_iter = iter(self.encode('utf8'))
         if not next(byte_iter) == 0x2F:
             raise PdfWriteError(
-                f"Could not serialise name object {repr(self)}, "
-                f"must start with /"
+                f"Could not serialise name object {self!r}, must start with /"
             )
         stream.write(b'/')
         for cur_byte in byte_iter:
@@ -1640,7 +1639,7 @@ class StreamObject(DictionaryObject):
 
             # prepend the new filter (order is important!)
             self[pdf_name('/Filter')] = ArrayObject(
-                (filter_name,) + filter_names
+                (filter_name, *filter_names)
             )
 
             if params or any(param_sets):

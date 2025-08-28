@@ -11,7 +11,6 @@ from typing import IO, Optional, Union
 
 from asn1crypto import cms
 from cryptography.hazmat.primitives import hashes
-
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_date, pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -23,15 +22,15 @@ from ..fields import SigAuthType, SigSeedSubFilter
 from . import constants
 
 __all__ = [
-    # Serialisable object used to track placeholder locations,
-    # part of PdfCMSEmbedder / PdfSigner protocol
-    'PreparedByteRangeDigest',
+    'BuildProps',
+    'DocumentTimestamp',
     # PDF-level signature containers
     'PdfByteRangeDigest',
     'PdfSignedData',
+    # Serialisable object used to track placeholder locations,
+    # part of PdfCMSEmbedder / PdfSigner protocol
+    'PreparedByteRangeDigest',
     'SignatureObject',
-    'DocumentTimestamp',
-    'BuildProps',
 ]
 
 

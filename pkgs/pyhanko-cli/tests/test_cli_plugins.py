@@ -3,7 +3,7 @@ import sys
 import pytest
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.simple import PKCS12Plugin
-from pyhanko.cli.plugin_api import SigningCommandPlugin, register_signing_plugin
+from pyhanko.cli.plugin_api import register_signing_plugin
 
 from .conftest import _write_config
 
@@ -79,7 +79,7 @@ def test_plugin_must_be_class(cli_runner):
     assert not result.exception
     output = result.output
     assert 'Plugins must be defined as' in output
-    assert not ('test-dummy' in output)
+    assert 'test-dummy' not in output
 
 
 def test_disable_non_default_plugins(cli_runner):
@@ -101,7 +101,7 @@ def test_disable_non_default_plugins(cli_runner):
     )
     assert not result.exception
     output = result.output
-    assert not ('test-dummy' in output)
+    assert 'test-dummy' not in output
     assert 'manual-dummy' in output
 
 

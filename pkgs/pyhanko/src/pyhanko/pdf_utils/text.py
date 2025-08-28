@@ -178,7 +178,7 @@ class TextBox(PdfContent):
         vertical = self.style.vertical_text
         for line in content.split('\n'):
             wrapped_line, extent = self.put_string_line(line)
-            rounded_extent = int(round(extent))
+            rounded_extent = round(extent)
             if vertical:
                 natural_text_height = max(natural_text_height, rounded_extent)
                 natural_text_width += leading
