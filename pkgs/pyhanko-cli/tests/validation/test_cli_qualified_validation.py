@@ -45,7 +45,7 @@ def tl_cache(pki_arch):
     lotl_xml = certomancer_lotl(
         pki_arch,
         EntityLabel('root'),
-        [(CertLabel('root'), TL_URL)],
+        [(CertLabel('root'), 'be', TL_URL)],
     )
 
     fs_cache = FileSystemTLCache(Path(CACHE_DIR) / 'eutl', timedelta(days=3650))
@@ -224,3 +224,129 @@ def test_validate_eutl_with_extra_roots_ca_on_tl(
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
+
+
+@pytest.mark.nosmoke
+@pytest.mark.parametrize('territories', ['be,fr', 'be', ['be', 'fr'], ['be']])
+def test_validate_config_eutl_limited_territories(
+    cli_runner, input_to_validate, tl_cache, territories
+):
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                    'eutl-territories': territories,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            '--eutl',
+            input_to_validate,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'judged VALID' in result.output
+
+
+@pytest.mark.nosmoke
+@pytest.mark.parametrize('territories', ['de,fr', 'de', ['de', 'fr'], [], ''])
+def test_validate_eutl_config_limited_territories_not_included(
+    cli_runner, input_to_validate, tl_cache, territories
+):
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                    'eutl-territories': territories,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            '--eutl',
+            input_to_validate,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'judged INVALID' in result.output
+
+
+@pytest.mark.nosmoke
+@pytest.mark.parametrize('territories', ['be,fr', 'be', ''])
+def test_validate_arg_eutl_limited_territories(
+    cli_runner, input_to_validate, tl_cache, territories
+):
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            '--eutl',
+            '--eutl-territories',
+            territories,
+            input_to_validate,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'judged VALID' in result.output
+
+
+@pytest.mark.nosmoke
+@pytest.mark.parametrize('territories', ['de,fr', 'de'])
+def test_validate_eutl_arg_limited_territories_not_included(
+    cli_runner, input_to_validate, tl_cache, territories
+):
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            '--eutl',
+            '--eutl-territories',
+            territories,
+            input_to_validate,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'judged INVALID' in result.output

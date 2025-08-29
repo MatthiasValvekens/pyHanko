@@ -38,6 +38,7 @@ def lta_update(
     trust,
     trust_replace,
     eutl,
+    eutl_territories,
     other_certs,
     timestamp_url,
     retroactive_revinfo,
@@ -49,6 +50,7 @@ def lta_update(
             trust=trust,
             trust_replace=trust_replace,
             eutl=eutl,
+            eutl_territories=eutl_territories,
             other_certs=other_certs,
             retroactive_revinfo=retroactive_revinfo,
         )
@@ -96,6 +98,7 @@ def ltv_fix(
     trust_replace,
     trust,
     eutl,
+    eutl_territories,
     other_certs,
 ):
     if apply_lta_timestamp and not timestamp_url:
@@ -110,6 +113,7 @@ def ltv_fix(
         trust_replace=trust_replace,
         other_certs=other_certs,
         eutl=eutl,
+        eutl_territories=eutl_territories,
         retroactive_revinfo=False,
         allow_fetching=True,
     )

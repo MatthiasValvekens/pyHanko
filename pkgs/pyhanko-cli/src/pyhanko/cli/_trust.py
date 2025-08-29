@@ -41,9 +41,7 @@ class TrustManagerSettings:
     eutl: bool
     eutl_lotl_url: Optional[str] = None
     lotl_tlso_certs: Optional[str] = None
-
-    # TODO options to force cache refresh,
-    #  limit territories to download, etc.
+    territories: Union[Iterable[str], str, None] = None
 
 
 async def init_trust_manager(
@@ -69,22 +67,36 @@ async def init_trust_manager(
     trust_manager: TrustManager
 
     if settings.eutl:
-        # TODO check availability of imported stuff and return a nice error
-        import aiohttp
-        from pyhanko.sign.validation.qualified.eutl_fetch import (
-            EU_LOTL_LOCATION,
-            FileSystemTLCache,
-            fetch_lotl,
-            lotl_to_registry,
-        )
+        try:
+            import aiohttp
+            from pyhanko.sign.validation.qualified.eutl_fetch import (
+                EU_LOTL_LOCATION,
+                FileSystemTLCache,
+                fetch_lotl,
+                lotl_to_registry,
+            )
+        except ImportError as e:  # pragma: nocover
+            raise click.ClickException(
+                "Install pyHanko with the [async-http,etsi] optional "
+                "dependency groups"
+            ) from e
 
         cache_dir = get_eutl_cache_dir(cli_config)
-        # TODO refresh time should be customisable, also respect expiration times on TLs
+        # TODO refresh time should be customisable,
+        #  also respect expiration times on TLs
         tl_cache = FileSystemTLCache(
             cache_dir, expire_after=DEFAULT_TL_CACHE_REFRESH_TIME
         )
 
         async with aiohttp.ClientSession() as client:
+            if isinstance(settings.territories, str) and settings.territories:
+                territories = {
+                    t.strip() for t in settings.territories.split(',')
+                }
+            elif settings.territories is not None:
+                territories = set(settings.territories)
+            else:
+                territories = None
             try:
                 lotl_xml = await fetch_lotl(
                     client, tl_cache, settings.eutl_lotl_url or EU_LOTL_LOCATION
@@ -94,6 +106,7 @@ async def init_trust_manager(
                     client=client,
                     cache=tl_cache,
                     lotl_tlso_certs=lotl_tlso_certs,
+                    only_territories=territories,
                 )
             except Exception as e:
                 raise click.ClickException(
@@ -195,6 +208,7 @@ def parse_trust_config(
             'eutl',
             'eutl-lotl-url',
             'lotl-tlso-certs',
+            'eutl-territories',
         ),
         trust_config,
     )
@@ -206,6 +220,7 @@ def parse_trust_config(
             eutl=trust_config.get('eutl', False),
             eutl_lotl_url=trust_config.get('eutl-lotl-url', None),
             lotl_tlso_certs=trust_config.get('lotl-tlso-certs', None),
+            territories=trust_config.get('eutl-territories', None),
         ),
         other_certs=trust_config.get('other-certs'),
         time_tolerance=trust_config.get('time-tolerance', time_tolerance),
@@ -222,15 +237,18 @@ def build_vc_kwargs(
     trust: Union[Iterable[str], str],
     trust_replace: bool,
     eutl: bool,
+    eutl_territories: Optional[str],
     other_certs: Union[Iterable[str], str],
     retroactive_revinfo: bool,
     allow_fetching: Optional[bool] = None,
 ):
-    overrides = {}
+    overrides: Dict[str, Any] = {}
     if retroactive_revinfo:
-        overrides['retroactive_revinfo'] = True
+        overrides['retroactive-revinfo'] = True
     if eutl:
         overrides['eutl'] = True
+    if eutl_territories:
+        overrides['eutl-territories'] = eutl_territories
     try:
         if validation_context is not None:
             if any((trust, other_certs)):
@@ -265,6 +283,7 @@ def build_vc_kwargs(
                     trust=trust,
                     trust_replace=trust_replace,
                     eutl=eutl,
+                    territories=eutl_territories,
                 ),
                 other_certs=other_certs,
                 retroactive_revinfo=retroactive_revinfo,
@@ -288,6 +307,7 @@ def build_vc_kwargs(
                     trust=None,
                     trust_replace=trust_replace,
                     eutl=eutl,
+                    territories=eutl_territories,
                 ),
                 other_certs=[],
                 retroactive_revinfo=retroactive_revinfo,
@@ -354,6 +374,15 @@ TRUST_OPTIONS = [
         is_flag=True,
         default=False,
         show_default=True,
+    ),
+    click.Option(
+        ('--eutl-territories',),
+        help=(
+            'comma-separated list of 2-letter ISO 3166 country codes, '
+            'trust lists maintained by other territories will be disregarded.'
+        ),
+        required=False,
+        type=str,
     ),
     click.Option(
         ('--other-certs',),

@@ -216,7 +216,7 @@ def test_parse_generated_lotl():
     tl_xml = certomancer_lotl(
         TESTING_CA_QUALIFIED,
         EntityLabel('root'),
-        entries=[(CertLabel('interm-qualified'), url)],
+        entries=[(CertLabel('interm-qualified'), 'be', url)],
     )
     result = eutl_parse.validate_and_parse_lotl(
         tl_xml,

@@ -170,6 +170,7 @@ def addsig(
     trust_replace,
     trust,
     eutl,
+    eutl_territories,
     other_certs,
     style_name,
     stamp_url,
@@ -212,6 +213,7 @@ def addsig(
             trust=trust,
             trust_replace=trust_replace,
             eutl=eutl,
+            eutl_territories=eutl_territories,
             other_certs=other_certs,
             retroactive_revinfo=retroactive_revinfo,
             allow_fetching=True,
@@ -305,6 +307,7 @@ def timestamp(
     trust,
     trust_replace,
     eutl,
+    eutl_territories,
     other_certs,
     timestamp_url,
 ):
@@ -315,6 +318,7 @@ def timestamp(
             trust=trust,
             trust_replace=trust_replace,
             eutl=eutl,
+            eutl_territories=eutl_territories,
             other_certs=other_certs,
             retroactive_revinfo=True,
         )

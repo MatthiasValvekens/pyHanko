@@ -231,6 +231,7 @@ def validate_signatures(
     trust,
     trust_replace,
     eutl,
+    eutl_territories,
     other_certs,
     ltv_profile,
     force_revinfo,
@@ -267,6 +268,7 @@ def validate_signatures(
         trust_replace=trust_replace,
         other_certs=other_certs,
         eutl=eutl,
+        eutl_territories=eutl_territories,
         retroactive_revinfo=retroactive_revinfo,
         allow_fetching=False if no_revocation_check else None,
     )

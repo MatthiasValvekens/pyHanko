@@ -324,9 +324,15 @@ async def lotl_to_registry(
     lotl_result = eutl_parse.validate_and_parse_lotl(lotl_xml, lotl_tlso_certs)
     errors = lotl_result.errors
     registry = registry or TSPRegistry()
-    territory_list = {x.casefold() for x in only_territories or ()}
+    if only_territories is not None:
+        territory_list = {x.casefold() for x in only_territories}
+    else:
+        territory_list = None
     for ref in lotl_result.references:
-        if territory_list and ref.territory.casefold() not in territory_list:
+        if (
+            territory_list is not None
+            and ref.territory.casefold() not in territory_list
+        ):
             continue
         if LOTL_RULE in ref.scheme_rules:
             continue

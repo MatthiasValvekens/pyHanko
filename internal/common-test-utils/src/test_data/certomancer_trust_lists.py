@@ -138,7 +138,7 @@ def certomancer_pki_as_trusted_list(
 def certomancer_lotl(
     pki_arch: PKIArchitecture,
     lotl_tlso_entity: EntityLabel,
-    entries: List[Tuple[CertLabel, str]],
+    entries: List[Tuple[CertLabel, str, str]],
 ):
     pointers = [
         ts_119612.OtherTSLPointer(
@@ -160,14 +160,14 @@ def certomancer_lotl(
                 other_information=(
                     ts_119612.AnyType(
                         content=(
-                            ts_119612.SchemeTerritory('eu'),
+                            ts_119612.SchemeTerritory(territory),
                             MimeType(ETSI_TSL_MIME_TYPE),
                         )
                     ),
                 ),
             ),
         )
-        for tlso_cert, url in entries
+        for tlso_cert, territory, url in entries
     ]
 
     xml_root = ts_119612.TrustServiceStatusList(
