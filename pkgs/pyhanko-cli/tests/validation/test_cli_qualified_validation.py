@@ -350,3 +350,36 @@ def test_validate_eutl_arg_limited_territories_not_included(
     )
     assert result.exit_code == 1
     assert 'judged INVALID' in result.output
+
+
+@pytest.mark.nosmoke
+def test_force_attempt_eutl_download(
+    cli_runner, input_to_validate, tl_cache, monkeypatch
+):
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    from pyhanko.sign.validation.qualified import eutl_fetch
+
+    monkeypatch.setattr(eutl_fetch, 'FETCH_TRIES', 1)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            '--eutl',
+            '--eutl-force-redownload',
+            input_to_validate,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'Trust list processing failed' in result.output

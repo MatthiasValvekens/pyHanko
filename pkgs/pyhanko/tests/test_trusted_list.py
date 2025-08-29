@@ -1777,3 +1777,22 @@ def test_fs_cache_io_failure(tmp_path):
 
     with pytest.raises(KeyError):
         fs.__getitem__('foo')
+
+
+def test_fs_cache_reload_and_reset(tmp_path):
+    with freeze_time('2025-08-28'):
+        fs = FileSystemTLCache(tmp_path, expire_after=timedelta(days=10))
+        fs['foo'] = 'bar'
+        fs['baz'] = 'quux'
+
+    with freeze_time('2025-08-31'):
+        fs2 = FileSystemTLCache(tmp_path, expire_after=timedelta(days=10))
+        fs2.reset()
+        with pytest.raises(KeyError):
+            fs.__getitem__('foo')
+        with pytest.raises(KeyError):
+            fs.__getitem__('baz')
+        with pytest.raises(KeyError):
+            fs2.__getitem__('foo')
+        with pytest.raises(KeyError):
+            fs2.__getitem__('baz')

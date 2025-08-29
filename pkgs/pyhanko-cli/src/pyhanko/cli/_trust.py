@@ -39,6 +39,7 @@ class TrustManagerSettings:
     trust: Union[Iterable[str], str, None]
     trust_replace: bool
     eutl: bool
+    eutl_force_redownload: bool
     eutl_lotl_url: Optional[str] = None
     lotl_tlso_certs: Optional[str] = None
     territories: Union[Iterable[str], str, None] = None
@@ -87,6 +88,9 @@ async def init_trust_manager(
         tl_cache = FileSystemTLCache(
             cache_dir, expire_after=DEFAULT_TL_CACHE_REFRESH_TIME
         )
+
+        if settings.eutl_force_redownload:
+            tl_cache.reset()
 
         async with aiohttp.ClientSession() as client:
             if isinstance(settings.territories, str) and settings.territories:
@@ -206,6 +210,7 @@ def parse_trust_config(
             'signer-extd-key-usage',
             'signer-key-usage-policy',
             'eutl',
+            'eutl-force-redownload',
             'eutl-lotl-url',
             'lotl-tlso-certs',
             'eutl-territories',
@@ -221,6 +226,9 @@ def parse_trust_config(
             eutl_lotl_url=trust_config.get('eutl-lotl-url', None),
             lotl_tlso_certs=trust_config.get('lotl-tlso-certs', None),
             territories=trust_config.get('eutl-territories', None),
+            eutl_force_redownload=trust_config.get(
+                'eutl-force-redownload', False
+            ),
         ),
         other_certs=trust_config.get('other-certs'),
         time_tolerance=trust_config.get('time-tolerance', time_tolerance),
@@ -237,6 +245,7 @@ def build_vc_kwargs(
     trust: Union[Iterable[str], str],
     trust_replace: bool,
     eutl: bool,
+    eutl_force_redownload: bool,
     eutl_territories: Optional[str],
     other_certs: Union[Iterable[str], str],
     retroactive_revinfo: bool,
@@ -249,6 +258,8 @@ def build_vc_kwargs(
         overrides['eutl'] = True
     if eutl_territories:
         overrides['eutl-territories'] = eutl_territories
+    if eutl_force_redownload:
+        overrides['eutl-force-redownload'] = True
     try:
         if validation_context is not None:
             if any((trust, other_certs)):
@@ -284,6 +295,7 @@ def build_vc_kwargs(
                     trust_replace=trust_replace,
                     eutl=eutl,
                     territories=eutl_territories,
+                    eutl_force_redownload=eutl_force_redownload,
                 ),
                 other_certs=other_certs,
                 retroactive_revinfo=retroactive_revinfo,
@@ -308,6 +320,7 @@ def build_vc_kwargs(
                     trust_replace=trust_replace,
                     eutl=eutl,
                     territories=eutl_territories,
+                    eutl_force_redownload=eutl_force_redownload,
                 ),
                 other_certs=[],
                 retroactive_revinfo=retroactive_revinfo,
@@ -369,6 +382,15 @@ TRUST_OPTIONS = [
     click.Option(
         ('--eutl',),
         help='source trust from EU trusted list (disregard OS trust store)',
+        required=False,
+        type=bool,
+        is_flag=True,
+        default=False,
+        show_default=True,
+    ),
+    click.Option(
+        ('--eutl-force-redownload',),
+        help='force re-downloading of the EUTL files by clearing the cache',
         required=False,
         type=bool,
         is_flag=True,

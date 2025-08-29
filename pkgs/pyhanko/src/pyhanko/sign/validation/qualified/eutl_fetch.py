@@ -42,6 +42,8 @@ class TLCache:
     """
     Cache for trusted lists, intended to speed up downloading lists
     from a list-of-lists.
+
+    This is internal API.
     """
 
     def __getitem__(self, key: str) -> str:
@@ -126,6 +128,10 @@ class FileSystemTLCache(TLCache):
             outf.write(value)
         self._cache[key] = (exp_ts, fname)
 
+    def reset(self):
+        for fname in self._root.iterdir():
+            fname.unlink(missing_ok=True)
+
 
 FETCH_TRIES = 3
 FETCH_BASE_DELAY_SECONDS = 2
@@ -133,42 +139,40 @@ FETCH_TIMEOUT_SECONDS = 30
 FETCH_CONNECT_TIMEOUT_SECONDS = 2
 
 
+async def _get(uri: str, client: aiohttp.ClientSession) -> str:
+    delay_s = FETCH_BASE_DELAY_SECONDS
+    last_error = None
+    for attempt in range(FETCH_TRIES):
+        try:
+            response = await client.get(
+                uri,
+                headers=(
+                    ('Accept', 'text/xml'),
+                    ('Accept', eutl_parse.ETSI_TSL_MIME_TYPE),
+                ),
+                raise_for_status=True,
+                timeout=ClientTimeout(
+                    total=FETCH_TIMEOUT_SECONDS,
+                    sock_read=FETCH_CONNECT_TIMEOUT_SECONDS,
+                ),
+            )
+            return await response.text()
+        except aiohttp.ClientError as e:
+            if isinstance(e, aiohttp.ClientResponseError) and e.status < 500:
+                raise e
+            last_error = e
+            if attempt < FETCH_TRIES - 1:
+                await asyncio.sleep(delay_s)
+                delay_s *= 2
+    assert last_error is not None
+    raise last_error
+
+
 async def _fetch(
     cache: Optional[TLCache], uri: str, client: aiohttp.ClientSession
 ):
-    async def _get() -> str:
-        delay_s = FETCH_BASE_DELAY_SECONDS
-        last_error = None
-        for attempt in range(FETCH_TRIES):
-            try:
-                response = await client.get(
-                    uri,
-                    headers=(
-                        ('Accept', 'text/xml'),
-                        ('Accept', eutl_parse.ETSI_TSL_MIME_TYPE),
-                    ),
-                    raise_for_status=True,
-                    timeout=ClientTimeout(
-                        total=FETCH_TIMEOUT_SECONDS,
-                        sock_read=FETCH_CONNECT_TIMEOUT_SECONDS,
-                    ),
-                )
-                return await response.text()
-            except aiohttp.ClientError as e:
-                if (
-                    isinstance(e, aiohttp.ClientResponseError)
-                    and e.status < 500
-                ):
-                    raise e
-                last_error = e
-                if attempt < FETCH_TRIES - 1:
-                    await asyncio.sleep(delay_s)
-                    delay_s *= 2
-        assert last_error is not None
-        raise last_error
-
     if cache is None:
-        return await _get()
+        return await _get(uri, client)
     else:
         try:
             result = cache[uri]
@@ -176,7 +180,7 @@ async def _fetch(
             return result
         except KeyError:
             pass
-        result = await _get()
+        result = await _get(uri, client)
         cache[uri] = result
         return result
 

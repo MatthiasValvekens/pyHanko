@@ -517,7 +517,10 @@ def test_read_time_tolerance_input_issues():
     vc_kwargs = init_validation_context_kwargs(
         cli_config=cli_config,
         trust_manager_settings=TrustManagerSettings(
-            trust=[], trust_replace=False, eutl=False
+            trust=[],
+            trust_replace=False,
+            eutl=False,
+            eutl_force_redownload=False,
         ),
         other_certs=[],
     )
