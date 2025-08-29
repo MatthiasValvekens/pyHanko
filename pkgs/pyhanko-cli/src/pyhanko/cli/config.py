@@ -8,7 +8,6 @@ from pyhanko.config.logging import LogConfig, parse_logging_config
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.stamp import BaseStampStyle, QRStampStyle, TextStampStyle
-from pyhanko_certvalidator import ValidationContext
 
 DEFAULT_TIME_TOLERANCE: timedelta = timedelta(seconds=30)
 
@@ -71,7 +70,7 @@ class CLIConfig:
     The default value for this setting is ``default``.
     """
 
-    time_tolerance: timedelta
+    time_tolerance: Optional[timedelta]
     """
     Time drift tolerance (global default).
     """
@@ -95,7 +94,7 @@ class CLIConfig:
 
     # TODO graceful error handling for syntax & type issues?
 
-    def _get_validation_settings_raw(self, name=None):
+    def get_validation_settings_raw(self, name=None):
         name = name or self.default_validation_context
         try:
             return self.validation_contexts[name]
@@ -103,41 +102,6 @@ class CLIConfig:
             raise ConfigurationError(
                 f"There is no validation context named '{name}'."
             )
-
-    def get_validation_context(
-        self,
-        name: Optional[str] = None,
-        as_dict: bool = False,
-        overrides: Optional[Dict[str, Any]] = None,
-    ):
-        """
-        Retrieve a validation context by name.
-
-        :param name:
-            The name of the validation context. If not supplied, the value
-            of :attr:`default_validation_context` will be used.
-        :param as_dict:
-            If ``True`` return the settings as a keyword argument dictionary.
-            If ``False`` (the default), return a
-            :class:`~pyhanko_certvalidator.context.ValidationContext`
-            object.
-        :param overrides:
-            Optional overrides for the validation context, e.g.
-            values sourced from command-line arguments.
-        """
-        vc_config = self._get_validation_settings_raw(name)
-
-        from ._trust import parse_trust_config
-
-        if overrides:
-            vc_config.update(overrides)
-        vc_kwargs = parse_trust_config(
-            vc_config,
-            self.time_tolerance,
-            self.retroactive_revinfo,
-            self,
-        )
-        return vc_kwargs if as_dict else ValidationContext(**vc_kwargs)
 
     def get_signer_key_usages(
         self, name: Optional[str] = None
@@ -151,7 +115,7 @@ class CLIConfig:
         :return:
             A :class:`.KeyUsageConstraints` object.
         """
-        vc_config = self._get_validation_settings_raw(name)
+        vc_config = self.get_validation_settings_raw(name)
 
         try:
             policy_settings = dict(vc_config['signer-key-usage-policy'])
@@ -275,6 +239,17 @@ def process_root_config_settings(config_dict: dict) -> dict:
     )
 
 
+def parse_time_tolerance(config_dict: dict) -> Optional[timedelta]:
+    time_tolerance_seconds: Any = config_dict.get('time-tolerance', None)
+    if time_tolerance_seconds is None:
+        return None
+    if not isinstance(time_tolerance_seconds, int):
+        raise ConfigurationError(
+            "time-tolerance parameter must be specified in seconds"
+        )
+    return timedelta(seconds=time_tolerance_seconds)
+
+
 def process_config_dict(config_dict: dict) -> dict:
     # validation context config
     vcs: Dict[str, dict] = {DEFAULT_VALIDATION_CONTEXT: {}}
@@ -306,15 +281,7 @@ def process_config_dict(config_dict: dict) -> dict:
     default_stamp_style = config_dict.get(
         'default-stamp-style', DEFAULT_STAMP_STYLE
     )
-    time_tolerance_seconds = config_dict.get(
-        'time-tolerance', DEFAULT_TIME_TOLERANCE.seconds
-    )
-    if not isinstance(time_tolerance_seconds, int):
-        raise ConfigurationError(
-            "time-tolerance parameter must be specified in seconds"
-        )
-
-    time_tolerance = timedelta(seconds=time_tolerance_seconds)
+    time_tolerance = parse_time_tolerance(config_dict)
     retroactive_revinfo = bool(config_dict.get('retroactive-revinfo', False))
     cache_dir = config_dict.get('cache-dir', None)
     return dict(

@@ -6,7 +6,11 @@ from typing import Any, Dict, Iterable, Optional, TypeVar, Union
 import click
 from asn1crypto import x509
 from pyhanko.cli.cache import get_eutl_cache_dir
-from pyhanko.cli.config import DEFAULT_TIME_TOLERANCE, CLIConfig
+from pyhanko.cli.config import (
+    DEFAULT_TIME_TOLERANCE,
+    CLIConfig,
+    parse_time_tolerance,
+)
 from pyhanko.cli.utils import logger, readable_file
 from pyhanko.config import api
 from pyhanko.config.errors import ConfigurationError
@@ -21,15 +25,32 @@ from pyhanko.sign.validation.qualified.tsp import (
     Qualifier,
     TSPTrustManager,
 )
-from pyhanko_certvalidator.registry import SimpleTrustManager, TrustManager
+from pyhanko_certvalidator.context import (
+    CertValidationPolicySpec,
+    ValidationDataHandlers,
+)
+from pyhanko_certvalidator.fetchers.requests_fetchers import (
+    RequestsFetcherBackend,
+)
+from pyhanko_certvalidator.ltv.poe import POEManager
+from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
+from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
+    RevocationCheckingPolicy,
+)
+from pyhanko_certvalidator.registry import (
+    CertificateRegistry,
+    SimpleTrustManager,
+    TrustManager,
+)
 
 __all__ = [
     'TrustManagerSettings',
     'init_trust_manager',
-    'init_validation_context_kwargs',
-    'parse_trust_config',
+    'build_vc_kwargs',
 ]
 
+from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 
 DEFAULT_TL_CACHE_REFRESH_TIME = timedelta(days=15)
 
@@ -161,63 +182,216 @@ async def init_trust_manager(
     return trust_manager
 
 
-def init_validation_context_kwargs(
+def _parse_other_certs(config_dict):
+    other_certs_from_config = config_dict.get("other-certs", [])
+    if isinstance(other_certs_from_config, str):
+        return [other_certs_from_config]
+    elif isinstance(other_certs_from_config, list):
+        return other_certs_from_config
+    else:
+        raise ConfigurationError(
+            "other-certs must be a string or a list of strings"
+        )
+
+
+def build_cert_validation_policy_and_extract_extra_certs(
+    *,
+    cli_config: Optional[CLIConfig],
+    validation_context: Optional[str],
+    trust: Union[Iterable[str], str],
+    trust_replace: bool,
+    eutl: bool,
+    eutl_force_redownload: bool,
+    eutl_territories: Optional[str],
+    other_certs: Iterable[str],
+    revocation_policy: Optional[str],
+):
+    other_certs = list(other_certs)
+    overrides: Dict[str, Any] = {}
+    if eutl:
+        overrides['eutl'] = True
+    if eutl_territories:
+        overrides['eutl-territories'] = eutl_territories
+    if eutl_force_redownload:
+        overrides['eutl-force-redownload'] = True
+    if revocation_policy:
+        overrides['revocation-policy'] = revocation_policy
+    try:
+        if validation_context is not None:
+            if any((trust, other_certs)):
+                raise click.ClickException(
+                    "--validation-context is incompatible with other "
+                    "trust-related settings"
+                )
+            # load the desired context from config
+            if cli_config is None:
+                raise click.ClickException("No config file specified.")
+            try:
+                vc_config_raw = cli_config.get_validation_settings_raw(
+                    validation_context
+                )
+                vc_config_raw.update(overrides)
+                cert_validation_policy = parse_trust_config_into_policy(
+                    vc_config_raw,
+                    cli_config=cli_config,
+                )
+                other_certs.extend(_parse_other_certs(vc_config_raw))
+            except ConfigurationError as e:
+                msg = (
+                    "Configuration problem. Are you sure that the validation "
+                    f"context '{validation_context}' is properly defined in the"
+                    " configuration file?"
+                )
+                logger.error(msg, exc_info=e)
+                raise click.ClickException(msg)
+        elif trust or other_certs:
+            # always load a validation profile using command
+            # line kwargs if the --trust or --other-certs
+            # arguments are provided
+            cert_validation_policy = derive_cert_validation_policy(
+                cli_config=cli_config,
+                trust_manager_settings=TrustManagerSettings(
+                    trust=trust,
+                    trust_replace=trust_replace,
+                    eutl=eutl,
+                    territories=eutl_territories,
+                    eutl_force_redownload=eutl_force_redownload,
+                ),
+                revinfo_policy=revocation_policy or 'require',
+                retroactive_revinfo=cli_config.retroactive_revinfo
+                if cli_config
+                else None,
+            )
+        elif cli_config is not None:
+            # load the default settings from the CLI config
+            try:
+                vc_config_raw = cli_config.get_validation_settings_raw(
+                    validation_context
+                )
+                vc_config_raw.update(overrides)
+                cert_validation_policy = parse_trust_config_into_policy(
+                    vc_config_raw,
+                    cli_config=cli_config,
+                )
+                other_certs.extend(_parse_other_certs(vc_config_raw))
+            except ConfigurationError as e:
+                msg = "Failed to load default validation context."
+                logger.error(msg, exc_info=e)
+                raise click.ClickException(msg)
+        else:
+            # load defaults given other arguments
+            cert_validation_policy = derive_cert_validation_policy(
+                cli_config=None,
+                trust_manager_settings=TrustManagerSettings(
+                    trust=None,
+                    trust_replace=trust_replace,
+                    eutl=eutl,
+                    territories=eutl_territories,
+                    eutl_force_redownload=eutl_force_redownload,
+                ),
+                revinfo_policy=revocation_policy or 'require',
+            )
+
+        return cert_validation_policy, other_certs
+    except click.ClickException:
+        raise
+    except IOError as e:
+        msg = "I/O problem while reading validation config"
+        logger.error(msg, exc_info=e)
+        raise click.ClickException(msg)
+    except Exception as e:
+        msg = "Generic processing problem while reading validation config"
+        logger.error(msg, exc_info=e)
+        raise click.ClickException(msg)
+
+
+def derive_cert_validation_policy(
     *,
     cli_config: Optional[CLIConfig],
     trust_manager_settings: TrustManagerSettings,
-    other_certs: Union[Iterable[str], str],
-    retroactive_revinfo: bool = False,
-    time_tolerance: Union[timedelta, int, None] = None,
-) -> Dict[str, Any]:
-    if not isinstance(time_tolerance, timedelta):
-        if time_tolerance is None:
-            time_tolerance = DEFAULT_TIME_TOLERANCE
-        elif isinstance(time_tolerance, int):
-            time_tolerance = timedelta(seconds=time_tolerance)
+    revinfo_policy: str,
+    retroactive_revinfo: Optional[bool] = None,
+    time_tolerance: Optional[timedelta] = None,
+) -> CertValidationPolicySpec:
+    if time_tolerance is None:
+        if cli_config:
+            time_tolerance = cli_config.time_tolerance or DEFAULT_TIME_TOLERANCE
         else:
-            raise ConfigurationError(
-                "time-tolerance parameter must be specified in seconds"
-            )
-    vc_kwargs: Dict[str, Any] = {'time_tolerance': time_tolerance}
-    if retroactive_revinfo:
-        vc_kwargs['retroactive_revinfo'] = True
+            time_tolerance = DEFAULT_TIME_TOLERANCE
+    if retroactive_revinfo is None:
+        if cli_config:
+            retroactive_revinfo = cli_config.retroactive_revinfo
+        else:
+            retroactive_revinfo = False
     trust_manager = asyncio.run(
         init_trust_manager(trust_manager_settings, cli_config)
     )
-    vc_kwargs['trust_manager'] = trust_manager
-    if other_certs:
-        if isinstance(other_certs, str):
-            other_certs = (other_certs,)
-        vc_kwargs['other_certs'] = list(load_certs_from_pemder(other_certs))
-    return vc_kwargs
+    return CertValidationPolicySpec(
+        trust_manager=trust_manager,
+        revinfo_policy=CertRevTrustPolicy(
+            revocation_checking_policy=RevocationCheckingPolicy.from_legacy(
+                revinfo_policy
+            ),
+            retroactive_revinfo=retroactive_revinfo,
+        ),
+        time_tolerance=time_tolerance,
+    )
 
 
-def parse_trust_config(
-    trust_config,
-    time_tolerance,
-    retroactive_revinfo,
+def init_handlers(
+    other_certs: Union[Iterable[str], str],
+    allow_fetching: bool,
+):
+    other_cert_objs = list(load_certs_from_pemder(other_certs))
+    fetcher_backend = RequestsFetcherBackend()
+    fetchers = fetcher_backend.get_fetchers() if allow_fetching else None
+    cert_registry = CertificateRegistry(
+        cert_fetcher=fetchers.cert_fetcher if fetchers else None,
+    )
+    cert_registry.register_multiple(other_cert_objs)
+    poe_manager = POEManager()
+    revinfo_manager = RevinfoManager(
+        certificate_registry=cert_registry,
+        poe_manager=poe_manager,
+        crls=[],
+        ocsps=[],
+        fetchers=fetchers,
+    )
+    return ValidationDataHandlers(
+        revinfo_manager=revinfo_manager,
+        poe_manager=poe_manager,
+        cert_registry=cert_registry,
+    )
+
+
+EXPECTED_CONFIG_KEYS = (
+    'trust',
+    'trust-replace',
+    'other-certs',
+    'time-tolerance',
+    'retroactive-revinfo',
+    'signer-key-usage',
+    'signer-extd-key-usage',
+    'signer-key-usage-policy',
+    'eutl',
+    'eutl-force-redownload',
+    'eutl-lotl-url',
+    'lotl-tlso-certs',
+    'eutl-territories',
+    'revocation-policy',
+)
+
+
+def parse_trust_config_into_policy(
+    trust_config: dict,
     cli_config: CLIConfig,
-) -> dict:
+) -> CertValidationPolicySpec:
     api.check_config_keys(
         'ValidationContext',
-        (
-            'trust',
-            'trust-replace',
-            'other-certs',
-            'time-tolerance',
-            'retroactive-revinfo',
-            'signer-key-usage',
-            'signer-extd-key-usage',
-            'signer-key-usage-policy',
-            'eutl',
-            'eutl-force-redownload',
-            'eutl-lotl-url',
-            'lotl-tlso-certs',
-            'eutl-territories',
-        ),
+        EXPECTED_CONFIG_KEYS,
         trust_config,
     )
-    return init_validation_context_kwargs(
+    return derive_cert_validation_policy(
         cli_config=cli_config,
         trust_manager_settings=TrustManagerSettings(
             trust=trust_config.get('trust'),
@@ -230,10 +404,12 @@ def parse_trust_config(
                 'eutl-force-redownload', False
             ),
         ),
-        other_certs=trust_config.get('other-certs'),
-        time_tolerance=trust_config.get('time-tolerance', time_tolerance),
-        retroactive_revinfo=trust_config.get(
-            'retroactive-revinfo', retroactive_revinfo
+        time_tolerance=parse_time_tolerance(trust_config),
+        revinfo_policy=trust_config.get('revocation-policy', 'require'),
+        retroactive_revinfo=bool(
+            trust_config.get(
+                'retroactive-revinfo', cli_config.retroactive_revinfo
+            )
         ),
     )
 
@@ -248,100 +424,31 @@ def build_vc_kwargs(
     eutl_force_redownload: bool,
     eutl_territories: Optional[str],
     other_certs: Union[Iterable[str], str],
+    revocation_policy: Optional[str],
     retroactive_revinfo: bool,
-    allow_fetching: Optional[bool] = None,
+    allow_fetching: bool,
 ):
-    overrides: Dict[str, Any] = {}
+    policy, other_certs = build_cert_validation_policy_and_extract_extra_certs(
+        cli_config=cli_config,
+        validation_context=validation_context,
+        trust=trust,
+        trust_replace=trust_replace,
+        eutl=eutl,
+        eutl_force_redownload=eutl_force_redownload,
+        eutl_territories=eutl_territories,
+        other_certs=other_certs,
+        revocation_policy=revocation_policy,
+    )
+    handlers = init_handlers(
+        other_certs=other_certs,
+        allow_fetching=allow_fetching,
+    )
+    vc_kwargs = policy.build_validation_context_kwargs(
+        ValidationTimingInfo.now(), handlers
+    )
     if retroactive_revinfo:
-        overrides['retroactive-revinfo'] = True
-    if eutl:
-        overrides['eutl'] = True
-    if eutl_territories:
-        overrides['eutl-territories'] = eutl_territories
-    if eutl_force_redownload:
-        overrides['eutl-force-redownload'] = True
-    try:
-        if validation_context is not None:
-            if any((trust, other_certs)):
-                raise click.ClickException(
-                    "--validation-context is incompatible with other "
-                    "trust-related settings"
-                )
-            # load the desired context from config
-            if cli_config is None:
-                raise click.ClickException("No config file specified.")
-            try:
-                result = cli_config.get_validation_context(
-                    validation_context,
-                    as_dict=True,
-                    overrides=overrides,
-                )
-            except ConfigurationError as e:
-                msg = (
-                    "Configuration problem. Are you sure that the validation "
-                    f"context '{validation_context}' is properly defined in the"
-                    " configuration file?"
-                )
-                logger.error(msg, exc_info=e)
-                raise click.ClickException(msg)
-        elif trust or other_certs:
-            # always load a validation profile using command
-            # line kwargs if the --trust or --other-certs
-            # arguments are provided
-            result = init_validation_context_kwargs(
-                cli_config=cli_config,
-                trust_manager_settings=TrustManagerSettings(
-                    trust=trust,
-                    trust_replace=trust_replace,
-                    eutl=eutl,
-                    territories=eutl_territories,
-                    eutl_force_redownload=eutl_force_redownload,
-                ),
-                other_certs=other_certs,
-                retroactive_revinfo=retroactive_revinfo,
-            )
-        elif cli_config is not None:
-            # load the default settings from the CLI config
-            try:
-                result = cli_config.get_validation_context(
-                    as_dict=True,
-                    overrides=overrides,
-                )
-            except ConfigurationError as e:
-                msg = "Failed to load default validation context."
-                logger.error(msg, exc_info=e)
-                raise click.ClickException(msg)
-        else:
-            # load defaults given other arguments
-            result = init_validation_context_kwargs(
-                cli_config=None,
-                trust_manager_settings=TrustManagerSettings(
-                    trust=None,
-                    trust_replace=trust_replace,
-                    eutl=eutl,
-                    territories=eutl_territories,
-                    eutl_force_redownload=eutl_force_redownload,
-                ),
-                other_certs=[],
-                retroactive_revinfo=retroactive_revinfo,
-            )
-
-        if allow_fetching is not None:
-            result['allow_fetching'] = allow_fetching
-        else:
-            result.setdefault('allow_fetching', True)
-
-        return result
-    except click.ClickException:
-        raise
-    except IOError as e:
-        msg = "I/O problem while reading validation config"
-        logger.error(msg, exc_info=e)
-        raise click.ClickException(msg)
-    except Exception as e:
-        msg = "Generic processing problem while reading validation config"
-        logger.error(msg, exc_info=e)
-        raise click.ClickException(msg)
+        vc_kwargs['retroactive_revinfo'] = retroactive_revinfo
+    return vc_kwargs
 
 
 def _get_key_usage_settings(ctx: click.Context, validation_context: str):
@@ -415,28 +522,12 @@ TRUST_OPTIONS = [
     ),
 ]
 
-
 FC = TypeVar('FC', bound=click.Command)
 
 
 def trust_options(f: FC) -> FC:
     f.params.extend(TRUST_OPTIONS)
     return f
-
-
-def _prepare_vc(vc_kwargs, soft_revocation_check, force_revinfo):
-    if soft_revocation_check and force_revinfo:
-        raise click.ClickException(
-            "--soft-revocation-check is incompatible with --force-revinfo"
-        )
-    if force_revinfo:
-        rev_mode = 'require'
-    elif soft_revocation_check:
-        rev_mode = 'soft-fail'
-    else:
-        rev_mode = 'hard-fail'
-    vc_kwargs['revocation_mode'] = rev_mode
-    return vc_kwargs
 
 
 def grab_certs(files):

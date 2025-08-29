@@ -6,12 +6,14 @@ from io import BytesIO
 import pytest
 from asn1crypto import pem
 from certomancer import PKIArchitecture
-from certomancer.registry import CertLabel
+from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko.cli import cli_root
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 from test_data.samples import (
     MINIMAL,
     MINIMAL_AES256,
@@ -43,6 +45,119 @@ def test_basic_validate(cli_runner, root_cert, input_to_validate):
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+
+
+@pytest.mark.parametrize('pki_mocks_enabled', [False])
+def test_basic_validate_fail_without_revinfo(
+    cli_runner, root_cert, input_to_validate
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--trust',
+            root_cert,
+            input_to_validate,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'INTACT:UNTRUSTED' in result.output
+
+
+@pytest.mark.parametrize('pki_mocks_enabled', [True, False])
+def test_basic_validate_with_soft_revocation(
+    cli_runner, root_cert, input_to_validate
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--trust',
+            root_cert,
+            '--soft-revocation-check',
+            input_to_validate,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+
+
+def test_basic_validate_with_required_revinfo(
+    cli_runner, root_cert, input_to_validate
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--trust',
+            root_cert,
+            '--force-revinfo',
+            input_to_validate,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+
+
+@pytest.mark.parametrize('pki_mocks_enabled', [False])
+def test_basic_validate_fail_without_required_revinfo(
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--trust',
+            root_cert,
+            '--force-revinfo',
+            input_to_validate,
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert 'UNTRUSTED' in result.output
+
+
+@pytest.mark.parametrize('pki_mocks_enabled', [False])
+def test_basic_validate_without_revinfo_check(
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--trust',
+            root_cert,
+            '--no-revocation-check',
+            input_to_validate,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+
+
+@pytest.mark.parametrize('pki_mocks_enabled', [False])
+def test_inconsistent_revo_settings(
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--trust',
+            root_cert,
+            '--no-revocation-check',
+            '--soft-revocation-check',
+            input_to_validate,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'incompatible' in result.output
 
 
 def test_validate_encrypted_wrong_password(
@@ -369,11 +484,110 @@ def test_basic_validate_with_explicit_context(
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
+def _write_input_to_validate_with_missing_intermediate(pki_arch):
+    fname = 'to-validate.pdf'
+    registry = SimpleCertificateStore()
+    registry.register(pki_arch.get_cert(CertLabel('root')))
+    signer = SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        cert_registry=registry,
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+    )
+
+    out = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(out)
+    sign_pdf(
+        pdf_out=w,
+        signature_meta=PdfSignatureMetadata(field_name='Sig1'),
+        signer=signer,
+        in_place=True,
+    )
+    with open(fname, 'wb') as outf:
+        outf.write(out.getvalue())
+    return fname
+
+
+def test_basic_validate_lacking_intermediate(
+    cli_runner,
+    root_cert,
+    pki_arch,
+):
+    fname = _write_input_to_validate_with_missing_intermediate(pki_arch)
+    with open('interm.crt', 'wb') as outf:
+        outf.write(pki_arch.get_cert(CertLabel('interm')).dump())
+    _write_config(
+        {
+            'validation-contexts': {
+                'default': {'trust': root_cert, 'other-certs': 'interm.crt'}
+            }
+        }
+    )
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+
+
+def test_basic_validate_lacking_intermediate_with_trust_arg(
+    cli_runner,
+    root_cert,
+    pki_arch,
+):
+    fname = _write_input_to_validate_with_missing_intermediate(pki_arch)
+    with open('interm.crt', 'wb') as outf:
+        outf.write(pki_arch.get_cert(CertLabel('interm')).dump())
+    _write_config({'validation-contexts': {'default': {}}})
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--trust',
+            root_cert,
+            '--other-certs',
+            'interm.crt',
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+
+
 @pytest.mark.parametrize('setup_type', ['default', 'explicit'])
 def test_basic_validate_context_config_wrong(cli_runner, setup_type):
     _write_config(
         {'validation-contexts': {setup_type: {'thismakesnosense': "blah"}}}
     )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            *(
+                ()
+                if setup_type == 'default'
+                else ('--validation-context', setup_type)
+            ),
+            INPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "validation context" in result.output
+
+
+@pytest.mark.parametrize('setup_type', ['default', 'explicit'])
+def test_basic_validate_context_config_nonsensical_other_certs(
+    cli_runner, setup_type
+):
+    _write_config({'validation-contexts': {setup_type: {'other-certs': 1234}}})
     result = cli_runner.invoke(
         cli_root,
         [

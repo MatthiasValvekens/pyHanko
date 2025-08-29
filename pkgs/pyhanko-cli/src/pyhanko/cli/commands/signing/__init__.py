@@ -219,6 +219,7 @@ def addsig(
             other_certs=other_certs,
             retroactive_revinfo=retroactive_revinfo,
             allow_fetching=True,
+            revocation_policy='hard-fail',
         )
         vc = ValidationContext(**vc_kwargs)
         key_usage_sett = _get_key_usage_settings(ctx, validation_context)
@@ -325,6 +326,8 @@ def timestamp(
             eutl_territories=eutl_territories,
             other_certs=other_certs,
             retroactive_revinfo=True,
+            allow_fetching=True,
+            revocation_policy='soft-fail',
         )
         timestamper = HTTPTimeStamper(timestamp_url)
         with open(infile, 'rb') as inf:

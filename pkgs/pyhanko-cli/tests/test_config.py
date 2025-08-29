@@ -13,8 +13,7 @@ from pyhanko import stamp
 from pyhanko.cli import cache, config
 from pyhanko.cli._trust import (
     DEFAULT_TIME_TOLERANCE,
-    TrustManagerSettings,
-    init_validation_context_kwargs,
+    parse_trust_config_into_policy,
 )
 from pyhanko.cli.commands.signing.pkcs11_cli import ModuleConfigWrapper
 from pyhanko.cli.commands.signing.simple import KeyFileConfigWrapper
@@ -48,17 +47,24 @@ def test_read_vc_kwargs(trust_replace):
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """
     cli_config: config.CLIConfig = _parse_cli_config(config_string)
-    vc_kwargs = cli_config.get_validation_context(as_dict=True)
-    assert len(vc_kwargs['other_certs']) == 2
-    tm = vc_kwargs['trust_manager']
-    assert isinstance(tm, SimpleTrustManager)
+
+    policy = parse_trust_config_into_policy(
+        trust_config=cli_config.get_validation_settings_raw(),
+        cli_config=cli_config,
+    )
+    assert isinstance(policy.trust_manager, SimpleTrustManager)
 
     ku = cli_config.get_signer_key_usages()
     assert ku.key_usage is None
     assert ku.extd_key_usage is None
 
     with pytest.raises(ConfigurationError):
-        cli_config.get_validation_context('theresnosuchvc')
+        parse_trust_config_into_policy(
+            trust_config=cli_config.get_validation_settings_raw(
+                'theresnosuchvc'
+            ),
+            cli_config=cli_config,
+        )
 
 
 NOTO_SERIF_JP = f'{TEST_DIR}/data/fonts/NotoSerifJP-Regular.otf'
@@ -174,10 +180,10 @@ def test_read_bad_config2(bad_type):
 
 def test_empty_config():
     cli_config: config.CLIConfig = _parse_cli_config("")
-    vc_kwargs = cli_config.get_validation_context(as_dict=True)
-    assert 'extra_trust_roots' not in vc_kwargs
-    assert 'trust_roots' not in vc_kwargs
-    assert 'other_certs' not in vc_kwargs
+    parse_trust_config_into_policy(
+        trust_config=cli_config.get_validation_settings_raw(),
+        cli_config=cli_config,
+    )
 
 
 def test_read_logging_config():
@@ -489,8 +495,11 @@ def test_key_usage_errors(key_usage_str):
 )
 def test_read_time_tolerance(config_string, result):
     cli_config: config.CLIConfig = _parse_cli_config(config_string)
-    vc_kwargs = cli_config.get_validation_context(as_dict=True)
-    assert vc_kwargs['time_tolerance'] == timedelta(seconds=result)
+    policy = parse_trust_config_into_policy(
+        trust_config=cli_config.get_validation_settings_raw(),
+        cli_config=cli_config,
+    )
+    assert policy.time_tolerance == timedelta(seconds=result)
 
 
 def test_read_time_tolerance_input_issues():
@@ -502,7 +511,10 @@ def test_read_time_tolerance_input_issues():
     """
     with pytest.raises(ConfigurationError, match='time-tolerance.*'):
         cli_config: config.CLIConfig = _parse_cli_config(config_string)
-        cli_config.get_validation_context(as_dict=True)
+        parse_trust_config_into_policy(
+            trust_config=cli_config.get_validation_settings_raw(),
+            cli_config=cli_config,
+        )
 
     config_string = f"""
     time-tolerance: "this makes no sense"
@@ -512,20 +524,10 @@ def test_read_time_tolerance_input_issues():
     """
     with pytest.raises(ConfigurationError, match='time-tolerance.*'):
         cli_config: config.CLIConfig = _parse_cli_config(config_string)
-        cli_config.get_validation_context(as_dict=True)
-
-    vc_kwargs = init_validation_context_kwargs(
-        cli_config=cli_config,
-        trust_manager_settings=TrustManagerSettings(
-            trust=[],
-            trust_replace=False,
-            eutl=False,
-            eutl_force_redownload=False,
-        ),
-        other_certs=[],
-    )
-    assert 'retroactive_revinfo' not in vc_kwargs
-    assert vc_kwargs['time_tolerance'] == DEFAULT_TIME_TOLERANCE
+        parse_trust_config_into_policy(
+            trust_config=cli_config.get_validation_settings_raw(),
+            cli_config=cli_config,
+        )
 
 
 @pytest.mark.parametrize(
@@ -596,11 +598,12 @@ def test_read_time_tolerance_input_issues():
 )
 def test_read_retroactive_revinfo(config_string, result):
     cli_config: config.CLIConfig = _parse_cli_config(config_string)
-    vc_kwargs = cli_config.get_validation_context(as_dict=True)
-    if result is False:
-        assert 'retroactive_revinfo' not in vc_kwargs
-    else:
-        assert vc_kwargs['retroactive_revinfo']
+
+    policy = parse_trust_config_into_policy(
+        trust_config=cli_config.get_validation_settings_raw(),
+        cli_config=cli_config,
+    )
+    assert policy.revinfo_policy.retroactive_revinfo == result
 
 
 def test_read_pkcs11_config():

@@ -3,7 +3,7 @@ import binascii
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, Iterable, List, Optional, Set, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Union
 
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
@@ -665,6 +665,54 @@ class CertValidationPolicySpec:
     signatures.
     """
 
+    def build_validation_context_kwargs(
+        self,
+        timing_info: ValidationTimingInfo,
+        handlers: Optional[ValidationDataHandlers],
+    ) -> Dict[str, Any]:
+        """
+        Internal API to build the keyword arguments to pass to a
+        :class:`ValidationContext` instance constructed from this policy,
+        validation timing info and a set of validation data handlers.
+
+        :param timing_info:
+            Timing settings.
+        :param handlers:
+            Optionally specify validation data handlers. A reasonable default
+            will be supplied if absent.
+        :return:
+            A dictionary of keyword arguments.
+        """
+
+        if handlers is None:
+            cert_registry = CertificateRegistry()
+            poe_manager = POEManager()
+            revinfo_manager = RevinfoManager(
+                certificate_registry=cert_registry,
+                poe_manager=poe_manager,
+                crls=[],
+                ocsps=[],
+            )
+        else:
+            cert_registry = handlers.cert_registry
+            poe_manager = handlers.poe_manager
+            revinfo_manager = handlers.revinfo_manager
+
+        return dict(
+            trust_manager=self.trust_manager,
+            revinfo_policy=self.revinfo_policy,
+            revinfo_manager=revinfo_manager,
+            certificate_registry=cert_registry,
+            poe_manager=poe_manager,
+            algorithm_usage_policy=self.algorithm_usage_policy,
+            moment=timing_info.validation_time,
+            best_signature_time=timing_info.best_signature_time,
+            time_tolerance=self.time_tolerance,
+            acceptable_ac_targets=self.acceptable_ac_targets,
+            allow_fetching=revinfo_manager.fetching_allowed,
+            signature_validator=self.signature_validator,
+        )
+
     def build_validation_context(
         self,
         timing_info: ValidationTimingInfo,
@@ -683,31 +731,8 @@ class CertValidationPolicySpec:
             A new :class:`ValidationContext` reflecting the parameters.
         """
 
-        if handlers is None:
-            cert_registry = CertificateRegistry()
-            poe_manager = POEManager()
-            revinfo_manager = RevinfoManager(
-                certificate_registry=cert_registry,
-                poe_manager=poe_manager,
-                crls=[],
-                ocsps=[],
-            )
-        else:
-            cert_registry = handlers.cert_registry
-            poe_manager = handlers.poe_manager
-            revinfo_manager = handlers.revinfo_manager
-
-        return ValidationContext(
-            trust_manager=self.trust_manager,
-            revinfo_policy=self.revinfo_policy,
-            revinfo_manager=revinfo_manager,
-            certificate_registry=cert_registry,
-            poe_manager=poe_manager,
-            algorithm_usage_policy=self.algorithm_usage_policy,
-            moment=timing_info.validation_time,
-            best_signature_time=timing_info.best_signature_time,
-            time_tolerance=self.time_tolerance,
-            acceptable_ac_targets=self.acceptable_ac_targets,
-            allow_fetching=revinfo_manager.fetching_allowed,
-            signature_validator=self.signature_validator,
+        kwargs = self.build_validation_context_kwargs(
+            timing_info=timing_info,
+            handlers=handlers,
         )
+        return ValidationContext(**kwargs)

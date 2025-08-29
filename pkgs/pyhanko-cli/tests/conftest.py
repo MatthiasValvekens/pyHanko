@@ -57,12 +57,20 @@ def pki_arch_name(request):
     return request.param
 
 
-@pytest.fixture(scope="module")
-def pki_arch(pki_arch_name):
+@pytest.fixture
+def pki_mocks_enabled():
+    return True
+
+
+@pytest.fixture
+def pki_arch(pki_arch_name, pki_mocks_enabled):
     with freeze_time(FREEZE_DT):
         arch = CERTOMANCER_ARCHITECTURES[pki_arch_name]
-        with requests_mock.Mocker() as m:
-            Illusionist(arch).register(m)
+        if pki_mocks_enabled:
+            with requests_mock.Mocker() as m:
+                Illusionist(arch).register(m)
+                yield arch
+        else:
             yield arch
 
 

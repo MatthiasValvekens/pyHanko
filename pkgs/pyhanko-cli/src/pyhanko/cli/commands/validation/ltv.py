@@ -55,6 +55,8 @@ def lta_update(
             eutl_territories=eutl_territories,
             other_certs=other_certs,
             retroactive_revinfo=retroactive_revinfo,
+            allow_fetching=True,
+            revocation_policy='hard-fail',
         )
         timestamper = HTTPTimeStamper(timestamp_url)
         r = PdfFileReader(infile)
@@ -120,8 +122,8 @@ def ltv_fix(
         eutl_territories=eutl_territories,
         retroactive_revinfo=False,
         allow_fetching=True,
+        revocation_policy='hard-fail',
     )
-    vc_kwargs['revocation_mode'] = 'hard-fail'
     r = PdfFileReader(infile)
 
     try:

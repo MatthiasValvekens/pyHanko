@@ -7,7 +7,6 @@ import pyhanko.sign
 from asn1crypto import cms, pem
 from pyhanko.cli._trust import (
     _get_key_usage_settings,
-    _prepare_vc,
     build_vc_kwargs,
     trust_options,
 )
@@ -19,7 +18,10 @@ from pyhanko.pdf_utils.misc import isoparse
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import validation
 from pyhanko.sign.validation import RevocationInfoValidationType
-from pyhanko.sign.validation.errors import SignatureValidationError
+from pyhanko.sign.validation.errors import (
+    SignatureValidationError,
+    ValidationInfoReadingError,
+)
 from pyhanko_certvalidator import ValidationContext
 
 __all__ = ['validate_signatures']
@@ -87,7 +89,7 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
             return status.pretty_print_details(), status.bottom_line
         else:
             return status.summary(), status.bottom_line
-    except validation.ValidationInfoReadingError as e:
+    except ValidationInfoReadingError as e:
         msg = (
             'An error occurred while parsing the revocation information '
             'for this signature: ' + str(e)
@@ -114,7 +116,36 @@ def _attempt_iso_dt_parse(dt_str) -> datetime:
     return dt
 
 
-# TODO add an option to do LTV, but guess the profile
+def _open_file_for_validation(infile, no_strict_syntax, password):
+    if no_strict_syntax:
+        logger.info(
+            "Strict PDF syntax is disabled; this could impact validation "
+            "results. Use caution."
+        )
+        r = PdfFileReader(infile, strict=False)
+    else:
+        r = PdfFileReader(infile)
+    sh = r.security_handler
+    if isinstance(sh, crypt.StandardSecurityHandler):
+        auth_result = None
+        if password is None:
+            # attempt the empty user password first--validation is a read-only
+            # operation, so this is in line with expected UX in other viewers.
+            empty_auth_result = r.decrypt("")
+            if empty_auth_result.status == crypt.AuthStatus.FAILED:
+                password = getpass.getpass(prompt='File password: ')
+            else:
+                auth_result = empty_auth_result
+        if not auth_result:
+            auth_result = r.decrypt(password)
+        if auth_result.status == crypt.AuthStatus.FAILED:
+            raise click.ClickException("Password didn't match.")
+    elif sh is not None:
+        raise click.ClickException(
+            "The CLI supports only password-based encryption when "
+            "validating (for now)"
+        )
+    return r
 
 
 @trust_options
@@ -245,6 +276,11 @@ def validate_signatures(
     validation_time,
     no_strict_syntax,
 ):
+    if sum((soft_revocation_check, force_revinfo, no_revocation_check)) > 1:
+        raise click.ClickException(
+            "--soft-revocation-check, --force-revinfo and "
+            "--no-revocation-check are incompatible"
+        )
     no_revocation_check |= validation_time is not None
 
     if no_revocation_check:
@@ -262,6 +298,16 @@ def validate_signatures(
             )
         ltv_profile = RevocationInfoValidationType(ltv_profile)
 
+    if no_revocation_check:
+        rev_mode = 'none'
+    else:
+        if force_revinfo:
+            rev_mode = 'require'
+        elif soft_revocation_check:
+            rev_mode = 'soft-fail'
+        else:
+            rev_mode = 'hard-fail'
+
     vc_kwargs = build_vc_kwargs(
         cli_config=ctx.obj.config,
         validation_context=validation_context,
@@ -272,7 +318,8 @@ def validate_signatures(
         eutl_force_redownload=eutl_force_redownload,
         eutl_territories=eutl_territories,
         retroactive_revinfo=retroactive_revinfo,
-        allow_fetching=False if no_revocation_check else None,
+        allow_fetching=not no_revocation_check,
+        revocation_policy=rev_mode,
     )
 
     use_claimed_validation_time = False
@@ -282,11 +329,6 @@ def validate_signatures(
         vc_kwargs['moment'] = _attempt_iso_dt_parse(validation_time)
 
     key_usage_settings = _get_key_usage_settings(ctx, validation_context)
-    vc_kwargs = _prepare_vc(
-        vc_kwargs,
-        soft_revocation_check=soft_revocation_check,
-        force_revinfo=force_revinfo,
-    )
     with pyhanko_exception_manager():
         if detached is not None:
             (status_str, signature_ok) = _signature_status_str(
@@ -305,35 +347,7 @@ def validate_signatures(
                 raise click.ClickException(status_str)
             return
 
-        if no_strict_syntax:
-            logger.info(
-                "Strict PDF syntax is disabled; this could impact validation "
-                "results. Use caution."
-            )
-            r = PdfFileReader(infile, strict=False)
-        else:
-            r = PdfFileReader(infile)
-        sh = r.security_handler
-        if isinstance(sh, crypt.StandardSecurityHandler):
-            auth_result = None
-            if password is None:
-                # attempt the empty user password first--validation is a read-only
-                # operation, so this is in line with expected UX in other viewers.
-                empty_auth_result = r.decrypt("")
-                if empty_auth_result.status == crypt.AuthStatus.FAILED:
-                    password = getpass.getpass(prompt='File password: ')
-                else:
-                    auth_result = empty_auth_result
-            if not auth_result:
-                auth_result = r.decrypt(password)
-            if auth_result.status == crypt.AuthStatus.FAILED:
-                raise click.ClickException("Password didn't match.")
-        elif sh is not None:
-            raise click.ClickException(
-                "The CLI supports only password-based encryption when "
-                "validating (for now)"
-            )
-
+        r = _open_file_for_validation(infile, no_strict_syntax, password)
         all_signatures_ok = True
         for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()

@@ -217,6 +217,7 @@ Policy indicating that revocation information is never required.
 
 
 LEGACY_POLICY_MAP = {
+    'none': NO_REVOCATION,
     'soft-fail': RevocationCheckingPolicy(
         RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
         RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
