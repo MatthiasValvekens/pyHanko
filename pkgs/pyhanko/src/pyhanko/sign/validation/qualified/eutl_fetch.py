@@ -86,7 +86,7 @@ class FileSystemTLCache(TLCache):
                         entry['exp_epoch_seconds'], tz=timezone.utc
                     )
                     self._cache[key] = (exp_ts, entry['fname'])
-        logger.info(
+        logger.debug(
             f"Loaded {len(self._cache)} items from cache at {cache_path.absolute()}"
         )
 
@@ -171,7 +171,9 @@ async def _fetch(
         return await _get()
     else:
         try:
-            return cache[uri]
+            result = cache[uri]
+            logger.info(f"Retrieved {uri} from cache")
+            return result
         except KeyError:
             pass
         result = await _get()
