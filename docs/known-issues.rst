@@ -3,10 +3,7 @@ Known issues
 
 This page lists some TODOs and known limitations of pyHanko.
 
-* Expand, polish and rigorously test the validation functionality.
-  The test suite covers a variety of scenarios already, but the difference
-  checker in particular is still far from perfect.
-* LTV validation was implemented ad-hoc, and likely does not fully adhere to
+* LTV validation was implemented ad-hoc, and does not fully adhere to
   the PAdES specification. This will require some effort to implement correctly.
   In the meantime, you should treat the result as a pyHanko-specific
   interpretation of the validity of the chain of trust based on the validation
@@ -30,8 +27,6 @@ This page lists some TODOs and known limitations of pyHanko.
   standards. As of ``0.14.0``, it is possible to generate compliant output
   using pyHanko in most cases, but pyHanko itself will not attempt to enforce
   any additional restrictions.
-* CLI support for signing files encrypted using PDF's public-key encryption
-  functionality is limited.
 * The signature appearance generation code in pyHanko is quite primitive, since
   pyHanko's principal focus is on the signing process itself.
   If the appearance generation code behaves in ways you do not expect,
@@ -39,3 +34,4 @@ This page lists some TODOs and known limitations of pyHanko.
   :ref:`the section on static content stamps <static-content-stamps>`
   for some pointers on how to "outsource" the appearance generation process
   to more capable graphics toolkits.
+* Several library features are only exposed in the CLI in limited ways.
