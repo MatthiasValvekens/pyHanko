@@ -285,8 +285,7 @@ class CertRevTrustPolicy:
 
     freshness_req_type: FreshnessReqType = FreshnessReqType.DEFAULT
     """
-    Controls whether the freshness requirement applies relatively to the
-    signing time or to the validation time.
+    Defines the methodology used to evaluate the freshness of revocation info.
     """
 
     expected_post_expiry_revinfo_time: Optional[timedelta] = None

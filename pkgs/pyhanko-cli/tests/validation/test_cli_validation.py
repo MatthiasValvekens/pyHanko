@@ -320,6 +320,23 @@ def test_basic_validate_summary(cli_runner, root_cert, input_to_validate):
     assert pattern.match(result.output)
 
 
+def test_validate_inconsistent_print_settings(cli_runner):
+    with open('file.pdf', 'wb') as inf:
+        inf.write(MINIMAL)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--executive-summary',
+            '--pretty-print',
+            'file.pdf',
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'incompatible' in result.output
+
+
 def test_basic_validate_pretty_print(cli_runner, root_cert, input_to_validate):
     result = cli_runner.invoke(
         cli_root,

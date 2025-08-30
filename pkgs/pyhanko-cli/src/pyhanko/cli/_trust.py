@@ -25,6 +25,7 @@ from pyhanko.sign.validation.qualified.tsp import (
     Qualifier,
     TSPTrustManager,
 )
+from pyhanko_certvalidator.authority import AuthorityWithCert
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
@@ -145,6 +146,9 @@ async def init_trust_manager(
                 )
         cert: x509.Certificate
         for cert in trust_certs:
+            authority = AuthorityWithCert(cert)
+            if authority in registry.known_certificate_authorities:
+                continue
             # define a new CA service
             registry.register_ca(
                 CAServiceInformation(

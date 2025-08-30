@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from asn1crypto import pem
-from certomancer.registry import CertLabel, EntityLabel
+from certomancer.registry import CertLabel, EntityLabel, ServiceLabel
 from pyhanko.cli import cli_root
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from test_data.samples import CERTOMANCER, MINIMAL_ONE_FIELD, TESTING_CA_ECDSA
@@ -12,7 +12,7 @@ from test_data.samples import CERTOMANCER, MINIMAL_ONE_FIELD, TESTING_CA_ECDSA
 from ..conftest import (
     _write_config,
 )
-from .conftest import write_input_to_validate
+from .conftest import write_input_to_validate, write_ltv_input_to_validate
 
 CACHE_DIR = "./cache"
 TL_URL_SUFFIX = 'testing-ca-qualified/tl/root.xml'
@@ -383,3 +383,286 @@ def test_force_attempt_eutl_download(
     )
     assert result.exit_code == 1
     assert 'Trust list processing failed' in result.output
+
+
+@pytest.mark.nosmoke
+@pytest.mark.parametrize('overloaded_trust', [True, False])
+def test_validate_eutl_ades(
+    cli_runner, pki_arch, tl_cache, root_cert, overloaded_trust
+):
+    fname = write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=CertLabel('esig-qualified'),
+        tsa_label=ServiceLabel('tsa-qualified'),
+    )
+    vc_settings = {
+        'eutl-lotl-url': LOTL_URL,
+        'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+    }
+    if overloaded_trust:
+        # Regression scenario against issue where registering
+        # a CA on the TL independently via trust=[] would cause it
+        # to be considered non-qualified (since non-listed roots
+        # are registered as unqualified)
+        vc_settings['trust'] = root_cert
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {'default': vc_settings},
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'adesverify',
+            '--pretty-print',
+            '--eutl',
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'The signer\'s certificate is qualified' in result.output
+    assert 'qualified for electronic signatures' in result.output
+    assert 'directly identified as a QTST' in result.output
+    assert 'judged VALID' in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_eutl_ades_qual_required(
+    cli_runner, pki_arch, tl_cache, root_cert
+):
+    fname = write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=CertLabel('esig-qualified'),
+        tsa_label=ServiceLabel('tsa-qualified'),
+    )
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'adesverify',
+            '--eutl',
+            '--require-qualified',
+            fname,
+        ],
+    )
+    assert 'INTACT:TRUSTED' in result.output
+    assert 'UNTRUSTED' not in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_eutl_ades_not_qualified(cli_runner, pki_arch, tl_cache):
+    fname = write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=CertLabel('not-qualified'),
+        tsa_label=ServiceLabel('tsa-qualified'),
+    )
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'adesverify',
+            '--pretty-print',
+            '--eutl',
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'The signer\'s certificate is not qualified' in result.output
+    assert 'judged VALID' in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_eutl_ades_not_qualified_summary(
+    cli_runner, pki_arch, tl_cache
+):
+    fname = write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=CertLabel('not-qualified'),
+        tsa_label=ServiceLabel('tsa-qualified'),
+    )
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'adesverify',
+            '--eutl',
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'NOT_QUALIFIED' in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_eutl_ades_qualified_summary(cli_runner, pki_arch, tl_cache):
+    fname = write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=CertLabel('esig-qualified'),
+        tsa_label=ServiceLabel('tsa-qualified'),
+    )
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'adesverify',
+            '--eutl',
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'QUALIFIED' in result.output
+    assert 'NOT_QUALIFIED' not in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_eutl_ades_not_qualified_required(
+    cli_runner, pki_arch, tl_cache
+):
+    fname = write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=CertLabel('not-qualified'),
+        tsa_label=ServiceLabel('tsa-qualified'),
+    )
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'adesverify',
+            '--eutl',
+            '--require-qualified',
+            fname,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'UNTRUSTED' in result.output
+    assert 'NOT_QUALIFIED' in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_eutl_ades_tsa_not_qualified(cli_runner, pki_arch, tl_cache):
+    fname = write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=CertLabel('esig-qualified'),
+        tsa_label=ServiceLabel('tsa-not-qualified'),
+    )
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'adesverify',
+            '--pretty-print',
+            '--eutl',
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'The signer\'s certificate is qualified' in result.output
+    assert 'The time stamping authority is not qualified' in result.output
+    assert 'judged VALID' in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_eutl_ades_point_in_time_no_revinfo(
+    cli_runner, pki_arch, tl_cache, root_cert
+):
+    fname = write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=CertLabel('esig-qualified'),
+        tsa_label=ServiceLabel('tsa-qualified'),
+    )
+    vc_settings = {
+        'eutl-lotl-url': LOTL_URL,
+        'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+    }
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {'default': vc_settings},
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'adesverify',
+            '--pretty-print',
+            '--validation-time',
+            '2025-03-01T22:00:00Z',
+            '--no-revocation-check',
+            '--eutl',
+            fname,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'The signer\'s certificate is qualified' in result.output
+    assert 'qualified for electronic signatures' in result.output
+    assert 'directly identified as a QTST' in result.output
+    assert 'judged VALID' in result.output

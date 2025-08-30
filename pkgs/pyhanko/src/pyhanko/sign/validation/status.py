@@ -33,7 +33,8 @@ from ..diff_analysis import (
     SuspiciousModification,
 )
 from .errors import SignatureValidationError, SigSeedValueValidationError
-from .qualified.q_status import QualificationResult
+from .qualified.q_status import QcPrivateKeyManagementType, QualificationResult
+from .qualified.tsp import QTST_URI, QcCertType
 from .settings import KeyUsageConstraints
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     'StandardCMSSignatureStatus',
     'TimestampSignatureStatus',
     'X509AttributeInfo',
+    'format_pretty_print_details',
 ]
 
 logger = logging.getLogger(__name__)
@@ -185,6 +187,11 @@ class SignatureStatus:
         else:
             cert_status = 'UNTRUSTED'
         yield cert_status
+        if self.qualification_result:
+            if self.qualification_result.status.qualified:
+                yield 'QUALIFIED'
+            else:
+                yield 'NOT_QUALIFIED'
 
     @property
     def revoked(self) -> bool:
@@ -525,6 +532,80 @@ class SignerAttributeStatus:
     """
 
 
+def describe_qc_type(qc_type):
+    return {
+        QcCertType.QC_WEB: (
+            "The certificate is qualified for web authentication."
+        ),
+        QcCertType.QC_ESEAL: (
+            "The certificate is qualified for electronic sealing (eSeal)."
+        ),
+        QcCertType.QC_ESIGN: (
+            "The certificate is qualified for electronic signatures (eSign)."
+        ),
+    }.get(qc_type, "The certificate type is unknown.")
+
+
+def describe_key_mgmt_methodology(mgmt_type):
+    return {
+        QcPrivateKeyManagementType.QSCD: (
+            "The private key is managed in a qualified "
+            "signature creation device (QSCD)."
+        ),
+        QcPrivateKeyManagementType.QSCD_DELEGATED: (
+            "The private key is managed in a qualified "
+            "signature creation device (QSCD) managed "
+            "on behalf of the subscriber."
+        ),
+        QcPrivateKeyManagementType.QSCD_BY_POLICY: (
+            "The private key is managed in a qualified "
+            "signature creation device (QSCD) "
+            "(declared by policy)."
+        ),
+    }.get(mgmt_type, "The private key management methodology is unknown.")
+
+
+def _describe_tst(tst_status, nature):
+    ts = tst_status.timestamp
+    ts_info = [
+        f"{nature} timestamp token: {ts.isoformat()}",
+        "The token is guaranteed to be newer than the signature.",
+        f"{tst_status.describe_timestamp_trust()}",
+    ]
+    if tst_status.qualification_result:
+        ts_info.append(
+            _describe_timestamp_qualification_status(
+                tst_status.qualification_result
+            )
+        )
+    return "\n".join(ts_info)
+
+
+def _describe_timestamp_qualification_status(qr):
+    q_status = qr.status
+    if not q_status.qualified:
+        return "The time stamping authority is not qualified."
+
+    sd = qr.service_definition
+    assert sd is not None
+    is_qtst = (
+        "The time stamping authority is directly identified as a QTST."
+        if sd.base_info.service_type == QTST_URI
+        else "The time stamping authority is NOT directly identified as a QTST."
+    )
+
+    return "\n".join(
+        [
+            "The time stamping authority's certificate is qualified. ",
+            is_qtst,
+            f"The associated qualified trusted service provider is "
+            f"{sd.base_info.service_name}.",
+            describe_key_mgmt_methodology(qr.status.qc_key_security),
+            describe_qc_type(qr.status.qc_type),
+        ]
+    )
+
+
 @dataclass(frozen=True)
 class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
     """
@@ -603,15 +684,7 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
             yield 'CERTIFIED_SIGNER_ATTRS_INVALID'
 
     def pretty_print_details(self):
-        def fmt_section(hdr, body):
-            return '\n'.join((hdr, '-' * len(hdr), body, '\n'))
-
-        sections = self.pretty_print_sections()
-        bottom_line = (
-            f"The signature is judged {'' if self.bottom_line else 'IN'}VALID."
-        )
-        sections.append(("Bottom line", bottom_line))
-        return '\n'.join(fmt_section(hdr, body) for hdr, body in sections)
+        return format_pretty_print_details(self)
 
     def pretty_print_sections(self) -> List[Tuple[str, str]]:
         cert: x509.Certificate = self.signing_cert
@@ -658,31 +731,46 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
             )
 
         tst_status = self.timestamp_validity
+
         if tst_status is not None:
-            ts = tst_status.timestamp
-            timing_infos.append(
-                f"Signature timestamp token: {ts.isoformat()}\n"
-                f"The token is guaranteed to be newer than the signature.\n"
-                f"{tst_status.describe_timestamp_trust()}"
-            )
+            timing_infos.append(_describe_tst(tst_status, "Signature"))
         content_tst_status = self.content_timestamp_validity
         if content_tst_status is not None:
-            ts = content_tst_status.timestamp
-            timing_infos.append(
-                f"Content timestamp token: {ts.isoformat()}\n"
-                f"The token is guaranteed to be older than the signature.\n"
-                f"{content_tst_status.describe_timestamp_trust()}"
-            )
+            timing_infos.append(_describe_tst(content_tst_status, "Content"))
         timing_info = (
             "No available information about the signing time."
             if not timing_infos
             else '\n\n'.join(timing_infos)
         )
-        return [
+        sections = [
             ("Signer info", about_signer),
             ("Integrity", validity_info),
             ("Signing time", timing_info),
         ]
+
+        if self.qualification_result:
+            sig_q_status = self.qualification_result.status
+            if sig_q_status.qualified:
+                sd = self.qualification_result.service_definition
+                assert sd is not None
+                sig_q_status_report = "\n".join(
+                    [
+                        "The signer's certificate is qualified.",
+                        f"The associated qualified trusted service provider is "
+                        f"{sd.base_info.service_name}.",
+                        describe_key_mgmt_methodology(
+                            sig_q_status.qc_key_security
+                        ),
+                        describe_qc_type(sig_q_status.qc_type),
+                    ]
+                )
+            else:
+                sig_q_status_report = (
+                    "The signer's certificate is not qualified."
+                )
+            sections.append(("Qualification status", sig_q_status_report))
+
+        return sections
 
 
 @unique
@@ -888,3 +976,19 @@ class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
 @dataclass(frozen=True)
 class DocumentTimestampStatus(ModificationInfo, TimestampSignatureStatus):
     """Class to indicate the validation status of a PDF document timestamp."""
+
+
+def format_pretty_print_details(
+    status: StandardCMSSignatureStatus,
+    extra_sections: Iterable[Tuple[str, str]] = (),
+) -> str:
+    def fmt_section(hdr, body):
+        return '\n'.join((hdr, '-' * len(hdr), body, '\n'))
+
+    sections = list(status.pretty_print_sections())
+    sections.extend(extra_sections)
+    bottom_line = (
+        f"The signature is judged {'' if status.bottom_line else 'IN'}VALID."
+    )
+    sections.append(("Bottom line", bottom_line))
+    return '\n'.join(fmt_section(hdr, body) for hdr, body in sections)
