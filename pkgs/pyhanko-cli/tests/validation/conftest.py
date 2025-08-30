@@ -5,12 +5,17 @@ from typing import Optional
 
 import pytest
 from certomancer import PKIArchitecture
-from certomancer.registry import CertLabel, KeyLabel
+from certomancer.registry import CertLabel, KeyLabel, ServiceLabel
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
 from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
-from pyhanko_certvalidator.registry import SimpleCertificateStore
+from pyhanko.sign.timestamps import HTTPTimeStamper
+from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.registry import (
+    SimpleCertificateStore,
+    SimpleTrustManager,
+)
 from test_data.samples import (
     MINIMAL,
     MINIMAL_AES256,
@@ -70,6 +75,48 @@ def write_input_to_validate(
         out.write(ci.dump())
     with open(fname, 'wb') as outf:
         outf.write(out.getvalue())
+    return fname
+
+
+def write_ltv_input_to_validate(
+    pki_arch: PKIArchitecture,
+    signer_cert_label: CertLabel,
+    tsa_label: ServiceLabel,
+    fname: str = 'to-validate.pdf',
+):
+    registry = SimpleCertificateStore()
+    signing_cert_spec = pki_arch.get_cert_spec(signer_cert_label)
+    registry.register(
+        pki_arch.get_cert(signing_cert_spec.resolve_issuer_cert(pki_arch))
+    )
+    root_cert = pki_arch.get_cert(CertLabel('root'))
+    registry.register(root_cert)
+    signer = SimpleSigner(
+        signing_cert=pki_arch.get_cert(signer_cert_label),
+        cert_registry=registry,
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+    )
+    tsa = pki_arch.service_registry.get_tsa_info(tsa_label)
+
+    with open(fname, 'wb') as outf:
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+        sign_pdf(
+            pdf_out=w,
+            signature_meta=PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=ValidationContext(
+                    trust_manager=SimpleTrustManager.build(
+                        trust_roots=[root_cert]
+                    ),
+                    allow_fetching=True,
+                ),
+                embed_validation_info=True,
+                use_pades_lta=True,
+            ),
+            signer=signer,
+            timestamper=HTTPTimeStamper(url=tsa.url),
+            output=outf,
+        )
     return fname
 
 

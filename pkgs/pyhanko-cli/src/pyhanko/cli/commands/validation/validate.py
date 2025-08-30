@@ -1,5 +1,6 @@
 import asyncio
 import getpass
+from dataclasses import replace
 from datetime import datetime
 
 import click
@@ -7,24 +8,66 @@ import pyhanko.sign
 from asn1crypto import cms, pem
 from pyhanko.cli._trust import (
     _get_key_usage_settings,
+    build_cert_validation_policy_and_extract_extra_certs,
     build_vc_kwargs,
     trust_options,
 )
 from pyhanko.cli.commands.signing import signing
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import logger
+from pyhanko.keys import load_certs_from_pemder
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.misc import isoparse
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import validation
+from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY
 from pyhanko.sign.validation import RevocationInfoValidationType
+from pyhanko.sign.validation.ades import (
+    AdESLTAValidationResult,
+    ades_lta_validation,
+)
 from pyhanko.sign.validation.errors import (
     SignatureValidationError,
     ValidationInfoReadingError,
 )
+from pyhanko.sign.validation.policy_decl import (
+    LocalKnowledge,
+    PdfSignatureValidationSpec,
+    QualificationRequirements,
+    SignatureValidationSpec,
+)
+from pyhanko.sign.validation.qualified.tsp import QTST_URI
+from pyhanko.sign.validation.status import format_pretty_print_details
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
+from pyhanko_certvalidator.policy_decl import (
+    NO_REVOCATION,
+    REQUIRE_REVINFO,
+    CertRevTrustPolicy,
+    FreshnessReqType,
+)
 
 __all__ = ['validate_signatures']
+
+
+def _assert_consistent_print_settings(pretty_print, executive_summary):
+    if pretty_print and executive_summary:
+        raise click.ClickException(
+            "--pretty-print is incompatible with --executive-summary."
+        )
+
+
+def _pretty_print_result(name, ix, status_str):
+    header = f'Field {ix + 1}: {name}'
+    line = '=' * len(header)
+    click.echo(line)
+    click.echo(header)
+    click.echo(line)
+    click.echo('\n\n' + status_str)
+
+
+def _print_summary_result(name, fingerprint, status_str):
+    click.echo('%s:%s:%s' % (name, fingerprint, status_str))
 
 
 def _signature_status(
@@ -79,14 +122,21 @@ def _validate_detached(
 
 def _signature_status_str(status_callback, pretty_print, executive_summary):
     try:
-        status = status_callback()
+        result = status_callback()
+        if isinstance(result, AdESLTAValidationResult):
+            status = result.api_status
+            extra_sections = []
+        else:
+            status = result
+            extra_sections = []
         if executive_summary and not pretty_print:
             return (
                 'VALID' if status.bottom_line else 'INVALID',
                 status.bottom_line,
             )
         elif pretty_print:
-            return status.pretty_print_details(), status.bottom_line
+            pretty_printed = format_pretty_print_details(status, extra_sections)
+            return pretty_printed, status.bottom_line
         else:
             return status.summary(), status.bottom_line
     except ValidationInfoReadingError as e:
@@ -286,11 +336,7 @@ def validate_signatures(
     if no_revocation_check:
         soft_revocation_check = True
 
-    if pretty_print and executive_summary:
-        raise click.ClickException(
-            "--pretty-print is incompatible with --executive-summary."
-        )
-
+    _assert_consistent_print_settings(pretty_print, executive_summary)
     if ltv_profile is not None:
         if validation_time is not None:
             raise click.ClickException(
@@ -365,17 +411,178 @@ def validate_signatures(
                 pretty_print=pretty_print,
                 executive_summary=executive_summary,
             )
-            name = embedded_sig.field_name
-
             if pretty_print:
-                header = f'Field {ix + 1}: {name}'
-                line = '=' * len(header)
-                click.echo(line)
-                click.echo(header)
-                click.echo(line)
-                click.echo('\n\n' + status_str)
+                _pretty_print_result(embedded_sig.field_name, ix, status_str)
             else:
-                click.echo('%s:%s:%s' % (name, fingerprint, status_str))
+                _print_summary_result(
+                    embedded_sig.field_name, fingerprint, status_str
+                )
+            all_signatures_ok &= signature_ok
+
+        if not all_signatures_ok:
+            raise click.ClickException("Validation failed")
+
+
+@trust_options
+@signing.command(name='adesverify', help='validate signatures AdES-style')
+@click.argument('infile', type=click.File('rb'))
+@click.option(
+    '--executive-summary',
+    help='only print final judgment on signature validity',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--pretty-print',
+    help='render a prettier summary for the signatures in the file',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--no-revocation-check',
+    help='Do not attempt to check revocation status.',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--validation-time',
+    help=('Override the validation time (ISO 8601 date).'),
+    type=str,
+    required=False,
+)
+@click.option(
+    '--password',
+    required=False,
+    type=str,
+    help='password to access the file (can also be read from stdin)',
+)
+@click.option(
+    '--no-diff-analysis',
+    default=False,
+    type=bool,
+    is_flag=True,
+    help='disable incremental update analysis',
+)
+@click.option(
+    '--require-qualified',
+    default=False,
+    type=bool,
+    is_flag=True,
+    help=(
+        'require qualified signing certificates and '
+        'TSAs (only meaningful with --eutl)'
+    ),
+)
+@click.option(
+    '--no-strict-syntax',
+    help='Attempt to ignore syntactical problems in the input file '
+    'and enable signature validation in hybrid-reference files. '
+    '(warning: this may affect validation results in unexpected '
+    'ways.)',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.pass_context
+def ades_validate_signatures(
+    ctx: click.Context,
+    infile,
+    executive_summary,
+    pretty_print,
+    validation_context,
+    trust,
+    trust_replace,
+    eutl,
+    eutl_force_redownload,
+    eutl_territories,
+    other_certs,
+    no_revocation_check,
+    password,
+    no_diff_analysis,
+    validation_time,
+    no_strict_syntax,
+    require_qualified,
+):
+    _assert_consistent_print_settings(pretty_print, executive_summary)
+    cert_policy, other_certs = (
+        build_cert_validation_policy_and_extract_extra_certs(
+            cli_config=ctx.obj.config,
+            validation_context=validation_context,
+            trust=trust,
+            trust_replace=trust_replace,
+            other_certs=other_certs,
+            eutl=eutl,
+            eutl_force_redownload=eutl_force_redownload,
+            eutl_territories=eutl_territories,
+            revocation_policy=None,
+        )
+    )
+
+    if validation_time:
+        parsed_time = _attempt_iso_dt_parse(validation_time)
+        timing_info = ValidationTimingInfo(
+            parsed_time, parsed_time, point_in_time_validation=True
+        )
+    else:
+        timing_info = ValidationTimingInfo.now()
+
+    if no_revocation_check:
+        rev_policy = CertRevTrustPolicy(NO_REVOCATION)
+    else:
+        rev_policy = CertRevTrustPolicy(
+            REQUIRE_REVINFO,
+            freshness=None,
+            freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
+        )
+    cert_policy = replace(cert_policy, revinfo_policy=rev_policy)
+    sig_policy = SignatureValidationSpec(
+        cert_validation_policy=cert_policy,
+        local_knowledge=LocalKnowledge(
+            known_certs=list(load_certs_from_pemder(other_certs)),
+        ),
+        qualification_requirements=QualificationRequirements()
+        if require_qualified
+        else None,
+        ts_qualification_requirements=QualificationRequirements(
+            require_service_type=QTST_URI
+        )
+        if require_qualified
+        else None,
+    )
+    pdf_sig_policy = PdfSignatureValidationSpec(
+        signature_validation_spec=sig_policy,
+        diff_policy=None if no_diff_analysis else DEFAULT_DIFF_POLICY,
+    )
+
+    with pyhanko_exception_manager():
+        r = _open_file_for_validation(infile, no_strict_syntax, password)
+        all_signatures_ok = True
+        for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
+            fingerprint: str = embedded_sig.signer_cert.sha256.hex()
+            (status_str, signature_ok) = _signature_status_str(
+                status_callback=lambda: asyncio.run(
+                    ades_lta_validation(
+                        embedded_sig,
+                        pdf_sig_policy,
+                        timing_info=timing_info,
+                    )
+                ),
+                pretty_print=pretty_print,
+                executive_summary=executive_summary,
+            )
+            if pretty_print:
+                _pretty_print_result(embedded_sig.field_name, ix, status_str)
+            else:
+                _print_summary_result(
+                    embedded_sig.field_name, fingerprint, status_str
+                )
             all_signatures_ok &= signature_ok
 
         if not all_signatures_ok:
