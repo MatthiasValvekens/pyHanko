@@ -1531,7 +1531,9 @@ async def test_two_signer_infos():
         )
 
 
-def get_ac_aware_signer(actual_signer='signer1'):
+def get_ac_aware_signer(
+    actual_signer='signer1', attr_cert='alice-role-with-rev'
+):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel(actual_signer)),
@@ -1545,17 +1547,19 @@ def get_ac_aware_signer(actual_signer='signer1'):
                 pki_arch.get_cert('leaf-aa'),
             ]
         ),
-        attribute_certs=[
-            pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
-        ],
+        attribute_certs=[pki_arch.get_attr_cert(CertLabel(attr_cert))],
     )
     return signer
 
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_embed_ac(requests_mock):
-    signer = get_ac_aware_signer()
+@pytest.mark.parametrize(
+    'ac_to_include',
+    ['alice-role-with-rev', 'alice-role-norev', 'alice-role-with-rev-crl-only'],
+)
+async def test_embed_ac(requests_mock, ac_to_include):
+    signer = get_ac_aware_signer(attr_cert=ac_to_include)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=signer

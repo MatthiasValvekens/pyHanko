@@ -518,6 +518,45 @@ pki-architectures:
         revocation:
           revoked-since: "2028-12-01T00:00:00+0000"
           reason: key_compromise
+      alice-role-with-rev-crl-only:
+        holder:
+          name: signer1
+          cert: signer1
+        issuer: leaf-aa
+        attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                name: {type: email, value: bigboss@example.com}
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params:
+                crl-repo-names: [leaf-aa]
+        revocation:
+          revoked-since: "2028-12-01T00:00:00+0000"
+          reason: key_compromise
+      alice-role-norev:
+        holder:
+          name: signer1
+          cert: signer1
+        issuer: leaf-aa
+        attributes:
+          - id: role
+            smart-value:
+              schema: role-syntax
+              params:
+                name: {type: email, value: bigboss@example.com}
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: no_rev_avail
     services:
       ocsp:
         leaf-aa:

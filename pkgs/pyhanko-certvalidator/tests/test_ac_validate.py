@@ -9,6 +9,7 @@ from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.context import ACTargetDescription, ValidationContext
 from pyhanko_certvalidator.errors import (
     CRLValidationIndeterminateError,
+    InsufficientRevinfoError,
     InvalidAttrCertificateError,
     InvalidCertificateError,
     PathValidationError,
@@ -618,6 +619,35 @@ async def test_ac_unrevoked_full_path_validation_crl():
         revocation_mode='require',
     )
     await validate.async_validate_ac(ac, vc)
+
+
+@freeze_time('2022-05-01')
+@pytest.mark.asyncio
+async def test_ac_insufficient_revinfo_crl():
+    ac = load_attr_cert(
+        os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+    )
+
+    root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+    interm = load_cert(os.path.join(basic_aa_dir, 'root', 'interm-role.crt'))
+    role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
+
+    root_crl = load_crl(os.path.join(basic_aa_dir, 'root', 'root-all-good.crl'))
+    interm_crl = load_crl(
+        os.path.join(basic_aa_dir, 'interm', 'interm-all-good.crl')
+    )
+
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm, role_aa],
+        crls=[root_crl, interm_crl],
+        moment=datetime.datetime(
+            year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+        ),
+        revocation_mode='require',
+    )
+    with pytest.raises(InsufficientRevinfoError):
+        await validate.async_validate_ac(ac, vc)
 
 
 @freeze_time('2022-05-01')
