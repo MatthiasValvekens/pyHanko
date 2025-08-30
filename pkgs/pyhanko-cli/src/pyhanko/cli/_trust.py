@@ -204,18 +204,31 @@ def build_cert_validation_policy_and_extract_extra_certs(
     validation_context: Optional[str],
     trust: Union[Iterable[str], str],
     trust_replace: bool,
-    eutl: bool,
+    eutl_all: bool,
     eutl_force_redownload: bool,
     eutl_territories: Optional[str],
     other_certs: Iterable[str],
     revocation_policy: Optional[str],
 ):
-    other_certs = list(other_certs)
     overrides: Dict[str, Any] = {}
-    if eutl:
-        overrides['eutl'] = True
-    if eutl_territories:
+    if eutl_territories == '':
+        raise click.ClickException(
+            "argument to --eutl-territories must be non-empty"
+        )
+    if eutl_all and eutl_territories is not None:
+        raise click.ClickException(
+            "--eutl-all and --eutl-territories are mutually exclusive"
+        )
+    elif eutl_all:
+        eutl = True
+        eutl_territories = None
+        overrides['eutl-territories'] = 'all'
+    elif eutl_territories:
+        eutl = True
         overrides['eutl-territories'] = eutl_territories
+    else:
+        eutl = False
+    other_certs = list(other_certs)
     if eutl_force_redownload:
         overrides['eutl-force-redownload'] = True
     if revocation_policy:
@@ -262,9 +275,9 @@ def build_cert_validation_policy_and_extract_extra_certs(
                     eutl_force_redownload=eutl_force_redownload,
                 ),
                 revinfo_policy=revocation_policy or 'require',
-                retroactive_revinfo=cli_config.retroactive_revinfo
-                if cli_config
-                else None,
+                retroactive_revinfo=(
+                    cli_config.retroactive_revinfo if cli_config else None
+                ),
             )
         elif cli_config is not None:
             # load the default settings from the CLI config
@@ -395,15 +408,23 @@ def parse_trust_config_into_policy(
         EXPECTED_CONFIG_KEYS,
         trust_config,
     )
+    territories: Any = trust_config.get('eutl-territories', None)
+    if territories == 'all':
+        territories = None
+        eutl = True
+    elif territories:
+        eutl = True
+    else:
+        eutl = False
     return derive_cert_validation_policy(
         cli_config=cli_config,
         trust_manager_settings=TrustManagerSettings(
             trust=trust_config.get('trust'),
             trust_replace=trust_config.get('trust-replace', False),
-            eutl=trust_config.get('eutl', False),
+            eutl=eutl,
             eutl_lotl_url=trust_config.get('eutl-lotl-url', None),
             lotl_tlso_certs=trust_config.get('lotl-tlso-certs', None),
-            territories=trust_config.get('eutl-territories', None),
+            territories=territories,
             eutl_force_redownload=trust_config.get(
                 'eutl-force-redownload', False
             ),
@@ -424,7 +445,7 @@ def build_vc_kwargs(
     validation_context: Optional[str],
     trust: Union[Iterable[str], str],
     trust_replace: bool,
-    eutl: bool,
+    eutl_all: bool,
     eutl_force_redownload: bool,
     eutl_territories: Optional[str],
     other_certs: Union[Iterable[str], str],
@@ -437,7 +458,7 @@ def build_vc_kwargs(
         validation_context=validation_context,
         trust=trust,
         trust_replace=trust_replace,
-        eutl=eutl,
+        eutl_all=eutl_all,
         eutl_force_redownload=eutl_force_redownload,
         eutl_territories=eutl_territories,
         other_certs=other_certs,
@@ -491,8 +512,13 @@ TRUST_OPTIONS = [
         show_default=True,
     ),
     click.Option(
-        ('--eutl',),
-        help='source trust from EU trusted list (disregard OS trust store)',
+        ('--eutl-all',),
+        help=(
+            'source trust from the complete EU trusted list programme, '
+            'covering all regions (note: this involves downloading all '
+            'trusted lists for all territories, which can take '
+            'considerable time)'
+        ),
         required=False,
         type=bool,
         is_flag=True,
@@ -511,6 +537,8 @@ TRUST_OPTIONS = [
     click.Option(
         ('--eutl-territories',),
         help=(
+            'source trust from the EU trusted list programme, '
+            'including only the regions specified in a '
             'comma-separated list of 2-letter ISO 3166 country codes, '
             'trust lists maintained by other territories will be disregarded.'
         ),

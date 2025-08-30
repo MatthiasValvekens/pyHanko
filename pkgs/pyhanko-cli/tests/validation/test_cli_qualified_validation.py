@@ -7,7 +7,12 @@ from asn1crypto import pem
 from certomancer.registry import CertLabel, EntityLabel, ServiceLabel
 from pyhanko.cli import cli_root
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from test_data.samples import CERTOMANCER, MINIMAL_ONE_FIELD, TESTING_CA_ECDSA
+from test_data.samples import (
+    CERTOMANCER,
+    MINIMAL,
+    MINIMAL_ONE_FIELD,
+    TESTING_CA_ECDSA,
+)
 
 from ..conftest import (
     _write_config,
@@ -80,7 +85,7 @@ def test_validate_eutl(cli_runner, input_to_validate, tl_cache):
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             input_to_validate,
         ],
     )
@@ -108,7 +113,7 @@ def test_validate_eutl_bogus_tl(cli_runner, input_to_validate, tl_cache):
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             input_to_validate,
         ],
     )
@@ -136,7 +141,7 @@ def test_validate_eutl_bogus_lotl(cli_runner, input_to_validate, tl_cache):
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             input_to_validate,
         ],
     )
@@ -178,7 +183,7 @@ def test_validate_eutl_with_extra_roots_ca_is_extra(cli_runner, tl_cache):
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             # Test plumbing doesn't easily allow setting up mocks for more
             # than one PKI architecture, so we disable revocation here.
             '--no-revocation-check',
@@ -218,7 +223,7 @@ def test_validate_eutl_with_extra_roots_ca_on_tl(
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             input_to_validate,
         ],
     )
@@ -249,7 +254,6 @@ def test_validate_config_eutl_limited_territories(
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
             input_to_validate,
         ],
     )
@@ -280,7 +284,6 @@ def test_validate_eutl_config_limited_territories_not_included(
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
             input_to_validate,
         ],
     )
@@ -289,7 +292,38 @@ def test_validate_eutl_config_limited_territories_not_included(
 
 
 @pytest.mark.nosmoke
-@pytest.mark.parametrize('territories', ['be,fr', 'be', ''])
+@pytest.mark.parametrize('territories', ['de,fr', 'de', ['de', 'fr'], [], ''])
+def test_validate_eutl_config_limited_territories_overridden_in_cli(
+    cli_runner, input_to_validate, tl_cache, territories
+):
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {
+                    'eutl-lotl-url': LOTL_URL,
+                    'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
+                    'eutl-territories': territories,
+                }
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            '--eutl-all',
+            input_to_validate,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'judged VALID' in result.output
+
+
+@pytest.mark.nosmoke
+@pytest.mark.parametrize('territories', ['be,fr', 'be'])
 def test_validate_arg_eutl_limited_territories(
     cli_runner, input_to_validate, tl_cache, territories
 ):
@@ -310,7 +344,6 @@ def test_validate_arg_eutl_limited_territories(
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
             '--eutl-territories',
             territories,
             input_to_validate,
@@ -318,6 +351,46 @@ def test_validate_arg_eutl_limited_territories(
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_territories_arg_empty(cli_runner):
+    with open('file.pdf', 'wb') as outf:
+        outf.write(MINIMAL)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            '--eutl-territories',
+            '',
+            'file.pdf',
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'must be non-empty' in result.output
+
+
+@pytest.mark.nosmoke
+def test_validate_inconsistent_eutl_args(cli_runner):
+    with open('file.pdf', 'wb') as outf:
+        outf.write(MINIMAL)
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            '--eutl-all',
+            '--eutl-territories',
+            'be',
+            'file.pdf',
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'mutually exclusive' in result.output
 
 
 @pytest.mark.nosmoke
@@ -342,7 +415,6 @@ def test_validate_eutl_arg_limited_territories_not_included(
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
             '--eutl-territories',
             territories,
             input_to_validate,
@@ -376,7 +448,7 @@ def test_force_attempt_eutl_download(
             'sign',
             'validate',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             '--eutl-force-redownload',
             input_to_validate,
         ],
@@ -417,7 +489,7 @@ def test_validate_eutl_ades(
             'sign',
             'adesverify',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             fname,
         ],
     )
@@ -453,7 +525,7 @@ def test_validate_eutl_ades_qual_required(
         [
             'sign',
             'adesverify',
-            '--eutl',
+            '--eutl-all',
             '--require-qualified',
             fname,
         ],
@@ -486,7 +558,7 @@ def test_validate_eutl_ades_not_qualified(cli_runner, pki_arch, tl_cache):
             'sign',
             'adesverify',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             fname,
         ],
     )
@@ -520,7 +592,7 @@ def test_validate_eutl_ades_not_qualified_summary(
         [
             'sign',
             'adesverify',
-            '--eutl',
+            '--eutl-all',
             fname,
         ],
     )
@@ -551,7 +623,7 @@ def test_validate_eutl_ades_qualified_summary(cli_runner, pki_arch, tl_cache):
         [
             'sign',
             'adesverify',
-            '--eutl',
+            '--eutl-all',
             fname,
         ],
     )
@@ -585,7 +657,7 @@ def test_validate_eutl_ades_not_qualified_required(
         [
             'sign',
             'adesverify',
-            '--eutl',
+            '--eutl-all',
             '--require-qualified',
             fname,
         ],
@@ -619,7 +691,7 @@ def test_validate_eutl_ades_tsa_not_qualified(cli_runner, pki_arch, tl_cache):
             'sign',
             'adesverify',
             '--pretty-print',
-            '--eutl',
+            '--eutl-all',
             fname,
         ],
     )
@@ -657,7 +729,7 @@ def test_validate_eutl_ades_point_in_time_no_revinfo(
             '--validation-time',
             '2025-03-01T22:00:00Z',
             '--no-revocation-check',
-            '--eutl',
+            '--eutl-all',
             fname,
         ],
     )

@@ -49,7 +49,7 @@ def test_basic_validate(cli_runner, root_cert, input_to_validate):
 
 @pytest.mark.parametrize('pki_mocks_enabled', [False])
 def test_basic_validate_fail_without_revinfo(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -67,7 +67,7 @@ def test_basic_validate_fail_without_revinfo(
 
 @pytest.mark.parametrize('pki_mocks_enabled', [True, False])
 def test_basic_validate_with_soft_revocation(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
 ):
     result = cli_runner.invoke(
         cli_root,

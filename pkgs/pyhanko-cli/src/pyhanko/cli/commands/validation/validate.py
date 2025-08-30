@@ -311,7 +311,7 @@ def validate_signatures(
     validation_context,
     trust,
     trust_replace,
-    eutl,
+    eutl_all,
     eutl_force_redownload,
     eutl_territories,
     other_certs,
@@ -360,7 +360,7 @@ def validate_signatures(
         trust=trust,
         trust_replace=trust_replace,
         other_certs=other_certs,
-        eutl=eutl,
+        eutl_all=eutl_all,
         eutl_force_redownload=eutl_force_redownload,
         eutl_territories=eutl_territories,
         retroactive_revinfo=retroactive_revinfo,
@@ -476,7 +476,7 @@ def validate_signatures(
     is_flag=True,
     help=(
         'require qualified signing certificates and '
-        'TSAs (only meaningful with --eutl)'
+        'TSAs (only meaningful with --eutl-* options)'
     ),
 )
 @click.option(
@@ -499,7 +499,7 @@ def ades_validate_signatures(
     validation_context,
     trust,
     trust_replace,
-    eutl,
+    eutl_all,
     eutl_force_redownload,
     eutl_territories,
     other_certs,
@@ -518,7 +518,7 @@ def ades_validate_signatures(
             trust=trust,
             trust_replace=trust_replace,
             other_certs=other_certs,
-            eutl=eutl,
+            eutl_all=eutl_all,
             eutl_force_redownload=eutl_force_redownload,
             eutl_territories=eutl_territories,
             revocation_policy=None,
@@ -547,14 +547,14 @@ def ades_validate_signatures(
         local_knowledge=LocalKnowledge(
             known_certs=list(load_certs_from_pemder(other_certs)),
         ),
-        qualification_requirements=QualificationRequirements()
-        if require_qualified
-        else None,
-        ts_qualification_requirements=QualificationRequirements(
-            require_service_type=QTST_URI
-        )
-        if require_qualified
-        else None,
+        qualification_requirements=(
+            QualificationRequirements() if require_qualified else None
+        ),
+        ts_qualification_requirements=(
+            QualificationRequirements(require_service_type=QTST_URI)
+            if require_qualified
+            else None
+        ),
     )
     pdf_sig_policy = PdfSignatureValidationSpec(
         signature_validation_spec=sig_policy,
