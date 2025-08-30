@@ -187,3 +187,42 @@ a validation context and specify trust settings.
     content timestamps (i.e. timestamps proving that a signature was created
     *after* some given time) aren't accounted for in pyHanko's trust model,
     this is somewhat unavoidable for the time being.
+
+
+Validating signatures according to EU standards
+-----------------------------------------------
+
+.. versionadded:: 0.31.0
+
+To validate against the trusted lists that define the EU public trust, use the ``--eutl-all``
+or ``--eutl-territories [territory-list]`` options.
+Using these options requires installing pyHanko with the ``[etsi,async-http]``
+optional dependency groups.
+
+
+.. code-block:: bash
+
+    pyhanko sign validate --eutl-all --pretty-print document.pdf
+
+.. warning::
+
+    Trusted lists are cached on the filesystem between runs, but
+    an invocation with ``--eutl-all`` on a cold cache can take
+    several minutes to complete, since pyHanko will then download
+    and verify all trusted lists for all EU member states.
+
+    If this isn't what you want, use the ``--eu-territories``
+    flag with a list of country codes to limit the scope.
+
+
+To extract even more relevant information, use the ``adesverify`` command
+instead of ``validate``. This will use a different validation implementation
+that is more closely aligned with the AdES specification, and also includes
+reporting on the qualified status of the certificate(s) involved in the signature.
+
+.. code-block:: bash
+
+    pyhanko sign adesverify --eutl-all --pretty-print document.pdf
+
+
+Note that ``adesverify`` is not exclusive to EUTL mode per se.

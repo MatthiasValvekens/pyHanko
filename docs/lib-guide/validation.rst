@@ -69,13 +69,14 @@ time at which the validation should be carried out.
 
 .. warning::
     PyHanko currently uses a forked version of the ``certvalidator`` library,
-    registered as ``pyhanko-certvalidator`` on PyPI. The changes in the forked
-    version are minor, and the API is intended to be backwards-compatible with
-    the "mainline" version.
+    registered as ``pyhanko-certvalidator`` on PyPI. The forked version
+    has over time diverged considerably from the original, but should be
+    largely backwards-compatible as far as basic usage is concerned.
 
-The principal purpose of the |ValidationContext| is to let the user explicitly
-specify their own trust settings.
-However, it may be necessary to juggle several *different* validation contexts
+Originally, the principal purpose of the |ValidationContext| was to let the
+user explicitly specify their own trust settings, but |ValidationContext| objects
+are stateful: they also accumulate revocation data and validation results.
+It may be necessary to juggle several *different* validation contexts
 over the course of a validation operation. For example, when performing LTV
 validation, pyHanko will first validate the signature's timestamp against the
 user-specified validation context, and then build a new validation context
@@ -101,6 +102,71 @@ w.r.t. a specific trust root.
         sig = r.embedded_signatures[0]
         status = validate_pdf_signature(sig, vc)
         print(status.pretty_print_details())
+
+
+Validating signatures against EU trusted lists
+----------------------------------------------
+
+.. versionadded:: 0.30.0
+
+With the optional ``[etsi]`` dependency group installed,
+pyHanko also supports using EU trusted lists as trust roots.
+PyHanko will verify the XML signatures on the lists while collecting
+them--default bootstrap keys for the EU list-of-the-lists (LOTL) are
+bundled with the library.
+
+
+.. code-block::
+
+    import asyncio
+    import aiohttp
+    from datetime import timedelta
+    from pyhanko_certvalidator import ValidationContext
+    from pyhanko.pdf_utils.reader import PdfFileReader
+    from pyhanko.sign.validation import async_validate_pdf_signature
+    from pyhanko.sign.validation.qualified.eutl_fetch import (
+        FileSystemTLCache,
+        lotl_to_registry,
+    )
+    from pyhanko.sign.validation.qualified.tsp import TSPTrustManager
+
+
+    async def prepare_registry():
+        async with aiohttp.ClientSession() as client:
+            tl_cache = FileSystemTLCache(
+                '/var/cache/trust-lists',
+                expire_after=timedelta(days=14)
+            )
+            registry, errors = await lotl_to_registry(
+                # 'None' => bootstrap from the list-of-the-lists
+                # Note: downloading the full EUTL for all member states
+                # on a cold cache can take a while
+                # pass only_territories='be,fr,de' if you want to
+                # limit the number of lists to take into account.
+                lotl_xml=None,
+                client=client,
+                cache=tl_cache,
+            )
+
+            # the 'errors' are recoverable errors, they generally
+            # mean that the collected data may be incomplete
+            return registry
+
+
+    async def run():
+        registry = await prepare_registry()
+        trust_manager = TSPTrustManager(tsp_registry=registry)
+        vc = ValidationContext(
+            trust_manager=trust_manager,
+            allow_fetching=True,
+            revocation_mode='require'
+        )
+
+        with open('document.pdf', 'rb') as doc:
+            r = PdfFileReader(doc)
+            sig = r.embedded_signatures[0]
+            status = await async_validate_pdf_signature(sig, vc)
+            print(status.pretty_print_details())
 
 
 Long-term verifiability checking
