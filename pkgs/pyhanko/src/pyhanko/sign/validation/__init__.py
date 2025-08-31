@@ -17,6 +17,8 @@ from .generic_cms import (
     async_validate_cms_signature,
     async_validate_detached_cms,
 )
+
+# noinspection PyDeprecation
 from .ltv import (
     RevocationInfoValidationType,
     apply_adobe_revocation_info,
@@ -371,6 +373,16 @@ def validate_pdf_ltv_signature(
     :return:
         The status of the signature.
     """
+
+    warnings.warn(
+        "'validate_pdf_ltv_signature' uses a deprecated "
+        "ad-hoc validation methodology, use 'ades_lta_validation' instead "
+        "for a more standards-based approach. This function may be removed "
+        "in a future pyHanko version.",
+        DeprecationWarning,
+    )
+
+    # noinspection PyDeprecation
     coro = async_validate_pdf_ltv_signature(
         embedded_sig=embedded_sig,
         validation_type=validation_type,

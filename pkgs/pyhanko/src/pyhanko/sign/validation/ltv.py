@@ -1,4 +1,5 @@
 import logging
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -268,13 +269,6 @@ async def _establish_timestamp_trust_lta(
     )
 
 
-# TODO verify formal PAdES requirements for timestamps
-# TODO verify other formal PAdES requirements (coverage, etc.)
-# TODO signature/verification policy-based validation! (PAdES-EPES-* etc)
-#  (this is a different beast, though)
-# TODO "tolerant" timestamp validation, where we tolerate problems in the
-#  timestamp chain provided that newer timestamps are "strong" enough to
-#  cover the gap.
 async def async_validate_pdf_ltv_signature(
     embedded_sig: EmbeddedPdfSignature,
     validation_type: RevocationInfoValidationType,
@@ -287,6 +281,9 @@ async def async_validate_pdf_ltv_signature(
     skip_diff: bool = False,
 ) -> PdfSignatureStatus:
     """
+    .. deprecated:: 0.31.0
+        Use :func:`~pyhanko.sign.validation.ades.ades_lta_validation` instead.
+
     .. versionadded:: 0.9.0
 
     Validate a PDF LTV signature according to a particular profile.
@@ -325,6 +322,14 @@ async def async_validate_pdf_ltv_signature(
     :return:
         The status of the signature.
     """
+
+    warnings.warn(
+        "'async_validate_pdf_ltv_signature' uses a deprecated "
+        "ad-hoc validation methodology, use 'ades_lta_validation' instead "
+        "for a more standards-based approach. This function may be removed "
+        "in a future pyHanko version.",
+        DeprecationWarning,
+    )
 
     # create a fresh copy of the validation_kwargs
     vc_kwargs: dict = dict(validation_context_kwargs or {})

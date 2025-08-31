@@ -528,9 +528,10 @@ async def test_sv_sign_subfilter_hint():
     assert emb_sig.sig_object['/SubFilter'] == PADES.value
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_sv_sign_addrevinfo_req(requests_mock):
+async def test_sv_sign_addrevinfo_req(requests_mock, expect_deprecation):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO, add_rev_info=True
     )

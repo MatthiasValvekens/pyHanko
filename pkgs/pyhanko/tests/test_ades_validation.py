@@ -38,7 +38,6 @@ from pyhanko.sign.validation.policy_decl import (
     QualificationRequirements,
     SignatureValidationSpec,
 )
-from pyhanko.sign.validation.qualified import eutl_parse
 from pyhanko.sign.validation.qualified.q_status import (
     QcPrivateKeyManagementType,
     QualificationResult,
@@ -76,7 +75,6 @@ from pyhanko_certvalidator.registry import (
     SimpleTrustManager,
 )
 from pyhanko_certvalidator.validate import async_validate_path
-from test_data.certomancer_trust_lists import certomancer_pki_as_trusted_list
 from test_data.samples import (
     CERTOMANCER,
     MINIMAL_ONE_FIELD,
@@ -185,9 +183,15 @@ ESEAL_SIGNER = signers.SimpleSigner(
 
 
 def _testing_ca_registry():
+    from pyhanko.sign.validation.qualified import eutl_parse
+    from test_data.certomancer_trust_lists import (
+        certomancer_pki_as_trusted_list,
+    )
+
     tl_xml = certomancer_pki_as_trusted_list(
         TESTING_CA_QUALIFIED, EntityLabel('root')
     )
+
     registry, _ = eutl_parse.trust_list_to_registry(
         tl_xml, tlso_certs=[TESTING_CA_QUALIFIED.get_cert(CertLabel('root'))]
     )
@@ -195,6 +199,7 @@ def _testing_ca_registry():
 
 
 @pytest.mark.asyncio
+@pytest.mark.nosmoke
 @pytest.mark.parametrize(
     'with_requirements',
     [True, False],
@@ -235,6 +240,7 @@ async def test_pades_basic_happy_path_with_tl(requests_mock, with_requirements):
 
 
 @pytest.mark.asyncio
+@pytest.mark.nosmoke
 @pytest.mark.parametrize(
     'cert_label,requirements',
     [
@@ -343,6 +349,7 @@ async def test_embedded_cades_with_time_happy_path(requests_mock):
 
 
 @pytest.mark.asyncio
+@pytest.mark.nosmoke
 @pytest.mark.parametrize(
     'with_requirements',
     [True, False],
@@ -397,6 +404,7 @@ async def test_embedded_cades_with_time_happy_path_with_tl(
 
 
 @pytest.mark.asyncio
+@pytest.mark.nosmoke
 @pytest.mark.parametrize(
     'cert_label,tsa_label,requirements,ts_requirements',
     [
@@ -462,6 +470,7 @@ async def test_embedded_cades_with_time_fail_qualification_requirements(
         assert result.ades_subindic == AdESIndeterminate.SIG_CONSTRAINTS_FAILURE
 
 
+@pytest.mark.nosmoke
 @pytest.mark.asyncio
 async def test_embedded_cades_with_time_non_qtst_tsa_fail(requests_mock):
     tsa = timestamps.HTTPTimeStamper(
@@ -501,6 +510,7 @@ async def test_embedded_cades_with_time_non_qtst_tsa_fail(requests_mock):
         assert result.ades_subindic == AdESIndeterminate.SIG_CONSTRAINTS_FAILURE
 
 
+@pytest.mark.nosmoke
 @pytest.mark.asyncio
 async def test_embedded_cades_with_time_non_qtst_tsa_pass(requests_mock):
     tsa = timestamps.HTTPTimeStamper(
@@ -672,6 +682,7 @@ async def test_simulate_future_lta_happy_path(requests_mock, with_lta):
     )
 
 
+@pytest.mark.nosmoke
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'with_requirements',
@@ -723,6 +734,7 @@ async def test_simulate_future_lta_happy_path_eseal(
 
 
 @freeze_time('2020-11-20')
+@pytest.mark.nosmoke
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'cert_label,tsa_label,requirements,ts_requirements',

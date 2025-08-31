@@ -276,20 +276,33 @@ This, in turn, has to do with the fact that it is not always reasonable for
 certificate authorities to publicly supply historical validity proofs for all
 certificates they ever signed at all possible points in time.
 
+
+The last property makes it so that the validity of the
+
 Hence, in order for a signature to remain valid long after signing, the signer
-needs to supply two additional pieces of data:
+generally needs to ensure the following criteria are met:
 
-1. a trusted timestamp signed by a time stamping authority (TSA), to prove the
-   time of signing to the validator;
-2. revocation information (relevant CRLs or OCSP responses) for all certificates
-   in the chain of trust of the signer's certificate, and of the TSA.
+ * The document contains a proof-of-existence for the signature
+   (usually in the form of a cryptographic timestamp computed over the signature).
+ * The document contains proof of non-revocation (CRL or OCSP response) for
+   the signer's certificate and the accompanying timestamp.
+ * The document contains proofs-of-existence for the above revocation information
+   (usually in the form of another cryptographic timestamp computed over all of the above).
 
-For both of these, it is crucial that the relevant data is collected at the time
-of signing and embedded into the signed document.
+The third criterion ensures that the signature can be maintained essentially
+"ad infinitum", as long as the party responsible for archiving the document
+extends the timestamp chain whenever the last timestamp is about to expire (while
+also embedding revocation data for the previous timestamp in the process).
+
 The revocation information in particular can be delicate, since the validator
 needs to be able to verify the validity of not only the signer's certificate,
 but also that of all issuers in the chain of trust, the OCSP responder's
 certificates used to sign the embedded OCSP responses, etc.
+Typically, the relevant data is collected at the time of signing and
+embedded into the signed document, but there are circumstances where the collection
+of such information is delayed intentionally (e.g. to observe a "cooldown period"
+after signing during which the signer's certificate must remain valid, to prevent
+abuse of stolen keys before the accompanying certificate can be revoked).
 
 Time stamp tokens are commonly obtained from TSA's via the HTTP-based protocol
 specified in :rfc:`3161`.

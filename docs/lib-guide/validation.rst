@@ -19,6 +19,7 @@ Validation functionality
 .. |PdfSignatureStatus| replace:: :class:`~.pyhanko.sign.validation.status.PdfSignatureStatus`
 .. |DocumentSecurityStore| replace:: :class:`~.pyhanko.sign.validation.dss.DocumentSecurityStore`
 .. |ValidationContext| replace:: :class:`~.pyhanko_certvalidator.ValidationContext`
+.. |AdESLTAValidationResult| replace:: :class:`~.pyhanko.sign.validation.ades.AdESLTAValidationResult`
 
 General API design
 ------------------
@@ -32,8 +33,8 @@ Its most important components are
 * the various subclasses of |SignatureStatus| (encoding the validity status
   of signatures and timestamps);
 * :func:`~.pyhanko.sign.validation.validate_pdf_signature` and
-  :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`, for running
-  the actual validation logic.
+  the more advanced functions in :mod:`pyhanko.sign.validation.ades`
+  for running the actual validation logic.
 * the |DocumentSecurityStore| class and surrounding auxiliary classes
   (responsible for handling DSS updates in documents).
 
@@ -52,9 +53,7 @@ that they were applied to the document. The result is cached on the reader
 object.
 
 These objects can be used to inspect the signature manually, if necessary,
-but they are mainly intended to be used as input for
-:func:`~.pyhanko.sign.validation.validate_pdf_signature` and
-:func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`.
+but they are mainly intended to be used as input for validation APIs.
 
 
 Validating a PDF signature
@@ -116,7 +115,7 @@ them--default bootstrap keys for the EU list-of-the-lists (LOTL) are
 bundled with the library.
 
 
-.. code-block::
+.. code-block:: python
 
     import asyncio
     import aiohttp
@@ -172,88 +171,83 @@ bundled with the library.
 Long-term verifiability checking
 --------------------------------
 
+.. versionchanged:: 0.31.0
+
+    The :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
+    function was deprecated in favour of the newer AdES-based
+    functionality in :mod:`pyhanko.sign.validation.ades`.
+
+
 As explained :ref:`here <pdf-signing-background>` and
 :ref:`here <ltv-signing>` in the CLI documentation, making sure that PDF
 signatures remain verifiable over long time scales requires special care.
-Signatures that have this property are often called "LTV enabled", where LTV
-is short for *long-term verifiable*.
+Signatures that have this property are called "LTV enabled" in some
+implementations, where LTV is short for *long-term verifiable*.
 
-To verify a LTV-enabled signature, you should use
-:func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature` instead of
-:func:`~.pyhanko.sign.validation.validate_pdf_signature`.
-The API is essentially the same, but
-:func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature` takes
-a required ``validation_type`` parameter. The ``validation_type`` is an instance
-of the enum :class:`.pyhanko.sign.validation.RevocationInfoValidationType` that
-tells pyHanko where to find and how to process the revocation data for the
-signature(s) involved\ [#profilesniff]_.
-See the documentation for :class:`.pyhanko.sign.validation.RevocationInfoValidationType`
-for more information on the available profiles.
+The notion of what it means to be "LTV enabled" is not entirely well-defined
+(since it inherently depends on the set of trust roots and policies
+used by the validator). PyHanko exposes the (now deprecated)
+:func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature` function
+to make this assessment, but the implementation is quite ad-hoc and
+therefore overly opinionated. See
+:func:`~.pyhanko.sign.validation.ades.simulate_future_ades_lta_validation`
+for a similar but more standards-based approach.
 
-In the initial |ValidationContext| passed to
-:func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature` via
-``bootstrap_validation_context``, you typically want to leave ``moment``
-unset (i.e. verify the signature at the current time).
 
-This is the validation context that will be used to establish the time of
-signing. When this step is done, pyHanko will construct a new validation
-context pointed towards that point in time.
-You can specify keyword arguments to the |ValidationContext| constructor using
-the ``validation_context_kwargs`` parameter of
-:func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`.
-In typical situations, you can leave the ``bootstrap_validation_context``
-parameter off entirely, and let pyHanko construct an initial validation context
-using ``validation_context_kwargs`` as input.
-
-The PAdES B-LTA validation example below should clarify that.
+To validate a signature while taking into account embedded historical
+validation data, we recommend using
+:func:`~.pyhanko.sign.validation.ades.ades_lta_validation`.
+This function is part of pyHanko's AdES validation API, which
+aims to implement the validation methodology laid out in
+ETSI EN 319 102-1. Here's what that looks like.
 
 .. code-block:: python
 
     from pyhanko.keys import load_cert_from_pemder
     from pyhanko.pdf_utils.reader import PdfFileReader
-    from pyhanko.sign.validation import (
-        validate_pdf_ltv_signature, RevocationInfoValidationType
+    from pyhanko.sign.validation.ades import ades_lta_validation
+    from pyhanko.sign.validation.policy_decl import (
+        PdfSignatureValidationSpec,
+        SignatureValidationSpec
     )
+    from pyhanko_certvalidator.context import CertValidationPolicySpec
+    from pyhanko_certvalidator.policy_decl import REQUIRE_REVINFO
+    from pyhanko_certvalidator.registry import SimpleTrustManager
 
-    root_cert = load_cert_from_pemder('path/to/certfile')
+    async def run():
+        root_cert = load_cert_from_pemder('path/to/certfile')
 
-    with open('document.pdf', 'rb') as doc:
-        r = PdfFileReader(doc)
-        sig = r.embedded_signatures[0]
-        status = validate_pdf_ltv_signature(
-            sig, RevocationInfoValidationType.PADES_LTA,
-            validation_context_kwargs={'trust_roots': [root_cert]}
+        trust_manager = SimpleTrustManager.build(
+            trust_roots=[root_cert],
         )
-        print(status.pretty_print_details())
+        validation_spec = PdfSignatureValidationSpec(
+            SignatureValidationSpec(
+                cert_validation_policy=CertValidationPolicySpec(
+                    trust_manager=trust_manager,
+                    revinfo_policy=REQUIRE_REVINFO,
+                ),
+            )
+        )
+        with open('document.pdf', 'rb') as doc:
+            r = PdfFileReader(doc)
+            sig = r.embedded_signatures[0]
+            ades_status = await ades_lta_validation(
+                sig, validation_spec
+            )
+            print(ades_status.ades_subindic)
+            print(ades_status.api_status.pretty_print_details())
+
 
 Notice how, rather than passing a |ValidationContext| object directly, the
-example code only supplies ``validation_context_kwargs``. These keyword arguments
-will be used both to construct an initial validation context (at the current time),
-and to construct any subsequent validation contexts for point-of-time validation
-once the signing time is known.
+example code supplies a declarative "validation spec" instead. The AdES
+validator will internally create |ValidationContext| objects as necessary,
+and supply them with revocation data in accordance with the rules around
+proof-of-existence management.
 
-In the example, the ``validation_context_kwargs`` parameter
-ensures that all validation will happen w.r.t. one specific
-trust root.
-
-If all this sounds confusing, that's because it is. You may want to take a look
-at the source of :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
-and its tests, and/or play around a little.
-
-
-.. warning::
-    Even outside the LTV context, pyHanko always distinguishes between
-    validation of the signing time and validation of the signature itself.
-    In fact, :func:`~.pyhanko.sign.validation.validate_pdf_signature` reports both
-    (see the docs for
-    :attr:`~.pyhanko.sign.validation.status.StandardCMSSignatureStatus.timestamp_validity`).
-
-    However, since the LTV adjudication process is entirely moot without a trusted record
-    of the signing time, :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
-    will raise a :class:`~.pyhanko.sign.validation.errors.SignatureValidationError`
-    if the timestamp token (or timestamp chain) fails to validate.
-    Otherwise, :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
-    returns a |PdfSignatureStatus| as usual.
+The status object returned also includes more information than just
+the "regular" |PdfSignatureStatus|: |AdESLTAValidationResult| also contains
+some AdES-specific status codes and structured validation outputs; the
+pyHanko-specific |PdfSignatureStatus| is included as an attribute.
 
 
 Incremental update analysis
@@ -390,9 +384,9 @@ Probing different aspects of the validity of a signature
 
 
 The |PdfSignatureStatus| objects returned by
-:func:`~.pyhanko.sign.validation.validate_pdf_signature` and
-:func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature` provide a fairly
-granular account of the validity of the signature.
+:func:`~.pyhanko.sign.validation.validate_pdf_signature`
+and other validation API functions provide a fairly granular
+account of the validity of the signature.
 
 You can print a human-readable validity report by calling
 :meth:`~.pyhanko.sign.validation.status.StandardCMSSignatureStatus.pretty_print_details`, and
@@ -408,10 +402,3 @@ includes information on things like
 * seed value constraint compliance.
 
 For more information, take a look at |PdfSignatureStatus| in the API reference.
-
-
-.. rubric:: Footnotes
-
-.. [#profilesniff]
-   Currently, pyHanko can't figure out by itself which LTV strategy is being
-   used, so the caller has to specify it explicitly.

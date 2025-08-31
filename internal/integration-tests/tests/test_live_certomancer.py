@@ -124,13 +124,18 @@ async def _init_validation_context(session, arch, *, backend=None, **kwargs):
     return vc, root
 
 
+# noinspection PyDeprecation
 async def _check_pades_result(out, roots, session, rivt_pades):
     r = PdfFileReader(out)
-    status = await async_validate_pdf_ltv_signature(
-        r.embedded_signatures[0],
-        rivt_pades,
-        {'trust_roots': roots, 'fetcher_backend': _fetcher_backend(session)},
-    )
+    with pytest.warns(DeprecationWarning):
+        status = await async_validate_pdf_ltv_signature(
+            r.embedded_signatures[0],
+            rivt_pades,
+            {
+                'trust_roots': roots,
+                'fetcher_backend': _fetcher_backend(session),
+            },
+        )
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
 

@@ -1581,9 +1581,10 @@ async def test_embed_ac(requests_mock, ac_to_include):
     assert role['role_name'].native == 'bigboss@example.com'
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_embed_ac_revinfo_adobe_style(requests_mock):
+async def test_embed_ac_revinfo_adobe_style(requests_mock, expect_deprecation):
     signer = get_ac_aware_signer()
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))

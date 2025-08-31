@@ -208,7 +208,7 @@ jobs:
             pytest $COVERAGE_SCOPE \
             -m "not nosmoke" --cov-report=xml:python-smoke-test-lib-coverage.xml \
             tests/test_signing.py tests/test_diff_analysis.py tests/test_crypt.py \
-            tests/test_cms.py
+            tests/test_cms.py tests/test_ades_validation.py
       - name: Run CLI test suite with minimal deps
         # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
         # the PKCS#11 & qualified validation parts

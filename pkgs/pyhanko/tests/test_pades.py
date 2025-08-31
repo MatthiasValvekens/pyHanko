@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import Iterable
+from typing import Any, Dict, Iterable
 
 import pytest
 from asn1crypto import cms, core, tsp
@@ -233,8 +233,9 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
     assert len(dss.ocsps) == 1
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_revinfo_live_no_timestamp(requests_mock):
+def test_pades_revinfo_live_no_timestamp(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
     out = signers.sign_pdf(
@@ -255,7 +256,8 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
         )
 
 
-def test_pades_revinfo_live(requests_mock):
+# noinspection PyDeprecation
+def test_pades_revinfo_live(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
     with freeze_time('2020-11-01'):
@@ -317,8 +319,9 @@ def test_pades_revinfo_live(requests_mock):
             )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_revinfo_live_update(requests_mock):
+def test_pades_revinfo_live_update(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
     out = signers.sign_pdf(
@@ -365,9 +368,12 @@ def test_update_no_timestamps():
     assert r.embedded_timestamp_signatures[0].sig_field['/TU'] == "Timestamp"
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_pades_revinfo_live_update_to_disk(requests_mock, tmp_path):
+async def test_pades_revinfo_live_update_to_disk(
+    requests_mock, tmp_path, expect_deprecation
+):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
     out = await signers.async_sign_pdf(
@@ -406,12 +412,14 @@ async def test_pades_revinfo_live_update_to_disk(requests_mock, tmp_path):
         assert emb_sig is r.embedded_regular_signatures[0]
 
 
-def test_pades_revinfo_live_lta(requests_mock):
+def test_pades_revinfo_live_lta(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     _test_pades_revinfo_live_lta(w, requests_mock)
 
 
-def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
+def test_pades_revinfo_live_lta_in_place(
+    requests_mock, tmp_path, expect_deprecation
+):
     from pathlib import Path
 
     inout_file: Path = tmp_path / "test.pdf"
@@ -421,7 +429,9 @@ def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
         _test_pades_revinfo_live_lta(w, requests_mock, in_place=True)
 
 
-def test_pades_revinfo_live_lta_direct_flush(requests_mock, tmp_path):
+def test_pades_revinfo_live_lta_direct_flush(
+    requests_mock, tmp_path, expect_deprecation
+):
     from pathlib import Path
 
     in_file: Path = tmp_path / "test.pdf"
@@ -434,7 +444,9 @@ def test_pades_revinfo_live_lta_direct_flush(requests_mock, tmp_path):
             _test_pades_revinfo_live_lta(w, requests_mock, output=out)
 
 
-def test_pades_revinfo_live_lta_direct_flush_newfile(requests_mock, tmp_path):
+def test_pades_revinfo_live_lta_direct_flush_newfile(
+    requests_mock, tmp_path, expect_deprecation
+):
     # test transparent handling of non-readable/seekable output buffers
     from pathlib import Path
 
@@ -470,6 +482,7 @@ def _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs):
     return out
 
 
+# noinspection PyDeprecation
 def _test_pades_revinfo_live_lta_validate(
     out, requests_mock, no_write=False, has_more_sigs=False
 ):
@@ -577,8 +590,9 @@ def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
     _test_pades_revinfo_live_lta_validate(out, requests_mock)
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_lta_dss_indirect_arrs(requests_mock):
+def test_pades_lta_dss_indirect_arrs(requests_mock, expect_deprecation):
     testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
     live_testing_vc(requests_mock)
     with open(testfile, 'rb') as f:
@@ -596,7 +610,8 @@ def test_pades_lta_dss_indirect_arrs(requests_mock):
         )
 
 
-def test_pades_lta_sign_twice(requests_mock):
+# noinspection PyDeprecation
+def test_pades_lta_sign_twice(requests_mock, expect_deprecation):
     stream = BytesIO(MINIMAL_TWO_FIELDS)
     w = IncrementalPdfFileWriter(stream)
     with freeze_time('2020-10-01'):
@@ -714,8 +729,9 @@ def test_standalone_document_timestamp(requests_mock):
     assert not tampered.intact and tampered.valid
 
 
+# noinspection PyDeprecation
 @pytest.mark.parametrize('with_vri', [True, False])
-def test_add_revinfo_later(requests_mock, with_vri):
+def test_add_revinfo_later(requests_mock, with_vri, expect_deprecation):
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
 
@@ -757,8 +773,11 @@ def test_add_revinfo_later(requests_mock, with_vri):
         assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
+# noinspection PyDeprecation
 @pytest.mark.parametrize('with_vri', [True, False])
-def test_fix_incomplete_revinfo_later(requests_mock, with_vri):
+def test_fix_incomplete_revinfo_later(
+    requests_mock, with_vri, expect_deprecation
+):
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
 
@@ -803,7 +822,8 @@ def test_fix_incomplete_revinfo_later(requests_mock, with_vri):
         assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
-def test_add_revinfo_and_timestamp(requests_mock):
+# noinspection PyDeprecation
+def test_add_revinfo_and_timestamp(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
     # create signature without revocation info
@@ -852,7 +872,8 @@ def test_add_revinfo_and_timestamp(requests_mock):
             )
 
 
-def test_add_revinfo_and_lta_timestamp(requests_mock):
+# noinspection PyDeprecation
+def test_add_revinfo_and_lta_timestamp(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
     # create signature without revocation info
@@ -1145,12 +1166,16 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
         trust_roots = TRUST_ROOTS
 
     emb_sig = r.embedded_signatures[0]
+    # TODO migrate this integration test to the new AdES checking style
+    #  (which is more relevant anyway)
     # perform LTA validation
-    status = validate_pdf_ltv_signature(
-        emb_sig,
-        RevocationInfoValidationType.PADES_LTA,
-        {'trust_roots': trust_roots},
-    )
+    with pytest.warns(DeprecationWarning):
+        # noinspection PyDeprecation
+        status = validate_pdf_ltv_signature(
+            emb_sig,
+            RevocationInfoValidationType.PADES_LTA,
+            {'trust_roots': trust_roots},
+        )
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
     assert len(r.embedded_signatures) == 2
@@ -1188,8 +1213,9 @@ def test_dss_setting_validation():
         ).assert_viable()
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_one_revision(requests_mock):
+def test_pades_one_revision(requests_mock, expect_deprecation):
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
         w,
@@ -1248,8 +1274,9 @@ def _lazy_pades_signature(requests_mock):
     return out
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_ltv_legacy_policy_sufficient(requests_mock):
+def test_pades_ltv_legacy_policy_sufficient(requests_mock, expect_deprecation):
     out = _lazy_pades_signature(requests_mock)
     r = PdfFileReader(out)
     # soft fail should not apply to the internal timestamp, so we expect
@@ -1272,8 +1299,9 @@ def test_pades_ltv_legacy_policy_sufficient(requests_mock):
         )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_ltv_upgrade_soft_fail(requests_mock):
+def test_pades_ltv_upgrade_soft_fail(requests_mock, expect_deprecation):
     out = _lazy_pades_signature(requests_mock)
     r = PdfFileReader(out)
     # soft fail should not apply to the internal timestamp, so we expect
@@ -1290,8 +1318,9 @@ def test_pades_ltv_upgrade_soft_fail(requests_mock):
         )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_ltv_upgrade_lax_policy(requests_mock):
+def test_pades_ltv_upgrade_lax_policy(requests_mock, expect_deprecation):
     out = _lazy_pades_signature(requests_mock)
     r = PdfFileReader(out)
     # as in the soft_fail case, we expect this to fail
@@ -1307,6 +1336,7 @@ def test_pades_ltv_upgrade_lax_policy(requests_mock):
         )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize(
     'dss_settings',
@@ -1320,7 +1350,7 @@ def test_pades_ltv_upgrade_lax_policy(requests_mock):
         DSSContentSettings(),
     ],
 )
-def test_pades_two_revisions(requests_mock, dss_settings):
+def test_pades_two_revisions(requests_mock, dss_settings, expect_deprecation):
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
         w,
@@ -1347,6 +1377,7 @@ def test_pades_two_revisions(requests_mock, dss_settings):
     )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize(
     'dss_settings',
@@ -1374,7 +1405,9 @@ def test_pades_two_revisions(requests_mock, dss_settings):
         ),
     ],
 )
-def test_pades_lta_two_revisions(requests_mock, dss_settings):
+def test_pades_lta_two_revisions(
+    requests_mock, dss_settings, expect_deprecation
+):
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
         w,
@@ -1402,8 +1435,9 @@ def test_pades_lta_two_revisions(requests_mock, dss_settings):
     )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_lta_noskip(requests_mock):
+def test_pades_lta_noskip(requests_mock, expect_deprecation):
     dss_settings = DSSContentSettings(
         placement=SigDSSPlacementPreference.SEPARATE_REVISION,
         include_vri=False,
@@ -1436,8 +1470,9 @@ def test_pades_lta_noskip(requests_mock):
     )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_post_ts_autosuppress(requests_mock):
+def test_pades_post_ts_autosuppress(requests_mock, expect_deprecation):
     # test if the post-timestamp DSS update is automatically suppressed
     # if we sign with the exact same TSA for both the sig & the document TS
     # (keeping the VC constant as well)
@@ -1477,8 +1512,9 @@ def test_pades_post_ts_autosuppress(requests_mock):
     )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_max_autosuppress(requests_mock):
+def test_pades_max_autosuppress(requests_mock, expect_deprecation):
     # test if all timestamp-related DSS updates are suppressed
     # if we sign with the exact same TSA for both the sig & the document TS
     # (keeping the VC constant as well) and all relevant DSS updates were
@@ -1519,8 +1555,9 @@ def test_pades_max_autosuppress(requests_mock):
     )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_independent_tsa(requests_mock):
+def test_pades_independent_tsa(requests_mock, expect_deprecation):
     # test signing/validation behaviour with an independent TSA
 
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
@@ -1584,8 +1621,9 @@ def test_sign_with_policy():
     assert sp_id.chosen['sig_policy_id'].native == '2.999'
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_pades_revinfo_live_nofullchain():
+def test_pades_revinfo_live_nofullchain(expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w,
@@ -1629,9 +1667,10 @@ def test_pades_revinfo_live_nofullchain():
         assert status.valid and not status.trusted, status.summary()
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_pades_lta_no_embed_root(requests_mock):
+async def test_pades_lta_no_embed_root(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     cr = SimpleCertificateStore()
     cr.register_multiple(FROM_CA.cert_registry)
@@ -1670,9 +1709,12 @@ async def test_pades_lta_no_embed_root(requests_mock):
     )
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_pades_live_ac_presign_validation(requests_mock):
+async def test_pades_live_ac_presign_validation(
+    requests_mock, expect_deprecation
+):
     # integration test for heavy-duty autofetching logic with ACs
     # NOTE: certificate autofetching is not tested due to lack of availability
     # in Illusionist (at the time of writing)
@@ -1767,10 +1809,11 @@ async def test_pades_live_ac_presign_validation(requests_mock):
     assert role['role_name'].native == 'bigboss@example.com'
 
 
+# noinspection PyDeprecation
 @pytest.mark.parametrize('with_force_revinfo', [True, False])
 @pytest.mark.asyncio
 async def test_pades_lta_live_ac_presign_validation(
-    requests_mock, with_force_revinfo
+    requests_mock, with_force_revinfo, expect_deprecation
 ):
     # Same as the above, but with LTA instead (+some time manipulation)
 
@@ -1841,10 +1884,10 @@ async def test_pades_lta_live_ac_presign_validation(
     with freeze_time('2028-02-01'):
         r = PdfFileReader(out)
         s = r.embedded_signatures[0]
-        vc_kwargs = {
+        vc_kwargs: Dict[str, Any] = {
             'trust_roots': [pki_arch.get_cert('root')],
         }
-        ac_vc_kwargs = {
+        ac_vc_kwargs: Dict[str, Any] = {
             'trust_roots': [pki_arch.get_cert('root-aa')],
         }
         if not with_force_revinfo:

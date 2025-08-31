@@ -1,5 +1,6 @@
 import asyncio
 import getpass
+import warnings
 from dataclasses import replace
 from datetime import datetime
 
@@ -47,7 +48,7 @@ from pyhanko_certvalidator.policy_decl import (
     FreshnessReqType,
 )
 
-__all__ = ['validate_signatures']
+__all__ = ['validate_signatures', 'ades_validate_signatures']
 
 
 def _assert_consistent_print_settings(pretty_print, executive_summary):
@@ -87,14 +88,22 @@ def _signature_status(
             skip_diff=skip_diff,
         )
     else:
-        status = validation.validate_pdf_ltv_signature(
-            embedded_sig,
-            ltv_profile,
-            key_usage_settings=key_usage_settings,
-            force_revinfo=force_revinfo,
-            validation_context_kwargs=vc_kwargs,
-            skip_diff=skip_diff,
+        warnings.warn(
+            "LTV validation as part of the validate command is deprecated. "
+            "Use pyhanko sign adesverify instead.",
+            UserWarning,
         )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            # noinspection PyDeprecation
+            status = validation.validate_pdf_ltv_signature(
+                embedded_sig,
+                ltv_profile,
+                key_usage_settings=key_usage_settings,
+                force_revinfo=force_revinfo,
+                validation_context_kwargs=vc_kwargs,
+                skip_diff=skip_diff,
+            )
     return status
 
 

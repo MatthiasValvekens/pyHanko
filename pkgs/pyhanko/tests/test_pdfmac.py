@@ -347,9 +347,10 @@ def test_signature_nondefault_hash(encryption_type):
     return out
 
 
+# noinspection PyDeprecation
 @pdf_mac_good
 @freeze_time('2020-11-01')
-def test_pdf_mac_pades(requests_mock):
+def test_pdf_mac_pades(requests_mock, expect_deprecation):
     w = init_sample_doc(EncryptionType.STANDARD)
 
     trust_roots = [ECC_ROOT_CERT]

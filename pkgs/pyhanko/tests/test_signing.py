@@ -537,8 +537,9 @@ def test_ocsp_without_nextupdate_embed(requests_mock):
     assert rdata['responses'][0]['next_update'].native is None
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_adobe_revinfo_live(requests_mock):
+def test_adobe_revinfo_live(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
     out = signers.sign_pdf(
@@ -576,8 +577,9 @@ async def test_meta_tsa_verify():
         await cv.async_validate_usage({'time_stamping'})
 
 
+# noinspection PyDeprecation
 @freeze_time('2020-11-01')
-def test_adobe_revinfo_live_nofullchain():
+def test_adobe_revinfo_live_nofullchain(expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w,
@@ -1065,8 +1067,11 @@ def test_no_revinfo_to_be_added(requests_mock, in_place):
     assert len(new_dss.crls) == 1
 
 
+# noinspection PyDeprecation
 @pytest.mark.parametrize('with_vri', [True, False])
-def test_add_revinfo_timestamp_separate_no_dss(requests_mock, with_vri):
+def test_add_revinfo_timestamp_separate_no_dss(
+    requests_mock, with_vri, expect_deprecation
+):
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
 
@@ -1110,7 +1115,8 @@ def test_add_revinfo_timestamp_separate_no_dss(requests_mock, with_vri):
         assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
-def test_add_revinfo_without_timestamp(requests_mock):
+# noinspection PyDeprecation
+def test_add_revinfo_without_timestamp(requests_mock, expect_deprecation):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
     # create signature without revocation info

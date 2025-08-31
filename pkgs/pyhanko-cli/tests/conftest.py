@@ -102,18 +102,13 @@ def root_cert(pki_arch):
 
 
 @pytest.fixture
-def user_cert(pki_arch):
-    return _write_cert(
-        pki_arch, CertLabel('signer1'), 'signer.crt', use_pem=False
-    )
-
-
-@pytest.fixture
-def cert_chain(pki_arch, root_cert, user_cert):
+def cert_chain(pki_arch, root_cert):
     return (
         root_cert,
         _write_cert(pki_arch, CertLabel('interm'), 'interm.cert.pem'),
-        user_cert,
+        _write_cert(
+            pki_arch, CertLabel('signer1'), 'signer.crt', use_pem=False
+        ),
     )
 
 
@@ -156,13 +151,15 @@ def _validate_last_sig_in(arch: PKIArchitecture, pdf_file, *, strict):
         if r.embedded_timestamp_signatures:
             # TODO once we move the CLI over to the new AdES engine,
             #  use that as the baseline for testing
-            status = validate_pdf_ltv_signature(
-                last_sig,
-                validation_context_kwargs=vc_kwargs,
-                validation_type=RevocationInfoValidationType.PADES_LTA,
-                bootstrap_validation_context=vc,
-                force_revinfo=True,
-            )
+            with pytest.warns(DeprecationWarning):
+                # noinspection PyDeprecation
+                status = validate_pdf_ltv_signature(
+                    last_sig,
+                    validation_context_kwargs=vc_kwargs,
+                    validation_type=RevocationInfoValidationType.PADES_LTA,
+                    bootstrap_validation_context=vc,
+                    force_revinfo=True,
+                )
         else:
             status = validate_pdf_signature(
                 last_sig, signer_validation_context=vc
