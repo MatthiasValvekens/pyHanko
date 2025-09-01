@@ -2174,13 +2174,13 @@ async def ades_lta_validation(
                 init_control_time=timing_info.validation_time,
                 is_timestamp=False,
             )
-            if (
-                updated_api_status is not None
-                and not updated_api_status.validation_path
-            ):
+            if updated_api_status is not None:
                 updated_api_status = dataclasses.replace(
                     updated_api_status,
-                    validation_path=past_validation_path,
+                    validation_path=(
+                        updated_api_status.validation_path
+                        or past_validation_path
+                    ),
                     trust_problem_indic=None,
                 )
             updated_poe_manager = past_sig_poe_manager

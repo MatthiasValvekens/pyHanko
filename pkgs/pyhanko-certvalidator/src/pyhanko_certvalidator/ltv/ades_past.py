@@ -129,9 +129,10 @@ async def past_validate(
             revinfo_manager=validation_data_handlers.revinfo_manager,
         )
         logger.info(
-            f"AdES time slide yields %s as the control time for path with "
-            f"leaf {path.describe_leaf()}",
+            "AdES time slide yields %s as the control time for path with "
+            "leaf %s",
             control_time,
+            path.describe_leaf(),
         )
     except ValidationError as e:
         raise TimeSlideFailure(

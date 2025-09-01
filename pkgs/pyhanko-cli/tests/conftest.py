@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import logging
 import os
@@ -15,11 +16,20 @@ from freezegun import freeze_time
 from pyhanko.pdf_utils.misc import PdfStrictReadError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import (
-    RevocationInfoValidationType,
-    validate_pdf_ltv_signature,
     validate_pdf_signature,
 )
+from pyhanko.sign.validation.ades import ades_lta_validation
+from pyhanko.sign.validation.policy_decl import (
+    PdfSignatureValidationSpec,
+    SignatureValidationSpec,
+)
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.context import CertValidationPolicySpec
+from pyhanko_certvalidator.policy_decl import (
+    REQUIRE_REVINFO,
+    CertRevTrustPolicy,
+)
+from pyhanko_certvalidator.registry import SimpleTrustManager
 from test_data.samples import (
     MINIMAL,
     TESTING_CA,
@@ -138,8 +148,6 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_last_sig_in(arch: PKIArchitecture, pdf_file, *, strict):
-    vc_kwargs = dict(trust_roots=[arch.get_cert(CertLabel('root'))])
-    vc = ValidationContext(**vc_kwargs, allow_fetching=True)
     with open(pdf_file, 'rb') as result:
         logger.info(f"Validating last signature in {pdf_file}...")
         r = PdfFileReader(result, strict=strict)
@@ -148,19 +156,30 @@ def _validate_last_sig_in(arch: PKIArchitecture, pdf_file, *, strict):
             r.decrypt("ownersecret")
         last_sig = r.embedded_regular_signatures[-1]
         # if there's a docts, we assume it's PAdES
+        trust_manager = SimpleTrustManager.build(
+            trust_roots=[arch.get_cert(CertLabel('root'))],
+        )
         if r.embedded_timestamp_signatures:
-            # TODO once we move the CLI over to the new AdES engine,
-            #  use that as the baseline for testing
-            with pytest.warns(DeprecationWarning):
-                # noinspection PyDeprecation
-                status = validate_pdf_ltv_signature(
+            ades_status = asyncio.run(
+                ades_lta_validation(
                     last_sig,
-                    validation_context_kwargs=vc_kwargs,
-                    validation_type=RevocationInfoValidationType.PADES_LTA,
-                    bootstrap_validation_context=vc,
-                    force_revinfo=True,
+                    PdfSignatureValidationSpec(
+                        SignatureValidationSpec(
+                            cert_validation_policy=CertValidationPolicySpec(
+                                trust_manager=trust_manager,
+                                revinfo_policy=CertRevTrustPolicy(
+                                    REQUIRE_REVINFO,
+                                ),
+                            ),
+                        )
+                    ),
                 )
+            )
+            status = ades_status.api_status
         else:
+            vc = ValidationContext(
+                trust_manager=trust_manager, allow_fetching=True
+            )
             status = validate_pdf_signature(
                 last_sig, signer_validation_context=vc
             )
