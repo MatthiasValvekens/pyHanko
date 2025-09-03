@@ -341,7 +341,8 @@ modified after signing (according to the diff policy used).
     and ill-defined, so until pyHanko matures, you probably shouldn't rely
     on its judgments too heavily.
 
-    Should you run into unexpected results, by all means file an issue.
+    Should you run into unexpected results, by all means
+    `start a discussion <https://github.com/MatthiasValvekens/pyHanko/discussions>`_.
     All information helps!
 
 If necessary, you can opt to turn off difference analysis altogether.
