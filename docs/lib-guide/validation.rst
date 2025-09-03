@@ -66,7 +66,8 @@ provides mechanisms to request and keep track of revocation data.
 For LTV validation purposes, a |ValidationContext| can also specify a point in
 time at which the validation should be carried out.
 
-.. warning::
+.. note::
+
     PyHanko currently uses a forked version of the ``certvalidator`` library,
     registered as ``pyhanko-certvalidator`` on PyPI. The forked version
     has over time diverged considerably from the original, but should be
