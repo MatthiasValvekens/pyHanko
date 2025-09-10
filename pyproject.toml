@@ -6,6 +6,9 @@ maintainers = [{ name = "Matthias Valvekens", email = "dev@mvalvekens.be" }]
 license = "MIT"
 requires-python = ">=3.9"
 version = "0.0.0"
+dependencies = [
+    "pytest-asyncio>=0.26.0",
+]
 
 [project.readme]
 file = "README.md"
