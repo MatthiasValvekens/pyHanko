@@ -78,7 +78,7 @@ testing-base = [
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
     "certomancer>=0.13.0,<0.14",
-    "pytest-cov>=4.0,<6.3",
+    "pytest-cov>=4.0,<7.1",
     "pytest-asyncio==0.26.0",
 ]
 testing-aiohttp = [
