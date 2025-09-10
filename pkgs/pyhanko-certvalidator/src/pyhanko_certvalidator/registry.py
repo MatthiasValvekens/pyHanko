@@ -404,7 +404,7 @@ class CertificateRegistry(SimpleCertificateStore):
             if cert.authority_key_identifier and issuer.key_identifier:
                 if cert.authority_key_identifier != issuer.key_identifier:
                     continue
-            elif cert.authority_issuer_serial:
+            if cert.authority_issuer_serial:
                 if cert.authority_issuer_serial != issuer.issuer_serial:
                     continue
 
