@@ -82,22 +82,12 @@ def lta_update(
     type=str,
     default=None,
 )
-@click.option(
-    '--apply-lta-timestamp',
-    help='Apply a document timestamp after adding revocation info.',
-    required=False,
-    type=bool,
-    default=False,
-    is_flag=True,
-    show_default=True,
-)
 @click.pass_context
 def ltv_fix(
     ctx,
     infile,
     field,
     timestamp_url,
-    apply_lta_timestamp,
     validation_context,
     trust_replace,
     trust,
@@ -106,11 +96,6 @@ def ltv_fix(
     eutl_territories,
     other_certs,
 ):
-    if apply_lta_timestamp and not timestamp_url:
-        raise click.ClickException(
-            "Please specify a timestamp server using --timestamp-url."
-        )
-
     vc_kwargs = build_vc_kwargs(
         cli_config=ctx.obj.config,
         validation_context=validation_context,
@@ -139,7 +124,7 @@ def ltv_fix(
         emb_sig, ValidationContext(**vc_kwargs), in_place=True
     )
 
-    if apply_lta_timestamp:
+    if timestamp_url:
         timestamper = HTTPTimeStamper(timestamp_url)
         signers.PdfTimeStamper(timestamper).timestamp_pdf(
             IncrementalPdfFileWriter(output),

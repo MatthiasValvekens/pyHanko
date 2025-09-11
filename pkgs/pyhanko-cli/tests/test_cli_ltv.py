@@ -1,6 +1,7 @@
 import pytest
 from certomancer.registry import CertLabel
 from pyhanko.cli import cli_root
+from pyhanko.pdf_utils.reader import PdfFileReader
 from test_data.samples import TESTING_CA
 
 from .conftest import (
@@ -70,8 +71,14 @@ def test_cli_lta_update(
     assert not result.exception, result.output
 
 
+@pytest.mark.parametrize('with_lta_timestamp', [True, False])
 def test_cli_ltvfix(
-    pki_arch_name, timestamp_url, cli_runner, root_cert, p12_keys
+    pki_arch_name,
+    timestamp_url,
+    cli_runner,
+    root_cert,
+    p12_keys,
+    with_lta_timestamp,
 ):
     cfg = {
         'pkcs12-setups': {
@@ -113,41 +120,18 @@ def test_cli_ltvfix(
             'Sig1',
             '--validation-context',
             'test',
-            '--apply-lta-timestamp',
-            '--timestamp-url',
-            timestamp_url,
+            *(('--timestamp-url', timestamp_url) if with_lta_timestamp else ()),
             SIGNED_OUTPUT_PATH,
         ],
     )
     assert not result.exception, result.output
 
-
-def test_cli_ltvfix_require_timestamp(cli_runner):
-    cfg = {
-        'validation-contexts': {
-            'test': {
-                'trust': _write_cert(TESTING_CA, CertLabel('root'), 'root.crt'),
-            }
-        },
-    }
-
-    _write_config(cfg)
-
-    result = cli_runner.invoke(
-        cli_root,
-        [
-            'sign',
-            'ltvfix',
-            '--field',
-            'Sig1',
-            '--validation-context',
-            'test',
-            '--apply-lta-timestamp',
-            INPUT_PATH,
-        ],
-    )
-    assert result.exit_code == 1
-    assert "Please specify a timestamp server" in result.output
+    with open(SIGNED_OUTPUT_PATH, 'rb') as f:
+        r = PdfFileReader(f)
+        if with_lta_timestamp:
+            assert len(r.embedded_timestamp_signatures) == 1
+        else:
+            assert not r.embedded_timestamp_signatures
 
 
 def test_cli_ltvfix_require_signed_field(cli_runner):
