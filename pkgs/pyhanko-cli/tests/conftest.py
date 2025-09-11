@@ -52,6 +52,9 @@ def _const(v):
 
 
 DEFAULT_CERTOMANCER_ARCHITECTURES = ["rsa", "ecdsa", "ed25519", "ed448"]
+# no ed448 timestamping in Certomancer
+# FIXME deal with the bug on the Certomancer end
+LTV_CERTOMANCER_ARCHITECTURES = ["rsa", "ecdsa", "ed25519"]
 CERTOMANCER_ARCHITECTURES = {
     "rsa": TESTING_CA,
     "ecdsa": TESTING_CA_ECDSA,

@@ -6,15 +6,11 @@ from test_data.samples import TESTING_CA
 from .conftest import (
     DUMMY_PASSPHRASE,
     INPUT_PATH,
+    LTV_CERTOMANCER_ARCHITECTURES,
     SIGNED_OUTPUT_PATH,
     _write_cert,
     _write_config,
 )
-
-# no ed448 timestamping in Certomancer
-# FIXME deal with the bug on the Certomancer end
-
-LTV_CERTOMANCER_ARCHITECTURES = ["rsa", "ecdsa", "ed25519"]
 
 
 @pytest.fixture(scope="module", params=LTV_CERTOMANCER_ARCHITECTURES)

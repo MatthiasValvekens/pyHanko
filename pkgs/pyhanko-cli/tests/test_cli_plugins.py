@@ -1,17 +1,8 @@
-import sys
-
-import pytest
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.simple import PKCS12Plugin
 from pyhanko.cli.plugin_api import register_signing_plugin
 
 from .conftest import _write_config
-
-if sys.version_info < (3, 8):
-    pytest.skip(
-        allow_module_level=True,
-        reason="Plugins are only supported on Python 3.8+",
-    )
 
 
 class DummyTestPlugin(PKCS12Plugin):
@@ -47,6 +38,28 @@ def test_load_plugins_from_config(cli_runner):
     output = result.output
     assert 'test-dummy' in output
     assert 'manual-dummy' in output
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            'test-dummy',
+            '--help',
+        ],
+    )
+    assert not result.exception
+
+
+def test_gracefully_handle_dupe_plugins(cli_runner):
+    _write_config(
+        {
+            'plugins': [
+                'tests.test_cli_plugins:DummyTestPlugin',
+                'tests.test_cli_plugins:DummyTestPlugin',
+            ]
+        }
+    )
 
     result = cli_runner.invoke(
         cli_root,

@@ -28,7 +28,7 @@ full_version = f"{lib_version} (CLI {cli_version})"
         f'YAML file to load configuration from[default: {DEFAULT_CONFIG_FILE}]'
     ),
     required=False,
-    type=click.File('r'),
+    type=str,
 )
 @click.option(
     '--verbose',
@@ -60,7 +60,8 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
             )
     else:
         try:
-            config_text = config.read()
+            with open(config, 'r') as f:
+                config_text = f.read()
         except IOError as e:
             raise click.ClickException(
                 f"Failed to read configuration: {e!s}",
@@ -95,12 +96,6 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
         log_config['pyhanko_certvalidator.fetchers'] = LogConfig(
             level=logging.WARNING, output=log_output
         )
-        if 'fontTools.subset' not in log_config:
-            # the fontTools subsetter has a very noisy INFO log, so
-            # set that one to WARNING by default
-            log_config['fontTools.subset'] = LogConfig(
-                level=logging.WARNING, output=log_output
-            )
 
     logging_setup(log_config, verbose)
 

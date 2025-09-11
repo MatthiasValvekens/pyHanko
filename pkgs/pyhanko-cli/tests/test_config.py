@@ -1,5 +1,6 @@
 import dataclasses
 import hashlib
+import os
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -10,7 +11,7 @@ import pytest
 import yaml
 from asn1crypto import x509
 from pyhanko import stamp
-from pyhanko.cli import cache, config
+from pyhanko.cli import cache, cli_root, config
 from pyhanko.cli._trust import (
     DEFAULT_TIME_TOLERANCE,
     parse_trust_config_into_policy,
@@ -18,6 +19,7 @@ from pyhanko.cli._trust import (
 from pyhanko.cli.commands.signing.pkcs11_cli import ModuleConfigWrapper
 from pyhanko.cli.commands.signing.simple import KeyFileConfigWrapper
 from pyhanko.cli.config import CLIConfig
+from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import DEFAULT_ROOT_LOGGER_LEVEL, StdLogOutput
@@ -215,7 +217,7 @@ def test_read_logging_config():
 
 
 def test_read_logging_config_defaults():
-    expected_loggers = [None, 'signxml.processor']
+    expected_loggers = [None, 'signxml.processor', 'fontTools.subset']
 
     cli_config: config.CLIRootConfig = config.parse_cli_config(
         """
@@ -1264,3 +1266,35 @@ def test_cache_dir_config():
     assert cache.get_cache_dir(cli_config) is not None
     cli_config = dataclasses.replace(cli_config, cache_dir="test")
     assert cache.get_cache_dir(cli_config) == Path("test")
+
+
+def test_fail_to_read_default_config(cli_runner):
+    os.mkdir(DEFAULT_CONFIG_FILE)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--help',
+        ],
+    )
+    output = result.output
+    assert result.exit_code == 1
+    assert f'Failed to read {DEFAULT_CONFIG_FILE}' in output
+
+
+def test_fail_to_read_nondefault_config(cli_runner):
+    os.mkdir('foo.yml')
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            '--config',
+            'foo.yml',
+            'sign',
+            'addsig',
+            '--help',
+        ],
+    )
+    output = result.output
+    assert result.exit_code == 1
+    assert 'Failed to read configuration' in output

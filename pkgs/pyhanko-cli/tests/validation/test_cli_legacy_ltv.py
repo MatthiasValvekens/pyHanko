@@ -2,11 +2,8 @@ import pytest
 from certomancer.registry import CertLabel, ServiceLabel
 from pyhanko.cli import cli_root
 
+from ..conftest import LTV_CERTOMANCER_ARCHITECTURES
 from .conftest import write_ltv_input_to_validate
-
-# no ed448 timestamping in Certomancer
-# FIXME deal with the bug on the Certomancer end
-LTV_CERTOMANCER_ARCHITECTURES = ["rsa", "ecdsa", "ed25519"]
 
 
 @pytest.fixture(scope="module", params=LTV_CERTOMANCER_ARCHITECTURES)

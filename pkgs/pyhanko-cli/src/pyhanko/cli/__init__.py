@@ -9,4 +9,4 @@ __all__ = ['cli_root', 'launch']
 
 
 def launch():
-    cli_root(prog_name='pyhanko')
+    cli_root(prog_name='pyhanko')  # pragma: nocover

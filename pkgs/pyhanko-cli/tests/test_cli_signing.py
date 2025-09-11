@@ -1,5 +1,6 @@
 import asyncio
 import getpass
+import itertools
 from typing import Optional
 
 import pytest
@@ -25,6 +26,7 @@ from test_data.samples import (
 from .conftest import (
     DUMMY_PASSPHRASE,
     INPUT_PATH,
+    LTV_CERTOMANCER_ARCHITECTURES,
     SIGNED_OUTPUT_PATH,
     _const,
     _write_cert,
@@ -304,7 +306,10 @@ def test_cli_addsig_pemder_with_unreadable_additional_certs(cli_runner):
     assert "Could not load certificates" in result.output
 
 
-@pytest.mark.parametrize('with_timestamp', ['claimed', 'tsa'])
+@pytest.mark.parametrize(
+    'with_timestamp,pki_arch_name',
+    list(itertools.product(['claimed', 'tsa'], LTV_CERTOMANCER_ARCHITECTURES)),
+)
 def test_cli_addsig_pemder_detached(
     cli_runner,
     pki_arch_name,
@@ -314,9 +319,6 @@ def test_cli_addsig_pemder_detached(
     timestamp_url,
     with_timestamp,
 ):
-    if pki_arch_name == 'ed448' and with_timestamp == 'tsa':
-        # FIXME deal with this bug on the Certomancer end
-        pytest.skip("ed448 timestamping in Certomancer doesn't work")
     cfg = _pemder_setup_config(user_key, cert_chain)
     _write_config(cfg)
     result = cli_runner.invoke(
@@ -723,12 +725,10 @@ def test_cli_sign_field_param_required(cli_runner):
     assert "There are no empty signature fields" in result.output
 
 
+@pytest.mark.parametrize('pki_arch_name', LTV_CERTOMANCER_ARCHITECTURES)
 def test_cli_pades_lta(
     pki_arch_name, timestamp_url, cli_runner, root_cert, p12_keys
 ):
-    if pki_arch_name == 'ed448':
-        # FIXME deal with this bug on the Certomancer end
-        pytest.skip("ed448 timestamping in Certomancer doesn't work")
     cfg = {
         'pkcs12-setups': {
             'test': {'pfx-file': p12_keys, 'pfx-passphrase': DUMMY_PASSPHRASE}
@@ -764,12 +764,10 @@ def test_cli_pades_lta(
     assert not result.exception, result.output
 
 
+@pytest.mark.parametrize('pki_arch_name', LTV_CERTOMANCER_ARCHITECTURES)
 def test_cli_pades_lta_nonstrict(
     pki_arch_name, timestamp_url, cli_runner, root_cert, p12_keys
 ):
-    if pki_arch_name == 'ed448':
-        # FIXME deal with this bug on the Certomancer end
-        pytest.skip("ed448 timestamping in Certomancer doesn't work")
     cfg = {
         'pkcs12-setups': {
             'test': {'pfx-file': p12_keys, 'pfx-passphrase': DUMMY_PASSPHRASE}
@@ -1277,10 +1275,8 @@ def test_cli_with_signature_dictionary_entries(cli_runner):
         assert last_sign['/Location'] == 'THIS-COMPUTER'
 
 
+@pytest.mark.parametrize('pki_arch_name', LTV_CERTOMANCER_ARCHITECTURES)
 def test_cli_timestamp(pki_arch_name, timestamp_url, cli_runner, root_cert):
-    if pki_arch_name == 'ed448':
-        # FIXME deal with this bug on the Certomancer end
-        pytest.skip("ed448 timestamping in Certomancer doesn't work")
     cfg = {
         'validation-contexts': {
             'test': {

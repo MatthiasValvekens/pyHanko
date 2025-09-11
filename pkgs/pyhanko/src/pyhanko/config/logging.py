@@ -77,8 +77,9 @@ def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
 
     log_config: Dict[Optional[str], LogConfig] = {
         None: LogConfig(root_logger_level, root_logger_output),
-        # this module is quite noisy, so we tone it down a notch by default
+        # these modules are quite noisy, so we tone them down a notch by default
         'signxml.processor': LogConfig(logging.WARNING, root_logger_output),
+        'fontTools.subset': LogConfig(logging.WARNING, root_logger_output),
     }
 
     logging_by_module = log_config_spec.get('by-module', {})
