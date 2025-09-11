@@ -337,6 +337,30 @@ def test_decrypt_with_private_key(
     _check_first_page(output_path)
 
 
+def test_decrypt_with_wrong_key(cli_runner, monkeypatch):
+    key_file, cert_file = _pubkey_decryption_pemder(PUBKEY_TEST_DECRYPTER)
+    with open(INPUT_PATH, 'wb') as inf:
+        inf.write(MINIMAL_PUBKEY_AES256)
+    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
+
+    output_path = 'out.pdf'
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'decrypt',
+            'pemder',
+            INPUT_PATH,
+            output_path,
+            '--key',
+            key_file,
+            '--cert',
+            cert_file,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'Failed to decrypt the file' in result.output
+
+
 def test_decrypt_with_private_key_no_force_change_of_encryption_forbidden(
     cli_runner, pubkey_decryption, monkeypatch
 ):

@@ -42,8 +42,7 @@ class OpenForSigning:
         return writer
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.handle:
-            self.handle.close()
+        self.handle.close()
 
 
 def open_for_signing(infile_path: str, lenient: bool):

@@ -160,6 +160,78 @@ def test_cli_addsig_pemder_with_setup(cli_runner, cert_chain, user_key):
     assert not result.exception, result.output
 
 
+@pytest.mark.parametrize('pki_arch_name', ['ed25519'])
+def test_cli_addsig_pemder_with_wrong_key_usage(
+    cli_runner, cert_chain, user_key, root_cert, pki_arch_name
+):
+    cfg = _pemder_setup_config(user_key, cert_chain)
+    cfg['validation-contexts'] = {
+        'test': {
+            'trust': root_cert,
+            # makes no sense
+            'signer-key-usage': 'crl_sign',
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            '--validation-context',
+            'test',
+            '--with-validation-info',
+            'pemder',
+            '--no-pass',
+            '--pemder-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "not valid for the purpose" in result.output
+
+
+@pytest.mark.xfail
+@pytest.mark.parametrize('pki_arch_name', ['ed25519'])
+def test_cli_addsig_pemder_with_wrong_extd_key_usage(
+    cli_runner, cert_chain, user_key, root_cert, pki_arch_name
+):
+    # This validation should actually fail, but there's
+    # no support for extended key usage in presign checks now,
+    # so we use this test to document the limitation
+    cfg = _pemder_setup_config(user_key, cert_chain)
+    cfg['validation-contexts'] = {
+        'test': {
+            'trust': root_cert,
+            'signer-extd-key-usage': '2.999',
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            '--validation-context',
+            'test',
+            '--with-validation-info',
+            'pemder',
+            '--no-pass',
+            '--pemder-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+
+
 def test_cli_addsig_pemder_with_setup_in_custom_config_file(
     cli_runner, cert_chain, user_key
 ):
@@ -307,8 +379,12 @@ def test_cli_addsig_pemder_with_unreadable_additional_certs(cli_runner):
 
 
 @pytest.mark.parametrize(
-    'with_timestamp,pki_arch_name',
-    list(itertools.product(['claimed', 'tsa'], LTV_CERTOMANCER_ARCHITECTURES)),
+    'with_timestamp,pki_arch_name,fmt',
+    list(
+        itertools.product(
+            ['claimed', 'tsa'], LTV_CERTOMANCER_ARCHITECTURES, ['pem', 'der']
+        )
+    ),
 )
 def test_cli_addsig_pemder_detached(
     cli_runner,
@@ -318,6 +394,7 @@ def test_cli_addsig_pemder_detached(
     user_key,
     timestamp_url,
     with_timestamp,
+    fmt,
 ):
     cfg = _pemder_setup_config(user_key, cert_chain)
     _write_config(cfg)
@@ -331,7 +408,7 @@ def test_cli_addsig_pemder_detached(
                 if with_timestamp == 'tsa'
                 else ()
             ),
-            '--detach-pem',
+            '--detach-pem' if fmt == 'pem' else '--detach',
             'pemder',
             '--no-pass',
             '--pemder-setup',
@@ -343,8 +420,12 @@ def test_cli_addsig_pemder_detached(
     assert not result.exception, result.output
     with open(INPUT_PATH, 'rb') as in_data:
         with open('output.sig.pem', 'rb') as sig_data:
-            sig_pem_bytes = sig_data.read()
-            sd = ContentInfo.load(pem.unarmor(sig_pem_bytes)[2])['content']
+            sig_data_bytes = sig_data.read()
+            if fmt == 'pem':
+                cms_der = pem.unarmor(sig_data_bytes)[2]
+            else:
+                cms_der = sig_data_bytes
+            sd = ContentInfo.load(cms_der)['content']
             status = asyncio.run(
                 async_validate_detached_cms(
                     in_data,
@@ -639,6 +720,70 @@ def test_cli_sign_visible_with_style(
         ],
     )
     assert not result.exception, result.output
+
+
+def test_cli_sign_visible_with_qr_style(
+    cli_runner, cert_chain, user_key, post_validate
+):
+    cfg = {'stamp-styles': {'test': {'type': 'qr', 'background': '__stamp__'}}}
+    _write_config(cfg)
+    root_cert, interm_cert, user_cert = cert_chain
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--stamp-url',
+            'https://example.com',
+            '--style-name',
+            'test',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            user_cert,
+            '--chain',
+            interm_cert,
+            '--key',
+            user_key,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+@pytest.mark.parametrize('pki_arch_name', ['ed25519'])
+def test_cli_sign_visible_with_qr_style_omit_stamp_url(
+    cli_runner, cert_chain, user_key, post_validate, pki_arch_name
+):
+    cfg = {'stamp-styles': {'test': {'type': 'qr', 'background': '__stamp__'}}}
+    _write_config(cfg)
+    root_cert, interm_cert, user_cert = cert_chain
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--style-name',
+            'test',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            user_cert,
+            '--chain',
+            interm_cert,
+            '--key',
+            user_key,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'QR stamp styles require the --stamp-url option' in result.output
 
 
 def test_cli_add_field_then_sign(cli_runner, cert_chain, user_key):
@@ -1122,8 +1267,17 @@ def test_cli_underspecified_visible_new_field_no_name(cli_runner):
     assert "you did not specify a bounding box" in result.output
 
 
-@pytest.mark.parametrize('field_name_passed', [True, False])
-def test_cli_explicit_style_but_field_invisible(cli_runner, field_name_passed):
+@pytest.mark.parametrize(
+    'field_name_passed,box',
+    list(
+        itertools.product(
+            [True, False], [None, (0, 0, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1)]
+        )
+    ),
+)
+def test_cli_explicit_style_but_field_invisible(
+    cli_runner, field_name_passed, box
+):
     cfg = {
         'stamp-styles': {'test': {'type': 'text', 'background': '__stamp__'}}
     }
@@ -1134,7 +1288,7 @@ def test_cli_explicit_style_but_field_invisible(cli_runner, field_name_passed):
         from pyhanko.sign import fields
 
         fields.append_signature_field(
-            w, sig_field_spec=fields.SigFieldSpec("Sig1")
+            w, sig_field_spec=fields.SigFieldSpec("Sig1", box=box)
         )
         w.write_in_place()
 
