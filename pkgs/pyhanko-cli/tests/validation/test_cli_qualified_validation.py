@@ -1,3 +1,4 @@
+import itertools
 from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
@@ -458,14 +459,18 @@ def test_force_attempt_eutl_download(
 
 
 @pytest.mark.nosmoke
-@pytest.mark.parametrize('overloaded_trust', [True, False])
+@pytest.mark.parametrize(
+    'overloaded_trust,pades_style',
+    list(itertools.product([True, False], [True, False])),
+)
 def test_validate_eutl_ades(
-    cli_runner, pki_arch, tl_cache, root_cert, overloaded_trust
+    cli_runner, pki_arch, tl_cache, root_cert, overloaded_trust, pades_style
 ):
     fname = write_ltv_input_to_validate(
         pki_arch,
         signer_cert_label=CertLabel('esig-qualified'),
         tsa_label=ServiceLabel('tsa-qualified'),
+        pades_style=pades_style,
     )
     vc_settings = {
         'eutl-lotl-url': LOTL_URL,

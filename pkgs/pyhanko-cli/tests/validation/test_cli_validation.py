@@ -4,7 +4,7 @@ import re
 from io import BytesIO
 
 import pytest
-from asn1crypto import pem
+from asn1crypto import cms, pem
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
@@ -373,6 +373,27 @@ def test_basic_validate_with_validation_time(
         assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
+def test_validation_time_syntax_error(
+    cli_runner,
+):
+    with open('file.pdf', 'wb') as inf:
+        inf.write(MINIMAL_ONE_FIELD)
+
+    with freeze_time(FREEZE_DT + datetime.timedelta(days=3650)):
+        result = cli_runner.invoke(
+            cli_root,
+            [
+                'sign',
+                'validate',
+                '--validation-time',
+                '2020-99-99T99:99:99Z',
+                'file.pdf',
+            ],
+        )
+        assert result.exit_code == 1
+        assert 'could not be parsed'
+
+
 def test_basic_validate_with_claimed_time(
     cli_runner, root_cert, input_to_validate
 ):
@@ -408,7 +429,8 @@ def test_basic_validate_untrusted(cli_runner, root_cert, input_to_validate):
         assert result.exit_code == 1
 
 
-def test_basic_validate_with_weak_hash(cli_runner):
+@pytest.mark.parametrize('pretty', [True, False])
+def test_basic_validate_with_weak_hash(cli_runner, pretty):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     fname = write_input_to_validate(
         TESTING_CA, 'to_validate.pdf', w, weakened=True
@@ -420,10 +442,12 @@ def test_basic_validate_with_weak_hash(cli_runner):
         [
             'sign',
             'validate',
+            *(('--pretty-print',) if pretty else ()),
             fname,
         ],
     )
     assert result.exit_code == 1
+    assert 'An error occurred while' in result.output
     assert 'sha1_rsa is not allowed' in result.output
 
 
@@ -692,9 +716,14 @@ def test_basic_validate_context_malformed_cert(cli_runner):
 
 
 @pytest.fixture(params=['pem', 'der'])
-def detached_input_to_validate(pki_arch: PKIArchitecture, request):
+def detached_input_type(request):
+    return request.param
+
+
+@pytest.fixture
+def detached_input_to_validate(pki_arch: PKIArchitecture, detached_input_type):
     outf = write_input_to_validate(pki_arch, 'detached.sig', w=None)
-    if request.param == 'pem':
+    if detached_input_type == 'pem':
         with open(outf, 'rb') as derf:
             sig = derf.read()
         with open(outf, 'wb') as pemf:
@@ -719,3 +748,69 @@ def test_basic_detached_validate(
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED' in result.output
+
+
+@pytest.mark.parametrize('detached_input_type', ['der'])
+def test_fail_detached_validate(
+    cli_runner, root_cert, detached_input_to_validate, detached_input_type
+):
+    with open(detached_input_to_validate, 'rb') as inf:
+        d = inf.read()
+    d = d[:-4] + b"\xde\xad\xbe\xef"
+    with open(detached_input_to_validate, 'wb') as inf:
+        inf.write(d)
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--detached',
+            detached_input_to_validate,
+            '--trust',
+            root_cert,
+            INPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'Error: INVALID' in result.output
+
+
+def test_detached_validate_malformed_input(
+    cli_runner,
+):
+    with open('data.pem', 'wb') as f:
+        f.write(b"\xde\xad\xbe\xef")
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--detached',
+            'data.pem',
+            INPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'Could not parse CMS object' in result.output
+
+
+def test_detached_validate_bad_cms_type(
+    cli_runner,
+):
+    with open('data.der', 'wb') as f:
+        f.write(cms.ContentInfo({'content_type': 'data'}).dump())
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--detached',
+            'data.der',
+            INPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'CMS content type is not signedData' in result.output

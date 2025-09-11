@@ -8,7 +8,7 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel, ServiceLabel
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
-from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
+from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, fields, sign_pdf
 from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko_certvalidator import ValidationContext
@@ -83,6 +83,7 @@ def write_ltv_input_to_validate(
     signer_cert_label: CertLabel,
     tsa_label: ServiceLabel,
     fname: str = 'to-validate.pdf',
+    pades_style: bool = True,
 ):
     registry = SimpleCertificateStore()
     signing_cert_spec = pki_arch.get_cert_spec(signer_cert_label)
@@ -110,6 +111,9 @@ def write_ltv_input_to_validate(
                     ),
                     allow_fetching=True,
                 ),
+                subfilter=fields.SigSeedSubFilter.PADES
+                if pades_style
+                else None,
                 embed_validation_info=True,
                 use_pades_lta=True,
             ),
@@ -133,4 +137,13 @@ def input_to_validate(
 
     return write_input_to_validate(
         pki_arch, 'to-validate.pdf', w, signer_cert_label=signer_cert_label
+    )
+
+
+@pytest.fixture(scope="function")
+def ltv_input_to_validate(pki_arch: PKIArchitecture, signer_cert_label):
+    return write_ltv_input_to_validate(
+        pki_arch,
+        signer_cert_label=signer_cert_label,
+        tsa_label=ServiceLabel('tsa'),
     )
