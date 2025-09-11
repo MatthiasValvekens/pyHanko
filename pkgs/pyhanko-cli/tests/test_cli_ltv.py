@@ -1,11 +1,19 @@
+from datetime import timedelta
+from io import BytesIO
+
 import pytest
-from certomancer.registry import CertLabel
+from certomancer.registry import CertLabel, KeyLabel
 from pyhanko.cli import cli_root
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from test_data.samples import TESTING_CA
+from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
+from pyhanko.sign.timestamps import DummyTimeStamper
+from pyhanko_certvalidator.registry import SimpleCertificateStore
+from test_data.samples import MINIMAL, TESTING_CA
 
 from .conftest import (
     DUMMY_PASSPHRASE,
+    FREEZE_DT,
     INPUT_PATH,
     LTV_CERTOMANCER_ARCHITECTURES,
     SIGNED_OUTPUT_PATH,
@@ -159,3 +167,82 @@ def test_cli_ltvfix_require_signed_field(cli_runner):
     )
     assert result.exit_code == 1
     assert "Could not find a PDF signature labelled Sig1" in result.output
+
+
+@pytest.mark.parametrize('pki_arch_name', ['rsa'])
+def test_cli_ltvfix_validation(
+    pki_arch, timestamp_url, cli_runner, root_cert, p12_keys, pki_arch_name
+):
+    cfg = {
+        'retroactive-revinfo': True,
+        'time-tolerance': 1,
+        'pkcs12-setups': {
+            'test': {
+                'pfx-file': p12_keys,
+                'pfx-passphrase': DUMMY_PASSPHRASE,
+            }
+        },
+        'validation-contexts': {
+            'test': {
+                'trust': root_cert,
+            }
+        },
+    }
+
+    _write_config(cfg)
+    # sign an hour before the standard time
+    registry = SimpleCertificateStore()
+    signing_cert_spec = pki_arch.get_cert_spec(CertLabel('signer1'))
+    registry.register(
+        pki_arch.get_cert(signing_cert_spec.resolve_issuer_cert(pki_arch))
+    )
+    root_cert = pki_arch.get_cert(CertLabel('root'))
+    registry.register(root_cert)
+    signer = SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        cert_registry=registry,
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+    )
+    timestamper = DummyTimeStamper(
+        tsa_cert=pki_arch.get_cert(CertLabel('tsa')),
+        tsa_key=pki_arch.key_set.get_private_key(KeyLabel('tsa')),
+        fixed_dt=FREEZE_DT - timedelta(hours=1),
+    )
+
+    with open(SIGNED_OUTPUT_PATH, 'wb') as outf:
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+        sign_pdf(
+            pdf_out=w,
+            signature_meta=PdfSignatureMetadata(field_name='Sig1'),
+            signer=signer,
+            timestamper=timestamper,
+            output=outf,
+        )
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'ltvfix',
+            '--field',
+            'Sig1',
+            '--validation-context',
+            'test',
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--ltv-profile',
+            'pades',
+            '--validation-context',
+            'test',
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output

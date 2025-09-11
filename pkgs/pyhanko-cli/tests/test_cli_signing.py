@@ -722,6 +722,7 @@ def test_cli_sign_visible_with_style(
     assert not result.exception, result.output
 
 
+@pytest.mark.nosmoke
 def test_cli_sign_visible_with_qr_style(
     cli_runner, cert_chain, user_key, post_validate
 ):
@@ -754,6 +755,7 @@ def test_cli_sign_visible_with_qr_style(
     assert not result.exception, result.output
 
 
+@pytest.mark.nosmoke
 @pytest.mark.parametrize('pki_arch_name', ['ed25519'])
 def test_cli_sign_visible_with_qr_style_omit_stamp_url(
     cli_runner, cert_chain, user_key, post_validate, pki_arch_name
