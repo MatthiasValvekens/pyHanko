@@ -233,16 +233,17 @@ def test_cli_ltvfix_validation(
     )
     assert not result.exception, result.output
 
-    result = cli_runner.invoke(
-        cli_root,
-        [
-            'sign',
-            'validate',
-            '--ltv-profile',
-            'pades',
-            '--validation-context',
-            'test',
-            SIGNED_OUTPUT_PATH,
-        ],
-    )
-    assert not result.exception, result.output
+    with pytest.warns(UserWarning, match="adesverify instead"):
+        result = cli_runner.invoke(
+            cli_root,
+            [
+                'sign',
+                'validate',
+                '--ltv-profile',
+                'pades',
+                '--validation-context',
+                'test',
+                SIGNED_OUTPUT_PATH,
+            ],
+        )
+        assert not result.exception, result.output

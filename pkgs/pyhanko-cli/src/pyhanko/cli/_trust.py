@@ -275,9 +275,6 @@ def build_cert_validation_policy_and_extract_extra_certs(
                     eutl_force_redownload=eutl_force_redownload,
                 ),
                 revinfo_policy=revocation_policy or 'require',
-                retroactive_revinfo=(
-                    cli_config.retroactive_revinfo if cli_config else None
-                ),
             )
         elif cli_config is not None:
             # load the default settings from the CLI config

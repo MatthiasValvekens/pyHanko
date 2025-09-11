@@ -174,7 +174,9 @@ def _decrypt_pubkey(
                     "File was not encrypted with a public-key security handler."
                 )
             auth_result = r.decrypt_pubkey(sedk)
-            if auth_result.status == crypt.AuthStatus.USER:
+            if auth_result.status == crypt.AuthStatus.FAILED:
+                raise click.ClickException("Failed to decrypt the file.")
+            else:
                 if (
                     not force
                     and auth_result.permission_flags
@@ -185,8 +187,6 @@ def _decrypt_pubkey(
                         "Change of encryption is typically not allowed with "
                         "user access. Pass --force to decrypt the file anyway."
                     )
-            elif auth_result.status == crypt.AuthStatus.FAILED:
-                raise click.ClickException("Failed to decrypt the file.")
             w = copy_into_new_writer(r)
             with open(outfile, 'wb') as outf:
                 w.write(outf)
