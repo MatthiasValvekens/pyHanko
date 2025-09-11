@@ -14,7 +14,15 @@ def pki_arch_name(request):
     return request.param
 
 
-def test_ltv_validate_success(cli_runner, root_cert, ltv_input_to_validate):
+@pytest.fixture(scope="function")
+def catch_ltv_warning():
+    with pytest.warns(UserWarning, match="adesverify instead"):
+        yield
+
+
+def test_ltv_validate_success(
+    cli_runner, root_cert, ltv_input_to_validate, catch_ltv_warning
+):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -33,7 +41,9 @@ def test_ltv_validate_success(cli_runner, root_cert, ltv_input_to_validate):
     assert 'EXTENDED_WITH_LTA_UPDATES' in result.output
 
 
-def test_ltv_validate_adobe_style(cli_runner, pki_arch, root_cert):
+def test_ltv_validate_adobe_style(
+    cli_runner, pki_arch, root_cert, catch_ltv_warning
+):
     fname = write_ltv_input_to_validate(
         pki_arch,
         signer_cert_label=CertLabel('signer1'),
@@ -58,7 +68,9 @@ def test_ltv_validate_adobe_style(cli_runner, pki_arch, root_cert):
     assert 'UNTOUCHED' in result.output
 
 
-def test_ltv_validate_fail_no_revinfo(cli_runner, root_cert, input_to_validate):
+def test_ltv_validate_fail_no_revinfo(
+    cli_runner, root_cert, input_to_validate, catch_ltv_warning
+):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -76,7 +88,7 @@ def test_ltv_validate_fail_no_revinfo(cli_runner, root_cert, input_to_validate):
 
 
 def test_ltv_validate_fail_no_revinfo_pretty(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, catch_ltv_warning
 ):
     result = cli_runner.invoke(
         cli_root,

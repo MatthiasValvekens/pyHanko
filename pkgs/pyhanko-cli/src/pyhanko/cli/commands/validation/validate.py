@@ -94,7 +94,7 @@ def _signature_status(
             UserWarning,
         )
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+            warnings.simplefilter("ignore", category=DeprecationWarning)
             # noinspection PyDeprecation
             status = validation.validate_pdf_ltv_signature(
                 embedded_sig,
