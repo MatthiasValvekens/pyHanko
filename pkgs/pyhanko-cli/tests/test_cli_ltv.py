@@ -11,13 +11,20 @@ from .conftest import (
     _write_config,
 )
 
+# no ed448 timestamping in Certomancer
+# FIXME deal with the bug on the Certomancer end
+
+LTV_CERTOMANCER_ARCHITECTURES = ["rsa", "ecdsa", "ed25519"]
+
+
+@pytest.fixture(scope="module", params=LTV_CERTOMANCER_ARCHITECTURES)
+def pki_arch_name(request):
+    return request.param
+
 
 def test_cli_lta_update(
     pki_arch_name, timestamp_url, cli_runner, root_cert, p12_keys
 ):
-    if pki_arch_name == 'ed448':
-        # FIXME deal with this bug on the Certomancer end
-        pytest.skip("ed448 timestamping in Certomancer doesn't work")
     cfg = {
         'pkcs12-setups': {
             'test': {'pfx-file': p12_keys, 'pfx-passphrase': DUMMY_PASSPHRASE}
@@ -70,9 +77,6 @@ def test_cli_lta_update(
 def test_cli_ltvfix(
     pki_arch_name, timestamp_url, cli_runner, root_cert, p12_keys
 ):
-    if pki_arch_name == 'ed448':
-        # FIXME deal with this bug on the Certomancer end
-        pytest.skip("ed448 timestamping in Certomancer doesn't work")
     cfg = {
         'pkcs12-setups': {
             'test': {'pfx-file': p12_keys, 'pfx-passphrase': DUMMY_PASSPHRASE}
