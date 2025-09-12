@@ -6,6 +6,27 @@ Release history
 pyHanko
 -------
 
+
+.. _release-0.31.0:
+
+0.31.0
+======
+
+*Release date:* 2025-09-12
+
+
+Breaking changes
+----------------
+
+Some pieces of the configuration API were refactored
+or pushed fully into the CLI layer.
+
+The old LTV validation functionality provided by
+:func:`~pyhanko.sign.validation.ltv.async_validate_pdf_ltv_signature`
+has now been deprecated and may be removed in a future release.
+
+
+
 .. _release-0.30.0:
 
 0.30.0
@@ -2347,6 +2368,17 @@ Initial release.
 pyhanko-certvalidator
 ---------------------
 
+.. _certvalidator-release-0.29.0:
+
+0.29.0
+======
+
+*Release date:* 2025-09-12
+
+ * Minor adjustments to error handling and APIs to
+   handle validation context derivation from policies.
+
+
 .. _certvalidator-release-0.28.0:
 
 0.28.0
@@ -2962,6 +2994,30 @@ The impact on the high-level API should be small to nonexistent, but caution whe
 -----------
 pyhanko-cli
 -----------
+
+.. _cli-release-0.2.0:
+
+0.2.0
+=====
+
+*Release date:* 2025-09-12
+
+
+Breaking changes
+----------------
+
+ * The ``--ltv-profile`` argument to ``pyhanko sign validate`` is now
+   deprecated.
+ * The redundant ``--apply-lta-timestamp`` argument to ``ltvfix`` was removed.
+ * Some pieces of the configuration API were refactored or pushed fully into
+   the CLI layer. This includes the way :class:`~pyhanko.cli.config.CLIConfig`
+   deals with validation context config.
+
+
+New features and enhancements
+-----------------------------
+
+ * Support EUTL usage and AdES validation in the CLI.
 
 
 .. _cli-release-0.1.2:
