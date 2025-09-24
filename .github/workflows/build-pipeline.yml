@@ -155,6 +155,10 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+          # TODO on the current version of setup-uv,
+          #  the post-run prune step hangs for this job.
+          #  Keep an eye on that.
+          save-cache: false
           python-version: ${{ matrix.python-version }}
       - name: Disable Python problem matchers
         shell: bash
