@@ -604,6 +604,38 @@ def test_cli_addsig_p12_setup_unreadable(cli_runner):
     assert "Error while reading PKCS#12 config" in result.output
 
 
+def test_cli_addsig_p12_setup_corrupted_keystore(cli_runner):
+    _write_config(
+        {
+            'pkcs12-setups': {
+                'blah': {
+                    'pfx-file': 'test.p12',
+                }
+            }
+        }
+    )
+    with open('test.p12', 'wb') as f:
+        f.write(b"\xde\xad\xbe\xef")
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs12',
+            '--no-pass',
+            '--p12-setup',
+            'blah',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    print(result.output)
+    assert result.exit_code == 1
+    assert "Could not load key material" in result.output
+
+
 def test_cli_addsig_p12_setup_or_pfx_argument_required(cli_runner):
     _write_config({'p12-setup': {}})
     result = cli_runner.invoke(
