@@ -1488,6 +1488,66 @@ class SimpleSigner(Signer):
             return None
 
     @classmethod
+    def load_pkcs12_data(
+        cls,
+        pkcs12_bytes: bytes,
+        other_certs: Iterable[x509.Certificate],
+        passphrase: Optional[bytes] = None,
+        signature_mechanism: Optional[SignedDigestAlgorithm] = None,
+    ):
+        """
+        Load certificates and key material from an in-memory PCKS#12 archive
+
+        :param pkcs12_bytes:
+            PKCS#12 data.
+        :param other_certs:
+            Other relevant certificates, specified as a list of
+            :class:`.asn1crypto.x509.Certificate` objects.
+        :param passphrase:
+            Passphrase to decrypt the PKCS#12 archive, if required.
+        :param signature_mechanism:
+            Override the signature mechanism to use.
+        :return:
+            A :class:`.SimpleSigner` object initialised with key material
+            loaded.
+        :raises ValueError:
+            if the PKCS#12 data fails to be loaded.
+        """
+        # TODO support MAC integrity checking?
+
+        try:
+            (
+                pyca_private_key,
+                pyca_cert,
+                pyca_other_certs_pkcs12,
+            ) = pkcs12.load_key_and_certificates(pkcs12_bytes, passphrase)
+        except Exception as e:
+            raise ValueError(
+                'Could not load key material from PKCS#12 data'
+            ) from e
+
+        kinfo = translate_pyca_cryptography_key_to_asn1(pyca_private_key)
+        cert = translate_pyca_cryptography_cert_to_asn1(pyca_cert)
+        other_certs_pkcs12 = set(
+            map(
+                translate_pyca_cryptography_cert_to_asn1,
+                pyca_other_certs_pkcs12,
+            )
+        )
+
+        cs = SimpleCertificateStore()
+        certs_to_register = other_certs_pkcs12
+        if other_certs:
+            certs_to_register |= set(other_certs)
+        cs.register_multiple(certs_to_register)
+        return SimpleSigner(
+            signing_key=kinfo,
+            signing_cert=cert,
+            cert_registry=cs,
+            signature_mechanism=signature_mechanism,
+        )
+
+    @classmethod
     def load_pkcs12(
         cls,
         pfx_file,
@@ -1500,6 +1560,10 @@ class SimpleSigner(Signer):
         """
         Load certificates and key material from a PCKS#12 archive
         (usually ``.pfx`` or ``.p12`` files).
+
+        .. note::
+            Generally, the API of :meth:`load_pkcs12_data` is less
+            clunky. This method was originally
 
         :param pfx_file:
             Path to the PKCS#12 archive.
@@ -1518,10 +1582,8 @@ class SimpleSigner(Signer):
             there's a choice.
         :return:
             A :class:`.SimpleSigner` object initialised with key material loaded
-            from the PKCS#12 file provided.
+            from the PKCS#12 file provided, or ``None`` if the operation failed.
         """
-        # TODO support MAC integrity checking?
-
         try:
             with open(pfx_file, 'rb') as f:
                 pfx_bytes = f.read()
@@ -1535,34 +1597,20 @@ class SimpleSigner(Signer):
         if ca_chain is None:  # pragma: nocover
             return None
         try:
-            (
-                private_key,
-                cert,
-                other_certs_pkcs12,
-            ) = pkcs12.load_key_and_certificates(pfx_bytes, passphrase)
-        except (IOError, ValueError, TypeError) as e:
+            signer = cls.load_pkcs12_data(
+                pfx_bytes,
+                other_certs=ca_chain
+                | (set(other_certs) if other_certs else set()),
+                passphrase=passphrase,
+                signature_mechanism=signature_mechanism,
+            )
+        except Exception as e:
             logger.error(
                 'Could not load key material from PKCS#12 file', exc_info=e
             )
             return None
-        kinfo = translate_pyca_cryptography_key_to_asn1(private_key)
-        cert = translate_pyca_cryptography_cert_to_asn1(cert)
-        other_certs_pkcs12 = set(
-            map(translate_pyca_cryptography_cert_to_asn1, other_certs_pkcs12)
-        )
-
-        cs = SimpleCertificateStore()
-        certs_to_register = ca_chain | other_certs_pkcs12
-        if other_certs is not None:
-            certs_to_register |= set(other_certs)
-        cs.register_multiple(certs_to_register)
-        return SimpleSigner(
-            signing_key=kinfo,
-            signing_cert=cert,
-            cert_registry=cs,
-            signature_mechanism=signature_mechanism,
-            prefer_pss=prefer_pss,
-        )
+        signer.prefer_pss = prefer_pss
+        return signer
 
     @classmethod
     def load(
