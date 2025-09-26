@@ -8,7 +8,8 @@ The code in this package is also used by the :package:`pyhanko.sign`
 package to render signature appearances.
 """
 
-from .appearances import AnnotAppearances, CoordinateSystem
+from ..pdf_utils.content import AnnotAppearances
+from .appearances import CoordinateSystem
 from .art import STAMP_ART_CONTENT
 from .base import BaseStamp, BaseStampStyle
 from .functions import qr_stamp_file, text_stamp_file
