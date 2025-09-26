@@ -1,13 +1,21 @@
 import logging
-from typing import Tuple
+from dataclasses import replace
+from typing import Optional, Tuple
 
-from . import generic
+from . import generic, layout
+from .content import AppearanceContent
+from .generic import TextStringObject
 from .misc import FormFillingError, PdfReadError
+from .rw_common import PdfHandler
+from .text import TextBox, TextBoxStyle
+from .writer import BasePdfFileWriter
 
 __all__ = [
     'get_single_field_annot',
     'enumerate_fields_in',
     'annot_width_height',
+    'find_existing_empty_field',
+    'populate_static_text_field',
 ]
 
 logger = logging.getLogger(__name__)
@@ -146,3 +154,139 @@ def annot_width_height(
     w = abs(x1 - x2)
     h = abs(y1 - y2)
     return w, h
+
+
+DEFAULT_TEXT_FIELD_LAYOUT_RULE = layout.SimpleBoxLayoutRule(
+    x_align=layout.AxisAlignment.ALIGN_MIN,
+    y_align=layout.AxisAlignment.ALIGN_MIN,
+    inner_content_scaling=layout.InnerScaling.NO_SCALING,
+)
+
+
+class TextFieldContent(AppearanceContent):
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        text_content: str,
+        text_style: TextBoxStyle,
+        box: Optional[layout.BoxConstraints] = None,
+    ):
+        self._text_content = text_content
+        box_layout = (
+            text_style.box_layout_rule or DEFAULT_TEXT_FIELD_LAYOUT_RULE
+        )
+        style = replace(
+            text_style,
+            box_layout_rule=box_layout,
+        )
+        super().__init__(writer=writer, box=box)
+
+        self.text_box = TextBox(
+            style,
+            writer=self.writer,
+            resources=self.resources,
+            box=self.box,
+        )
+
+    def render(self) -> bytes:
+        self.text_box.content = self._text_content
+        rendered = self.text_box.render()
+        return rendered
+
+
+def find_existing_empty_field(
+    handler: PdfHandler,
+    field_name: str,
+    field_type: str,
+) -> generic.Reference:
+    """
+    Find an empty form field of a given type and return a reference to
+    the form field dictionary.
+
+    :param handler:
+        A PDF handler representing the document to be searched.
+    :param field_name:
+        The name of the field to look for.
+    :param field_type:
+        The type of the field to look for.
+    :return:
+        A reference to the form field dictionary of the resulting field,
+        if found.
+    :raises FormFillingError:
+    if the form field does not exist or is filled.
+    """
+    try:
+        field_list = handler.root['/AcroForm']['/Fields']
+    except KeyError:
+        raise FormFillingError("No AcroForm present")
+
+    candidates = enumerate_fields_in(
+        field_list=field_list,
+        with_name=field_name,
+        filled_status=False,
+        target_field_type=field_type,
+        refs_seen=set(),
+    )
+
+    try:
+        field_name, value, field_ref = next(candidates)
+    except StopIteration:
+        raise FormFillingError(
+            f'No empty text field with name {field_name} found.'
+        )
+
+    return field_ref.reference
+
+
+def populate_static_text_field(
+    writer: BasePdfFileWriter,
+    field_name: str,
+    style: TextBoxStyle,
+    content: str,
+):
+    """
+    Populate an existing text field in a PDF document that is to be treated
+    as read-only.
+
+    .. warning::
+
+        This function is intended to be used to fill out form fields
+        that do not need to be edited interactively later.
+        By design, it is not compatible with PDF's variable text mechanisms.
+
+    :param writer:
+        PDF document to modify.
+    :param field_name:
+        The name of the field to look for.
+    :param style:
+        The text box style to use.
+    :param content:
+        The content of the text field.
+    """
+    field_ref = find_existing_empty_field(writer, field_name, field_type='/Tx')
+    field = field_ref.get_object()
+    assert isinstance(field, generic.DictionaryObject)
+
+    annot_dict = get_single_field_annot(field)
+
+    w, h = annot_width_height(annot_dict)
+    content_obj = TextFieldContent(
+        writer=writer,
+        text_content=content,
+        text_style=style,
+        box=layout.BoxConstraints(width=w, height=h),
+    )
+    # TODO option to use existing DR resources and DA?
+    content_obj.apply_appearance(annot_dict)
+    writer.update_container(annot_dict)
+
+    field['/V'] = TextStringObject(content)
+
+    try:
+        flags = int(field['/Ff'])
+    except KeyError:
+        flags = 0
+
+    field['/Ff'] = generic.NumberObject(flags | 1)
+    field.pop('/DA', None)
+    writer.mark_update(field_ref)

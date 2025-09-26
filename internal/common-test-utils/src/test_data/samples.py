@@ -16,6 +16,7 @@ TEST_DIR = os.path.dirname(__file__)
 CRYPTO_DATA_DIR = f'{TEST_DIR}/data/crypto'
 PDF_DATA_DIR = f'{TEST_DIR}/data/pdf'
 MINIMAL_PATH = PDF_DATA_DIR + '/minimal.pdf'
+EXPECTED_OUTPUT_DIR = f'{TEST_DIR}/data/pdf/layout-tests'
 MINIMAL = read_all(MINIMAL_PATH)
 EMPTY_A4 = read_all(PDF_DATA_DIR + '/empty-a4.pdf')
 MINIMAL_TWO_PAGES = read_all(PDF_DATA_DIR + '/minimal-two-pages.pdf')

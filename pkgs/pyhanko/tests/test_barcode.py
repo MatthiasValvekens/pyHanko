@@ -6,13 +6,11 @@ from pyhanko.pdf_utils import barcodes, generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
-from test_data.samples import MINIMAL, TEST_DIR
+from test_data.samples import EXPECTED_OUTPUT_DIR, MINIMAL
 from test_utils.layout_test_utils import (
     compare_output,
     with_layout_comparison,
 )
-
-EXPECTED_OUTPUT_DIR = f'{TEST_DIR}/data/pdf/layout-tests'
 
 
 @freeze_time('2020-11-01')

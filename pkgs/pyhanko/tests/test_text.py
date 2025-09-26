@@ -2,12 +2,28 @@ from io import BytesIO
 
 import pytest
 from pyhanko.pdf_utils import generic, text
-from pyhanko.pdf_utils.font.opentype import GlyphAccumulator
+from pyhanko.pdf_utils.font.opentype import (
+    GlyphAccumulator,
+    GlyphAccumulatorFactory,
+)
+from pyhanko.pdf_utils.form_tools import populate_static_text_field
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.layout import BoxConstraints
+from pyhanko.pdf_utils.layout import (
+    AxisAlignment,
+    BoxConstraints,
+    SimpleBoxLayoutRule,
+)
+from pyhanko.pdf_utils.misc import FormFillingError
 from pyhanko.pdf_utils.reader import PdfFileReader
-from test_data.samples import MINIMAL, MINIMAL_XREF, TEST_DIR
+from test_data.samples import (
+    EXPECTED_OUTPUT_DIR,
+    MINIMAL,
+    MINIMAL_XREF,
+    SIMPLE_FORM,
+    TEST_DIR,
+)
+from test_utils.layout_test_utils import compare_output, with_layout_comparison
 
 
 @pytest.mark.parametrize(
@@ -227,3 +243,51 @@ def test_opentype_invalid_writing_direction():
     ) as ffile:
         with pytest.raises(ValueError, match='direction must be one of'):
             GlyphAccumulator(w, ffile, font_size=10, writing_direction='foobar')
+
+
+@with_layout_comparison
+def test_fill_form_field():
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+    ga_factory = GlyphAccumulatorFactory(NOTO_SERIF_JP)
+    style = text.TextBoxStyle(
+        font=ga_factory,
+        box_layout_rule=SimpleBoxLayoutRule(
+            x_align=AxisAlignment.ALIGN_MIN,
+            y_align=AxisAlignment.ALIGN_MID,
+        ),
+    )
+    populate_static_text_field(w, "TextField1", style, content="文字")
+    field = w.root['/AcroForm']['/Fields'][1]
+    assert field['/FT'] == '/Tx'
+    assert '/DA' not in field
+    assert field['/Ff'] & 1
+    compare_output(
+        writer=w,
+        expected_output_path=f'{EXPECTED_OUTPUT_DIR}/form-fill-result.pdf',
+    )
+
+
+def test_fill_form_field_error_on_nonexisting():
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+    ga_factory = GlyphAccumulatorFactory(NOTO_SERIF_JP)
+    style = text.TextBoxStyle(font=ga_factory)
+    with pytest.raises(FormFillingError, match="No empty text field"):
+        populate_static_text_field(w, "TextField2", style, content="文字")
+
+
+def test_fill_form_field_error_on_filled_field():
+    with open(f'{EXPECTED_OUTPUT_DIR}/form-fill-result.pdf', 'rb') as inf:
+        content = inf.read()
+    w = IncrementalPdfFileWriter(BytesIO(content))
+    ga_factory = GlyphAccumulatorFactory(NOTO_SERIF_JP)
+    style = text.TextBoxStyle(font=ga_factory)
+    with pytest.raises(FormFillingError, match="No empty text field"):
+        populate_static_text_field(w, "TextField1", style, content="文字")
+
+
+def test_fill_form_field_error_on_nonexisting_acro_form():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    ga_factory = GlyphAccumulatorFactory(NOTO_SERIF_JP)
+    style = text.TextBoxStyle(font=ga_factory)
+    with pytest.raises(FormFillingError, match="No AcroForm present"):
+        populate_static_text_field(w, "TextField2", style, content="文字")

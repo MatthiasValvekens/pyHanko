@@ -28,7 +28,12 @@ from pyhanko.stamp import (
     qr_stamp_file,
     text_stamp_file,
 )
-from test_data.samples import MINIMAL_PATH, PDF_DATA_DIR, TEST_DIR
+from test_data.samples import (
+    EXPECTED_OUTPUT_DIR,
+    MINIMAL_PATH,
+    PDF_DATA_DIR,
+    TEST_DIR,
+)
 from test_utils.layout_test_utils import compare_output, with_layout_comparison
 
 FONT_DIR = f'{TEST_DIR}/data/fonts'
@@ -43,7 +48,6 @@ NOTO_SANS = f'{FONT_DIR}/NotoSans-Regular.ttf'
 # We're only using it here because it's a useful example of a string-keyed
 # CFF font.
 FREE_SERIF = f'{FONT_DIR}/FreeSerif.otf'
-EXPECTED_OUTPUT_DIR = f'{TEST_DIR}/data/pdf/layout-tests'
 
 
 def test_simple_text_stamp(tmp_path):
