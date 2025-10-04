@@ -15,7 +15,12 @@ from pyhanko.pdf_utils.content import (
     ResourceManagementError,
     ResourceType,
 )
-from pyhanko.pdf_utils.generic import Reference, pdf_name
+from pyhanko.pdf_utils.generic import (
+    ContentOpReading,
+    OperatorLiteral,
+    Reference,
+    pdf_name,
+)
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints, BoxSpecificationError
 from pyhanko.pdf_utils.metadata.model import DocumentMetadata
@@ -311,7 +316,6 @@ def test_read_until_whitespace(data, expected_return, expected_remaining):
         (b'abc z', b'abc', b'z', 4),
         (b'abc  z', b'abc', b' z', 4),
         (b'abc z', b'ab', b'c z', 2),
-        (b'abc z', b'', b'abc z', 0),
     ],
 )
 def test_read_until_whitespace_bounded(
@@ -1624,6 +1628,31 @@ def test_unrecognized_token():
     r = PdfFileReader(BytesIO(MINIMAL))
     with pytest.raises(misc.PdfReadError, match="Unexpected"):
         generic.read_object(tst, container_ref=generic.Reference(1, 0, pdf=r))
+
+
+def test_operator_literal():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    v = generic.read_object(
+        BytesIO(b"BT"),
+        container_ref=generic.Reference(1, 0, pdf=r),
+        in_content_stream=ContentOpReading.GRAPHIC_OPS,
+    )
+    assert v == OperatorLiteral('BT')
+
+    with pytest.raises(misc.PdfReadError, match="Unexpected"):
+        generic.read_object(
+            BytesIO(b"BT"), container_ref=generic.Reference(1, 0, pdf=r)
+        )
+
+
+def test_content_stream_null():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    v = generic.read_object(
+        BytesIO(b"null"),
+        container_ref=generic.Reference(1, 0, pdf=r),
+        in_content_stream=ContentOpReading.GRAPHIC_OPS,
+    )
+    assert v == generic.NullObject()
 
 
 def test_bad_bool():

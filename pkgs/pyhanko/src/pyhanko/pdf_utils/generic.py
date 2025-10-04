@@ -59,6 +59,7 @@ __all__ = [
     'pdf_name',
     'pdf_string',
     'read_object',
+    'OperatorLiteral',
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -207,10 +208,27 @@ class Reference(Dereferenceable):
         return self.pdf
 
 
+@enum.unique
+class ContentOpReading(enum.Enum):
+    NO = 1
+    GRAPHIC_OPS = 2
+    IN_OBJECT = 3
+
+    def __bool__(self):
+        return self != ContentOpReading.NO
+
+    def nest(self):
+        if not self:
+            return ContentOpReading.NO
+        else:
+            return ContentOpReading.IN_OBJECT
+
+
 def read_object(
     stream,
     container_ref: 'Dereferenceable',
     as_metadata_stream: bool = False,
+    in_content_stream: ContentOpReading = ContentOpReading.NO,
 ) -> 'PdfObject':
     """
     Read a PDF object from an input stream.
@@ -230,6 +248,9 @@ def read_object(
         resolve to the return value of this function.
     :param as_metadata_stream:
         Whether to dereference the object as an XMP metadata stream.
+    :param in_content_stream:
+        Whether we are parsing inside a content stream (where
+        certain kinds of object cannot occur).
     :return:
         A :class:`.PdfObject`.
     """
@@ -249,21 +270,21 @@ def read_object(
                 stream,
                 container_ref,
                 as_metadata_stream=as_metadata_stream,
+                in_content_stream=in_content_stream.nest(),
             )
         else:
             result = read_hex_string_from_stream(stream)
     elif idx == 2:
         # array object
-        result = ArrayObject.read_from_stream(stream, container_ref)
+        result = ArrayObject.read_from_stream(
+            stream, container_ref, in_content_stream=in_content_stream.nest()
+        )
     elif idx == 3 or idx == 4:
         # boolean object
         result = BooleanObject.read_from_stream(stream)
     elif idx == 5:
         # string object
         result = read_string_from_stream(stream)
-    elif idx == 6:
-        # null object
-        result = NullObject.read_from_stream(stream)
     elif idx == 7:
         # comment
         while tok not in (b'\r', b'\n'):
@@ -271,19 +292,37 @@ def read_object(
         read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
         result = read_object(stream, container_ref)
+    elif in_content_stream == ContentOpReading.GRAPHIC_OPS and tok.isalpha():
+        # operator literal
+        literal = read_until_delimiter(stream)
+        if not literal.isascii():
+            raise PdfReadError(
+                f"Failed to parse {literal!r} as operator literal"
+            )
+        elif literal == b'null':
+            return NullObject()
+        elif literal == b"R":
+            raise PdfReadError("Indirect object reference in content stream")
+        result = OperatorLiteral(literal.decode('ascii'))
+    elif idx == 6:
+        # null object
+        result = NullObject.read_from_stream(stream)
     elif tok in NUMBER_SIGNS:
         result = NumberObject.read_from_stream(stream)
     elif tok.isdigit():
-        # number object OR indirect reference
-        peek = stream.read(20)
-        stream.seek(-len(peek), os.SEEK_CUR)  # reset to start
-        if INDIRECT_PATTERN.match(peek) is not None:
-            result = IndirectObject.read_from_stream(stream, container_ref)
-        else:
+        if in_content_stream:
             result = NumberObject.read_from_stream(stream)
+        else:
+            # number object OR indirect reference
+            peek = stream.read(20)
+            stream.seek(-len(peek), os.SEEK_CUR)  # reset to start
+            if INDIRECT_PATTERN.match(peek) is not None:
+                result = IndirectObject.read_from_stream(stream, container_ref)
+            else:
+                result = NumberObject.read_from_stream(stream)
     else:
         raise PdfReadError(
-            f"Unexpected byte '{tok}' at position '{stream.tell()}"
+            f"Unexpected byte '{tok}' at position {stream.tell()}"
         )
 
     result.container_ref = container_ref
@@ -515,7 +554,11 @@ class ArrayObject(list, PdfObject):
         stream.write(b" ]")
 
     @staticmethod
-    def read_from_stream(stream, container_ref):
+    def read_from_stream(
+        stream,
+        container_ref,
+        in_content_stream: ContentOpReading = ContentOpReading.NO,
+    ):
         arr = ArrayObject()
         tmp = stream.read(1)
         if tmp != b"[":
@@ -527,7 +570,11 @@ class ArrayObject(list, PdfObject):
                 break
             stream.seek(-1, os.SEEK_CUR)
             # read and append obj
-            arr.append(read_object(stream, container_ref))
+            arr.append(
+                read_object(
+                    stream, container_ref, in_content_stream=in_content_stream
+                )
+            )
         return arr
 
 
@@ -1320,6 +1367,7 @@ class DictionaryObject(dict, PdfObject):
         stream,
         container_ref: 'Dereferenceable',
         as_metadata_stream: bool = False,
+        in_content_stream: ContentOpReading = ContentOpReading.NO,
     ):
         tmp = stream.read(2)
         if tmp != b"<<":
@@ -1344,7 +1392,9 @@ class DictionaryObject(dict, PdfObject):
                 ) from ex
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
-            value = read_object(stream, container_ref)
+            value = read_object(
+                stream, container_ref, in_content_stream=in_content_stream
+            )
             if key not in data:
                 data[key] = value
             else:
@@ -1357,7 +1407,10 @@ class DictionaryObject(dict, PdfObject):
                 else:
                     logger.warning(err)
 
-        stream_data = _maybe_read_stream_payload(stream, data, handler)
+        if in_content_stream:
+            stream_data = None
+        else:
+            stream_data = _maybe_read_stream_payload(stream, data, handler)
         if stream_data is not None:
             # pass in everything as encoded data, the StreamObject class
             # will take care of decoding as necessary
