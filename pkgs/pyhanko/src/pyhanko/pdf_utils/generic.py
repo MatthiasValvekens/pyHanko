@@ -62,7 +62,7 @@ __all__ = [
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
-NUMBER_SIGNS = b'+-'
+NUMBER_SIGNS = b'+-.'
 INDIRECT_PATTERN = re.compile(r"(\d+)\s+(\d+)\s+R[^a-zA-Z]".encode('ascii'))
 
 logger = logging.getLogger(__name__)
@@ -208,7 +208,9 @@ class Reference(Dereferenceable):
 
 
 def read_object(
-    stream, container_ref: 'Dereferenceable', as_metadata_stream: bool = False
+    stream,
+    container_ref: 'Dereferenceable',
+    as_metadata_stream: bool = False,
 ) -> 'PdfObject':
     """
     Read a PDF object from an input stream.
@@ -244,7 +246,9 @@ def read_object(
         stream.seek(-2, os.SEEK_CUR)  # reset to start
         if peek == b'<<':
             result = DictionaryObject.read_from_stream(
-                stream, container_ref, as_metadata_stream=as_metadata_stream
+                stream,
+                container_ref,
+                as_metadata_stream=as_metadata_stream,
             )
         else:
             result = read_hex_string_from_stream(stream)
@@ -267,18 +271,20 @@ def read_object(
         read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
         result = read_object(stream, container_ref)
-    else:
+    elif tok in NUMBER_SIGNS:
+        result = NumberObject.read_from_stream(stream)
+    elif tok.isdigit():
         # number object OR indirect reference
-        if tok in NUMBER_SIGNS:
-            # number
-            result = NumberObject.read_from_stream(stream)
+        peek = stream.read(20)
+        stream.seek(-len(peek), os.SEEK_CUR)  # reset to start
+        if INDIRECT_PATTERN.match(peek) is not None:
+            result = IndirectObject.read_from_stream(stream, container_ref)
         else:
-            peek = stream.read(20)
-            stream.seek(-len(peek), os.SEEK_CUR)  # reset to start
-            if INDIRECT_PATTERN.match(peek) is not None:
-                result = IndirectObject.read_from_stream(stream, container_ref)
-            else:
-                result = NumberObject.read_from_stream(stream)
+            result = NumberObject.read_from_stream(stream)
+    else:
+        raise PdfReadError(
+            f"Unexpected byte '{tok}' at position '{stream.tell()}"
+        )
 
     result.container_ref = container_ref
     return result
@@ -351,6 +357,19 @@ class PdfObject:
             Security handler
         """
         raise NotImplementedError
+
+
+class OperatorLiteral(PdfObject):
+    def __init__(self, literal: str):
+        self.literal = literal
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, OperatorLiteral) and self.literal == other.literal
+        )
+
+    def __hash__(self):
+        return hash(("op", self.literal))
 
 
 class NullObject(PdfObject):
@@ -1139,6 +1158,47 @@ def _normalise_key(key):
     return key
 
 
+def _maybe_read_stream_payload(stream, data, handler):
+    pos = stream.tell()
+    s = read_non_whitespace(stream, allow_eof=True)
+    stream_data = None
+    if s == b's' and stream.read(5) == b'tream':
+        # odd PDF file output has spaces after 'stream' keyword
+        # but before EOL. Original PyPDF2 patch provided by Danial Sandler,
+        # modified by Matthias Valvekens
+        skip_over_whitespace(stream, stop_after_eol=True)
+        # this is a stream object, not a dictionary
+        length = data[pdf_name("/Length")]
+        if isinstance(length, IndirectObject):
+            t = stream.tell()
+            length = handler.get_object(length)
+            stream.seek(t)
+        stream_data = stream.read(length)
+        e = read_non_whitespace(stream)
+        ndstream = stream.read(8)
+        if (e + ndstream) != b"endstream":
+            # (sigh) - the odd PDF file has a length that is too long, so
+            # we need to read backwards to find the "endstream" ending.
+            # ReportLab (unknown version) generates files with this bug,
+            # and Python users into PDF files tend to be our audience.
+            # we need to do this to correct the streamdata and chop off
+            # an extra character.
+            orig_endstream_pos = stream.tell()
+            stream.seek(-10, os.SEEK_CUR)
+            end = stream.read(9)
+            if end == b"endstream":
+                # we found it by looking back one character further.
+                stream_data = stream_data[:-1]
+            else:
+                raise PdfReadError(
+                    "Unable to find 'endstream' marker after "
+                    "stream at byte %s." % hex(orig_endstream_pos)
+                )
+    else:
+        stream.seek(pos)
+    return stream_data
+
+
 class DictionaryObject(dict, PdfObject):
     """
     A PDF dictionary object.
@@ -1297,43 +1357,7 @@ class DictionaryObject(dict, PdfObject):
                 else:
                     logger.warning(err)
 
-        pos = stream.tell()
-        s = read_non_whitespace(stream, allow_eof=True)
-        stream_data = None
-        if s == b's' and stream.read(5) == b'tream':
-            # odd PDF file output has spaces after 'stream' keyword
-            # but before EOL. Original PyPDF2 patch provided by Danial Sandler,
-            # modified by Matthias Valvekens
-            skip_over_whitespace(stream, stop_after_eol=True)
-            # this is a stream object, not a dictionary
-            length = data[pdf_name("/Length")]
-            if isinstance(length, IndirectObject):
-                t = stream.tell()
-                length = handler.get_object(length)
-                stream.seek(t)
-            stream_data = stream.read(length)
-            e = read_non_whitespace(stream)
-            ndstream = stream.read(8)
-            if (e + ndstream) != b"endstream":
-                # (sigh) - the odd PDF file has a length that is too long, so
-                # we need to read backwards to find the "endstream" ending.
-                # ReportLab (unknown version) generates files with this bug,
-                # and Python users into PDF files tend to be our audience.
-                # we need to do this to correct the streamdata and chop off
-                # an extra character.
-                orig_endstream_pos = stream.tell()
-                stream.seek(-10, os.SEEK_CUR)
-                end = stream.read(9)
-                if end == b"endstream":
-                    # we found it by looking back one character further.
-                    stream_data = stream_data[:-1]
-                else:
-                    raise PdfReadError(
-                        "Unable to find 'endstream' marker after "
-                        "stream at byte %s." % hex(orig_endstream_pos)
-                    )
-        else:
-            stream.seek(pos)
+        stream_data = _maybe_read_stream_payload(stream, data, handler)
         if stream_data is not None:
             # pass in everything as encoded data, the StreamObject class
             # will take care of decoding as necessary

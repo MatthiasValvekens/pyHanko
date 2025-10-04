@@ -815,9 +815,8 @@ def _read_object_header(stream, strict):
     # cross-reference table should put us in the right spot to read the
     # object header.  In reality... some files have stupid cross reference
     # tables that are off by whitespace bytes.
-    extra = False
-    misc.skip_over_comment(stream)
-    extra |= misc.skip_over_whitespace(stream)
+    extra = misc.skip_over_whitespace(stream)
+    extra |= misc.skip_over_comments(stream)
     idnum_bytes = misc.read_until_whitespace(stream)
     idnum = int(idnum_bytes)
     extra |= misc.skip_over_whitespace(stream)

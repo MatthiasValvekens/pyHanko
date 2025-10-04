@@ -216,20 +216,42 @@ def test_skip_ws_eof_ok_behaviour(data):
 @pytest.mark.parametrize(
     'data,next_data',
     [
-        (b'%abc\n a', b' a'),
-        (b'%a\x00bc\x00\r\n a', b' a'),
-        (b'%abc\r a', b' a'),
+        (b'%abc\n a', b'a'),
+        (b'%a\x00bc\x00\r\n a', b'a'),
+        (b'%abc\r a', b'a'),
         (b'%abc\n', b''),
         (b'%abc\x00\r\n', b''),
         (b'%abc\r', b''),
         (b'%abc', b''),
+        (b'%abc%abc\nz', b'z'),
+        (b'%abc\n%abc\nz', b'z'),
+        (b'%abc\r\n%abc\nz', b'z'),
+        (b'%abc\n%abc\r\nz', b'z'),
+        (b'%abc\r%abc\rz', b'z'),
     ],
 )
 def test_skip_comment_behaviour(data, next_data):
     buf = BytesIO(data)
-    comment_read = misc.skip_over_comment(buf)
+    comment_read = misc.skip_over_comments(buf, error_on_end_of_stream=False)
     assert comment_read
     assert buf.read() == next_data
+
+
+@pytest.mark.parametrize(
+    'data',
+    [
+        b'%abc\n',
+        b'%abc\x00\r\n',
+        b'%abc\r',
+        b'%abc',
+        b'%abc\n  ',
+        b'%abc\r\n  ',
+    ],
+)
+def test_skip_comment_end_of_stream_err(data):
+    buf = BytesIO(data)
+    with pytest.raises(misc.PdfStreamError, match="ended prematurely"):
+        misc.skip_over_comments(buf, error_on_end_of_stream=True)
 
 
 @pytest.mark.parametrize(
@@ -1597,6 +1619,13 @@ def test_bad_null():
         generic.read_object(tst, container_ref=generic.Reference(1, 0, pdf=r))
 
 
+def test_unrecognized_token():
+    tst = BytesIO(b"##&@*#!")
+    r = PdfFileReader(BytesIO(MINIMAL))
+    with pytest.raises(misc.PdfReadError, match="Unexpected"):
+        generic.read_object(tst, container_ref=generic.Reference(1, 0, pdf=r))
+
+
 def test_bad_bool():
     tst = BytesIO(b"trux")
     with pytest.raises(misc.PdfReadError):
@@ -2167,3 +2196,9 @@ def test_copy_root_reference():
 
     new_r = PdfFileReader(out)
     assert new_r.root['/Blah'].raw_get(0).idnum == w.root_ref.idnum
+
+
+def test_operator_literal_hash():
+    assert hash(generic.TextStringObject("aaa")) != hash(
+        generic.OperatorLiteral("aaa")
+    )

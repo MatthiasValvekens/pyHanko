@@ -46,7 +46,7 @@ __all__ = [
     'read_until_delimiter',
     'read_until_regex',
     'read_until_whitespace',
-    'skip_over_comment',
+    'skip_over_comments',
     'skip_over_whitespace',
 ]
 
@@ -94,7 +94,7 @@ def read_until_whitespace(stream, maxchars: Optional[int] = None) -> bytes:
         maximal number of bytes to read before returning
     """
 
-    return _read_until_class(PDF_WHITESPACE, stream, maxchars=maxchars)
+    return _read_until_class(PDF_WHITESPACE, stream, maxchars=maxchars)[0]
 
 
 def read_until_delimiter(stream) -> bytes:
@@ -108,24 +108,28 @@ def read_until_delimiter(stream) -> bytes:
     :return:
         The bytes read.
     """
-    result = _read_until_class(PDF_WHITESPACE + PDF_DELIMITERS, stream)
-    stream.seek(-1, os.SEEK_CUR)
+    result, end = _read_until_class(PDF_WHITESPACE + PDF_DELIMITERS, stream)
+    if not end:
+        stream.seek(-1, os.SEEK_CUR)
     return result
 
 
-def _read_until_class(class_chars: bytes, stream, maxchars=None) -> bytes:
-    if maxchars == 0:
-        return b''
+def _read_until_class(class_chars: bytes, stream, maxchars=None):
+    end = False
 
     def _build():
-        stop_at = None if maxchars is None else stream.tell() + maxchars
+        nonlocal end
+        stop_at = None if not maxchars else stream.tell() + maxchars
         while maxchars is None or stream.tell() < stop_at:
             tok = stream.read(1)
-            if tok in class_chars or not tok:
+            if not tok:
+                end = True
+                break
+            if tok in class_chars:
                 break
             yield tok
 
-    return b''.join(_build())
+    return b''.join(_build()), end
 
 
 def is_regular_character(byte_value: int):
@@ -150,14 +154,16 @@ def read_non_whitespace(stream, seek_back=False, allow_eof=False):
             break
         else:
             stream.seek(-1, os.SEEK_CUR)
-            skip_over_comment(stream)
+            skip_over_comments(stream)
             tok = PDF_WHITESPACE[0]
     if seek_back:
         stream.seek(-1, os.SEEK_CUR)
     return tok
 
 
-def skip_over_whitespace(stream, stop_after_eol=False) -> bool:
+def skip_over_whitespace(
+    stream, stop_after_eol=False, error_on_end_of_stream=True
+) -> bool:
     """
     Similar to :func:`read_non_whitespace`, but returns a ``bool`` if more than
     one whitespace character was read.
@@ -170,7 +176,10 @@ def skip_over_whitespace(stream, stop_after_eol=False) -> bool:
     while tok in PDF_WHITESPACE:
         tok = stream.read(1)
         if not tok:
-            raise PdfStreamError("Stream ended prematurely")
+            if error_on_end_of_stream:
+                raise PdfStreamError("Stream ended prematurely")
+            else:
+                return True
         cnt += 1
         if stop_after_eol:
             if tok == b'\n':
@@ -188,29 +197,35 @@ def skip_over_whitespace(stream, stop_after_eol=False) -> bool:
     return cnt > 1
 
 
-def skip_over_comment(stream) -> bool:
+def skip_over_comments(stream, error_on_end_of_stream=True) -> bool:
     """
-    Skip over a comment and position the cursor at the first byte after
-    the EOL sequence following the comment. If there is no comment under
-    the cursor, do nothing.
+    Skip over comments and position the cursor at the first byte after
+    the chunk of continuous whitespace starting with the EOL sequence following
+    the comment. If there is no comment under the cursor, do nothing.
 
     :param stream:
         stream to read
+    :param error_on_end_of_stream:
+        Raise an error if the stream ended prematurely.
     :return:
         ``True`` if a comment was read.
     """
     tok = stream.read(1)
-    stream.seek(-1, 1)
-    if tok == b'%':
+    seen = False
+    while tok == b'%':
+        seen = True
         while tok not in (b'\n', b'\r', b''):
             tok = stream.read(1)
-        # read the next char and check if it's a LF (or EOF)
-        nxt = stream.read(1)
-        if nxt and nxt != b'\n':
-            # ...if not, rewind
-            stream.seek(-1, os.SEEK_CUR)
-        return True
-    return False
+        skip_over_whitespace(
+            stream, error_on_end_of_stream=error_on_end_of_stream
+        )
+        tok = stream.read(1)
+        # repeat until there are no comments
+    if tok:
+        # ...and rewind one at the end to undo the last peek,
+        # unless we're at the end of the stream
+        stream.seek(-1, os.SEEK_CUR)
+    return seen
 
 
 def read_until_regex(stream, regex, ignore_eof: bool = False):
