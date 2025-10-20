@@ -68,7 +68,7 @@ image-support = [
     "Pillow>=7.2.0",
     "python-barcode==0.15.1"
 ]
-pkcs11 = ["python-pkcs11~=0.9.0"]
+pkcs11 = ["python-pkcs11~=0.9.1"]
 async-http = ["aiohttp>=3.9,<3.13"]
 etsi = ["xsdata>=24.4,<26.0", "signxml>=4.2.0"]
 
