@@ -1,5 +1,6 @@
 import itertools
 import logging
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import resources
@@ -61,6 +62,8 @@ from pyhanko.sign.validation.qualified.tsp import (
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from signxml.exceptions import SignXMLException as InvalidXmlSignature
 from signxml.xades import XAdESSignatureConfiguration, XAdESVerifier
+from xsdata.exceptions import XmlContextError
+from xsdata.formats.dataclass.models.builders import XmlMetaBuilder
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
 from xsdata.formats.dataclass.parsers.handlers import LxmlEventHandler
@@ -88,6 +91,26 @@ _CERTIFICATE_TYPE_BY_URI = {
 }
 _QUALIFIER_BY_URI = {q.uri: q for q in Qualifier}
 PREFERRED_LANGUAGE: str = 'en'
+
+if sys.version_info >= (3, 14):
+    # monkeypatch until there is an xsdata release with this fix:
+    # https://github.com/tefra/xsdata/pull/1173
+
+    def _find_declared_class(
+        _cls: type, clazz: type, name: str
+    ) -> Any:  # pragma: nocover
+        import inspect
+
+        for base in clazz.__mro__:
+            ann = inspect.get_annotations(base)
+            if ann and name in ann:
+                return base
+
+        raise XmlContextError(
+            f"Failed to detect the declared class for field {name}"
+        )
+
+    XmlMetaBuilder.find_declared_class = _find_declared_class  # type: ignore
 
 
 def _service_name_from_intl_string(
