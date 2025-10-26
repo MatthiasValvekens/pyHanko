@@ -77,7 +77,7 @@ jobs:
           VERSION: ${{ steps.getrelease.outputs.version }}
           PACKAGE: ${{ steps.getrelease.outputs.package }}
       - name: Upload release body
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: release-body
           path: release.md
