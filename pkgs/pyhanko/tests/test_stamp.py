@@ -437,6 +437,7 @@ def test_zero_width_error():
     stamp.apply(0, x=10, y=500)
 
 
+@with_layout_comparison
 def test_simple_text_stamp_on_page_with_leaky_graphics_state():
     with open(f"{PDF_DATA_DIR}/leaky-graphics-state-doc.pdf", 'rb') as fin:
         pdf_out = IncrementalPdfFileWriter(fin, strict=False)
@@ -450,6 +451,7 @@ def test_simple_text_stamp_on_page_with_leaky_graphics_state():
         )
 
 
+@with_layout_comparison
 def test_simple_text_stamp_on_page_with_leaky_graphics_state_without_coord_correction():
     with open(f"{PDF_DATA_DIR}/leaky-graphics-state-doc.pdf", 'rb') as fin:
         pdf_out = IncrementalPdfFileWriter(fin, strict=False)
