@@ -601,7 +601,7 @@ class PKCS11Signer(Signer):
 
         kh: SignMixin = self._key_handle
         spec = self._select_pkcs11_signing_params(
-            digest_algorithm, sign_kwargs=self._sign_kwargs
+            digest_algorithm, sign_kwargs=self.sign_kwargs(data)
         )
 
         if spec.pre_sign_transform is not None:
