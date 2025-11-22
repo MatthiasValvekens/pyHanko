@@ -596,7 +596,19 @@ def test_unsupported_algo():
             algos.SignedDigestAlgorithm({'algorithm': '2.999'}),
             digest_algorithm='sha256',
             use_raw_mechanism=False,
+            sign_kwargs={},
         )
+
+
+def test_unsupported_algo_mech_specified_in_kwargs():
+    # this should be allowed
+    result = pkcs11.select_pkcs11_signing_params(
+        algos.SignedDigestAlgorithm({'algorithm': '2.999'}),
+        digest_algorithm='sha256',
+        use_raw_mechanism=False,
+        sign_kwargs={'mechanism': 0xDEADBEEF},
+    )
+    assert result.sign_kwargs['mechanism'] == 0xDEADBEEF
 
 
 @pytest.mark.parametrize('md', ['sha256', 'sha384'])
@@ -608,10 +620,21 @@ def test_select_ecdsa_mech(md):
         algos.SignedDigestAlgorithm({'algorithm': algo}),
         digest_algorithm=md,
         use_raw_mechanism=False,
+        sign_kwargs={},
     )
     assert result.sign_kwargs['mechanism'] == getattr(
         Mechanism, f"ECDSA_{md.upper()}"
     )
+
+
+def test_select_sign_kwargs_priority():
+    result = pkcs11.select_pkcs11_signing_params(
+        algos.SignedDigestAlgorithm({'algorithm': 'sha256_ecdsa'}),
+        digest_algorithm='sha256',
+        use_raw_mechanism=False,
+        sign_kwargs={'mechanism': 0xDEADBEEF},
+    )
+    assert result.sign_kwargs['mechanism'] == 0xDEADBEEF
 
 
 @pytest.mark.parametrize(

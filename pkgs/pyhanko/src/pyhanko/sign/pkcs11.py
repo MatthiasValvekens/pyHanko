@@ -215,6 +215,7 @@ def select_pkcs11_signing_params(
     signature_mechanism: algos.SignedDigestAlgorithm,
     digest_algorithm: str,
     use_raw_mechanism: bool,
+    sign_kwargs: Dict[str, Any],
 ) -> PKCS11SignatureOperationSpec:
     """
     Internal helper function to set up a PKCS #11 signing operation.
@@ -225,6 +226,8 @@ def select_pkcs11_signing_params(
         The digest algorithm to use
     :param use_raw_mechanism:
         Whether to attempt to use the raw mechanism on pre-hashed data.
+    :param sign_kwargs:
+        Override kwargs manually.
     :return:
     """
     from pkcs11.util.dsa import encode_dsa_signature
@@ -297,11 +300,11 @@ def select_pkcs11_signing_params(
             raise NotImplementedError("Ed448 not available in raw mode")
         kwargs['mechanism'] = Mechanism.EDDSA
         kwargs['mechanism_param'] = (False, None)
-    else:
+    elif 'mechanism' not in sign_kwargs:
         raise NotImplementedError(
             f"Signature algorithm '{signature_algo}' is not supported."
         )
-
+    kwargs.update(**sign_kwargs)
     return PKCS11SignatureOperationSpec(
         sign_kwargs=kwargs,
         pre_sign_transform=pre_sign_transform,
@@ -460,6 +463,16 @@ class PKCS11Signer(Signer):
             This functionality is only available for ECDSA at this time.
             Support for other signature schemes will be added on an as-needed
             basis.
+    :param signature_mechanism:
+        Specify the signature mechanism explicitly. By default, pyHanko will
+        attempt to infer it from the key's properties.
+    :param base_sign_kwargs:
+        Directly specify some of the keyword arguments passed to the
+        :meth:`pkcs11.SignMixin.sign` method.
+
+        This can be used as an escape hatch to enable functionality
+        (advanced auth, additional signing mechanisms) that are not
+        directly supported by pyHanko.
     """
 
     default_cert_query_params: Dict[Attribute, Any]
@@ -480,6 +493,7 @@ class PKCS11Signer(Signer):
         cert_id: Optional[bytes] = None,
         use_raw_mechanism=False,
         signature_mechanism: Optional[algos.SignedDigestAlgorithm] = None,
+        base_sign_kwargs: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialise a PKCS11 signer.
@@ -500,6 +514,7 @@ class PKCS11Signer(Signer):
         self.use_raw_mechanism = use_raw_mechanism
         self._key_handle = None
         self._loaded = False
+        self._sign_kwargs = base_sign_kwargs or {}
         self.__loading_event = None
         super().__init__(
             prefer_pss=prefer_pss,
@@ -539,14 +554,39 @@ class PKCS11Signer(Signer):
         self._load_objects()
         return self._signing_cert
 
+    # noinspection PyUnusedLocal
+    def sign_kwargs(self, data_to_sign: bytes) -> Dict[str, Any]:
+        """
+        Supply keyword arguments to pass to the :meth:`pkcs11.SignMixin.sign`
+        method.
+
+        This can be used as an escape hatch to enable functionality
+        (advanced auth, additional signing mechanisms) that are not
+        directly supported by pyHanko.
+
+        :param data_to_sign:
+            The data being signed.
+
+            .. note::
+                In typical cases this parameter can be ignored;
+                pyHanko exposes it to subclasses to allow for
+                just-in-time credentials that depend on
+                the content being signed.
+
+        :return:
+            A dictionary of keyword arguments.
+        """
+        return self._sign_kwargs
+
     def _select_pkcs11_signing_params(
-        self, digest_algorithm: str
+        self, digest_algorithm: str, sign_kwargs: Dict[str, Any]
     ) -> PKCS11SignatureOperationSpec:
         digest_algorithm = digest_algorithm.lower()
         return select_pkcs11_signing_params(
             self.get_signature_mechanism_for_digest(digest_algorithm),
             digest_algorithm,
             use_raw_mechanism=self.use_raw_mechanism,
+            sign_kwargs=sign_kwargs,
         )
 
     async def async_sign_raw(
@@ -560,7 +600,9 @@ class PKCS11Signer(Signer):
         from pkcs11 import SignMixin
 
         kh: SignMixin = self._key_handle
-        spec = self._select_pkcs11_signing_params(digest_algorithm)
+        spec = self._select_pkcs11_signing_params(
+            digest_algorithm, sign_kwargs=self._sign_kwargs
+        )
 
         if spec.pre_sign_transform is not None:
             data = spec.pre_sign_transform(data)
