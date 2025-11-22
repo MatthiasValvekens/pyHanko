@@ -7,6 +7,48 @@ pyHanko
 -------
 
 
+.. _release-0.32.0:
+
+0.32.0
+======
+
+*Release date:* 2025-11-22
+
+
+Dependency changes
+------------------
+
+ * Support Python 3.14
+ * Relax ``uharfbuzz`` upper bound to ``<0.51.0``.
+
+
+.. warning::
+
+    PyHanko currently does not test against free-threaded Python builds.
+    Feel free to raise issues related to free-threaded Python
+    in `the discussion forum <https://github.com/MatthiasValvekens/pyHanko/discussions>`_
+    or on `the issue tracker <https://github.com/MatthiasValvekens/pyHanko/issues>`_
+    if you're sure the problem is pyHanko-related, but there are currently
+    no concrete plans to actively pursue support for this.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Support reading PKCS#12 data from memory.
+ * Make PKCS#11 ``sign_kwargs`` easier to customise in subclasses.
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Support basic text field filling.
+ * Put in place scaffolding for content stream parsing.
+
+
 .. _release-0.31.0:
 
 0.31.0
@@ -2994,6 +3036,16 @@ The impact on the high-level API should be small to nonexistent, but caution whe
 -----------
 pyhanko-cli
 -----------
+
+.. _cli-release-0.2.1:
+
+0.2.1
+=====
+
+*Release date:* 2025-11-22
+
+Maintenance release for Python 3.14 support.
+
 
 .. _cli-release-0.2.0:
 
