@@ -7,7 +7,7 @@ import pytest
 import requests_mock
 import tzlocal
 import yaml
-from asn1crypto import pem
+from asn1crypto import pem, x509
 from certomancer import PKIArchitecture
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, ServiceLabel
@@ -38,6 +38,9 @@ from test_data.samples import (
     TESTING_CA_ED25519,
     TESTING_CA_QUALIFIED,
 )
+
+pytest_plugins = ["test_utils.pkcs11_utils.fixtures"]
+
 
 INPUT_PATH = 'input.pdf'
 SIGNED_OUTPUT_PATH = 'output.pdf'
@@ -110,6 +113,11 @@ def _write_cert(
 
 
 @pytest.fixture
+def root_cert_data(pki_arch):
+    return pki_arch.get_cert(CertLabel('root'))
+
+
+@pytest.fixture
 def root_cert(pki_arch):
     return _write_cert(pki_arch, CertLabel('root'), 'root.cert.pem')
 
@@ -150,7 +158,7 @@ def _write_config(config: dict, fname: str = 'pyhanko.yml'):
 logger = logging.getLogger(__name__)
 
 
-def _validate_last_sig_in(arch: PKIArchitecture, pdf_file, *, strict):
+def _validate_last_sig_in(root: x509.Certificate, pdf_file, *, strict):
     with open(pdf_file, 'rb') as result:
         logger.info(f"Validating last signature in {pdf_file}...")
         r = PdfFileReader(result, strict=strict)
@@ -160,7 +168,7 @@ def _validate_last_sig_in(arch: PKIArchitecture, pdf_file, *, strict):
         last_sig = r.embedded_regular_signatures[-1]
         # if there's a docts, we assume it's PAdES
         trust_manager = SimpleTrustManager.build(
-            trust_roots=[arch.get_cert(CertLabel('root'))],
+            trust_roots=[root],
         )
         if r.embedded_timestamp_signatures:
             ades_status = asyncio.run(
@@ -191,7 +199,7 @@ def _validate_last_sig_in(arch: PKIArchitecture, pdf_file, *, strict):
 
 
 @pytest.fixture
-def post_validate(pki_arch):
+def post_validate(root_cert_data):
     yield
     input_passes_strict = True
     if os.path.isfile(INPUT_PATH):
@@ -208,5 +216,5 @@ def post_validate(pki_arch):
 
     if os.path.isfile(SIGNED_OUTPUT_PATH):
         _validate_last_sig_in(
-            pki_arch, SIGNED_OUTPUT_PATH, strict=input_passes_strict
+            root_cert_data, SIGNED_OUTPUT_PATH, strict=input_passes_strict
         )

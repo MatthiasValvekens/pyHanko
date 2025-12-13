@@ -28,7 +28,7 @@ permissions:
   actions: read
   contents: read
 env:
-  UV_PYTHON_PREFERENCE: only-system
+  UV_NO_MANAGED_PYTHON: 1
   PDFTOPPM_PATH: /usr/bin/pdftoppm
   IM_COMPARE_PATH: /usr/bin/compare
   SOFTHSM2_CONF: /tmp/softhsm2.conf
@@ -188,6 +188,37 @@ jobs:
         with:
           name: coverage-live-${{ strategy.job-index }}
           path: "internal/integration-tests/*-coverage.xml"
+  hsm-tests:
+    runs-on: pyhanko-testbench
+    environment: testbench
+    needs: build
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Test library against HSM testbench
+        run: |
+          uv run --directory pkgs/pyhanko --no-dev --exact --group testing-base --extra pkcs11 \
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-hsm-coverage.xml \
+            -m hsm tests/test_pkcs11.py
+        env:
+          YUBIHSM_PKCS11_PIN: ${{ secrets.YUBIHSM_PKCS11_PIN }}
+          PKCS11_PLATFORMS: yubihsm
+      - name: Test CLI against HSM testbench
+        run: |
+          uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing \
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-cli-hsm-coverage.xml \
+            -m hsm tests/test_cli_signing_pkcs11.py
+        env:
+          YUBIHSM_PKCS11_PIN: ${{ secrets.YUBIHSM_PKCS11_PIN }}
+          PKCS11_PLATFORMS: yubihsm
+      - name: Stash coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-hsm
+          path: "pkgs/pyhanko/*-coverage.xml"
   smoke-tests:
     runs-on: ubuntu-latest
     needs: build
@@ -231,7 +262,7 @@ jobs:
       actions: write
       contents: read
     runs-on: ubuntu-latest
-    needs: [pytest-coverage,live-integration-tests,smoke-tests]
+    needs: [pytest-coverage,live-integration-tests,smoke-tests,hsm-tests]
     steps:
       # checkout necessary to ensure the uploaded report contains the correct paths
       - uses: actions/checkout@v6

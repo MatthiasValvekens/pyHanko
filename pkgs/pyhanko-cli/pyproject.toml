@@ -86,7 +86,9 @@ pythonpath = ["src"]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope="function"
 markers = [
-    "nosmoke: exclude from smoke test runs"
+    "nosmoke: exclude from smoke test runs",
+    "hsm: run test on HSM platform",
+    "algo: indicate signing algorithm used in test",  # so far only used in PKCS#11 suite
 ]
 
 [tool.coverage.run]

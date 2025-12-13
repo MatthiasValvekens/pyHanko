@@ -1,12 +1,9 @@
 import getpass
 
+import pytest
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.pkcs11_cli import P11_PIN_ENV_VAR
-from test_utils.signing_commons import (
-    SOFTHSM,
-    pkcs11_only,
-    pkcs11_test_module,
-)
+from test_utils.pkcs11_utils.config import P11TestConfig
 
 from .conftest import (
     INPUT_PATH,
@@ -16,8 +13,18 @@ from .conftest import (
 )
 
 
-@pkcs11_only
-def test_cli_pkcs11_args_required(cli_runner):
+@pytest.fixture(
+    params=[
+        pytest.param(k, marks=pytest.mark.algo(k))
+        for k in ('rsa', 'ecdsa', 'ed25519', 'ed448')
+    ]
+)
+def root_cert_data(p11_config, any_algo):
+    return p11_config.cert_chain[0]
+
+
+@pytest.mark.hsm(platform='softhsm')
+def test_cli_pkcs11_args_required(cli_runner, p11_config):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -34,8 +41,8 @@ def test_cli_pkcs11_args_required(cli_runner):
     assert "--lib and --cert-label are required" in result.output
 
 
-@pkcs11_only
-def test_cli_pkcs11_setup_requires_config(cli_runner):
+@pytest.mark.hsm(platform='softhsm')
+def test_cli_pkcs11_setup_requires_config(cli_runner, p11_config):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -54,7 +61,7 @@ def test_cli_pkcs11_setup_requires_config(cli_runner):
     assert "requires a configuration file" in result.output
 
 
-@pkcs11_only
+@pytest.mark.nosmoke
 def test_cli_pkcs11_setup_config_unreadable(cli_runner):
     _write_config({'pkcs11-setups': {}})
     result = cli_runner.invoke(
@@ -75,39 +82,39 @@ def test_cli_pkcs11_setup_config_unreadable(cli_runner):
     assert "Error while reading PKCS#11 config" in result.output
 
 
-def _pkcs11_setup_config(pki_arch_name):
+def _pkcs11_setup_config(p11_test_config: P11TestConfig):
     cfg = {
         'pkcs11-setups': {
             'test': {
-                'module-path': pkcs11_test_module,
+                'module-path': p11_test_config.module,
                 'token-criteria': {
-                    'label': 'test' + pki_arch_name,
+                    'label': p11_test_config.token_label,
                 },
-                'cert-label': 'signer1',
-                'other-certs-to-pull': 'interm',
+                'cert-label': p11_test_config.key_label,
+                'other-certs-to-pull': p11_test_config.cert_chain_labels[1],
             }
         }
     }
     return cfg
 
 
-@pkcs11_only
+@pytest.mark.hsm(platform='all')
 def test_cli_addsig_pkcs11(
-    cli_runner, pki_arch_name, post_validate, monkeypatch
+    cli_runner, post_validate, monkeypatch, p11_config, platform
 ):
     args = [
         '--lib',
-        pkcs11_test_module,
+        p11_config.module,
         '--token-label',
-        'test' + pki_arch_name,
+        p11_config.token_label,
         '--cert-label',
-        'signer1',
+        p11_config.key_label,
         '--other-cert',
-        'interm',
+        p11_config.cert_chain_labels[1],
     ]
-    if SOFTHSM and pki_arch_name == 'ecdsa':
+    if platform == "softhsm" and p11_config.algo == 'ecdsa':
         args += ['--raw-mechanism']
-    monkeypatch.setattr(getpass, 'getpass', value=_const('1234'))
+    monkeypatch.setattr(getpass, 'getpass', value=_const(p11_config.user_pin))
     result = cli_runner.invoke(
         cli_root,
         [
@@ -124,12 +131,14 @@ def test_cli_addsig_pkcs11(
     assert not result.exception, result.output
 
 
-@pkcs11_only
-def test_cli_addsig_pkcs11_with_setup(cli_runner, pki_arch_name, post_validate):
-    cfg = _pkcs11_setup_config(pki_arch_name)
-    if SOFTHSM and pki_arch_name == 'ecdsa':
+@pytest.mark.hsm(platform='all')
+def test_cli_addsig_pkcs11_with_setup(
+    cli_runner, p11_config, post_validate, platform
+):
+    cfg = _pkcs11_setup_config(p11_config)
+    if platform == 'softhsm' and p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
-    cfg['pkcs11-setups']['test']['user-pin'] = 1234
+    cfg['pkcs11-setups']['test']['user-pin'] = p11_config.user_pin
     _write_config(cfg)
     result = cli_runner.invoke(
         cli_root,
@@ -148,13 +157,13 @@ def test_cli_addsig_pkcs11_with_setup(cli_runner, pki_arch_name, post_validate):
     assert not result.exception, result.output
 
 
-@pkcs11_only
+@pytest.mark.hsm(platform='softhsm')
 def test_cli_addsig_pkcs11_with_setup_and_env_pin(
-    cli_runner, pki_arch_name, post_validate
+    cli_runner, p11_config, post_validate
 ):
-    cli_runner.env[P11_PIN_ENV_VAR] = '1234'
-    cfg = _pkcs11_setup_config(pki_arch_name)
-    if SOFTHSM and pki_arch_name == 'ecdsa':
+    cli_runner.env[P11_PIN_ENV_VAR] = p11_config.user_pin
+    cfg = _pkcs11_setup_config(p11_config)
+    if p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     _write_config(cfg)
     result = cli_runner.invoke(
@@ -174,16 +183,19 @@ def test_cli_addsig_pkcs11_with_setup_and_env_pin(
     assert not result.exception, result.output
 
 
-@pkcs11_only
+@pytest.mark.hsm(platform='softhsm')
 def test_cli_addsig_pkcs11_with_setup_and_pin_prompt(
-    cli_runner, pki_arch_name, post_validate, monkeypatch
+    cli_runner,
+    post_validate,
+    monkeypatch,
+    p11_config,
 ):
-    cfg = _pkcs11_setup_config(pki_arch_name)
-    if SOFTHSM and pki_arch_name == 'ecdsa':
+    cfg = _pkcs11_setup_config(p11_config)
+    if p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     _write_config(cfg)
 
-    monkeypatch.setattr(getpass, 'getpass', value=_const('1234'))
+    monkeypatch.setattr(getpass, 'getpass', value=_const(p11_config.user_pin))
     result = cli_runner.invoke(
         cli_root,
         [
