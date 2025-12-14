@@ -59,7 +59,7 @@ jobs:
       - name: Build release artifacts
         run: uv build --all-packages
       - name: Upload dist artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: pyhanko-dist
           path: dist/
@@ -71,7 +71,7 @@ jobs:
           PATTERN: ${{ inputs.wheel }}-${{ inputs.version }}*
       - name: Upload dist artifacts for release
         if: inputs.package != ''
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: pyhanko-release-dist
           path: dist/${{ inputs.wheel }}-${{ inputs.version }}*
@@ -133,7 +133,7 @@ jobs:
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-${{ strategy.job-index }}
           path: "pkgs/*/*-coverage.xml"
@@ -184,7 +184,7 @@ jobs:
           LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
           LIVE_CSC_SCAL2_HOST_URL: http://localhost:8999
       - name: Stash coverage report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-live-${{ strategy.job-index }}
           path: "internal/integration-tests/*-coverage.xml"
@@ -222,7 +222,7 @@ jobs:
             -m "not nosmoke" --cov-report=xml:python-smoke-test-cli-coverage.xml \
             tests
       - name: Stash coverage report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-smoke-tests
           path: "pkgs/pyhanko/*-coverage.xml"
