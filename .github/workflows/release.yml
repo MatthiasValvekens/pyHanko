@@ -119,17 +119,17 @@ jobs:
       discussions: write
     steps:
     - name: Download dist artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: pyhanko-release-dist
         path: dist/
     - name: Download provenance data
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: multiple.intoto.jsonl
         path: provenance/
     - name: Download release body
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: release-body
         path: release-body
