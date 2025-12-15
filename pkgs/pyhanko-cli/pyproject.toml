@@ -65,7 +65,7 @@ testing-base = [
 ]
 testing = [
     {include-group = "testing-base"},
-    "aiohttp>=3.9,<3.13",
+    "aiohttp>=3.9,<3.14",
     "pytest-aiohttp>=1.0.4,<1.2.0",
     "pyhanko[pkcs11,opentype,async_http,image-support,qr,etsi]"
 ]
