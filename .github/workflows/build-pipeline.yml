@@ -190,6 +190,8 @@ jobs:
           path: "internal/integration-tests/*-coverage.xml"
   hsm-tests:
     runs-on: pyhanko-testbench
+    # Dependabot PRs don't get access to secrets
+    if: ${{ github.actor != 'dependabot[bot]' }}
     environment: testbench
     needs: build
     steps:
