@@ -1,8 +1,12 @@
 import getpass
+from typing import Any, Dict
 
 import pytest
 from pyhanko.cli import cli_root
-from pyhanko.cli.commands.signing.pkcs11_cli import P11_PIN_ENV_VAR
+from pyhanko.cli.commands.signing.pkcs11_cli import (
+    P11_PIN_ENV_VAR,
+    P11_SIGNING_PIN_ENV_VAR,
+)
 from test_utils.pkcs11_utils.config import P11TestConfig
 
 from .conftest import (
@@ -99,7 +103,9 @@ def _pkcs11_setup_config_pull_certs(p11_test_config: P11TestConfig):
     return cfg
 
 
-def _pkcs11_setup_config_read_certs_from_file(p11_test_config: P11TestConfig):
+def _pkcs11_setup_config_read_certs_from_file(
+    p11_test_config: P11TestConfig,
+) -> Dict[str, Any]:
     with open('interm.crt', 'wb') as certf:
         certf.write(p11_test_config.cert_chain[1].dump())
     test_cfg = {
@@ -150,7 +156,7 @@ def test_cli_addsig_pkcs11_pull_interm(
     assert not result.exception, result.output
 
 
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm(exclude='safenet')
 def test_cli_addsig_pkcs11_read_interm_from_file(
     cli_runner, post_validate, monkeypatch, p11_config, platform
 ):
@@ -187,7 +193,7 @@ def test_cli_addsig_pkcs11_read_interm_from_file(
     assert not result.exception, result.output
 
 
-@pytest.mark.hsm(platform='softhsm,yubihsm')
+@pytest.mark.hsm(exclude='yubikey-nano')
 def test_cli_addsig_pkcs11_with_setup_pull_certs(
     cli_runner, p11_config, post_validate, platform
 ):
@@ -195,6 +201,9 @@ def test_cli_addsig_pkcs11_with_setup_pull_certs(
     if platform == 'softhsm' and p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     cfg['pkcs11-setups']['test']['user-pin'] = p11_config.user_pin
+    if p11_config.signing_pin is not None:
+        cfg['pkcs11-setups']['test']['signing-pin-mode'] = 'reauthenticate'
+        cfg['pkcs11-setups']['test']['signing-pin'] = p11_config.signing_pin
     _write_config(cfg)
     result = cli_runner.invoke(
         cli_root,
@@ -213,7 +222,7 @@ def test_cli_addsig_pkcs11_with_setup_pull_certs(
     assert not result.exception, result.output
 
 
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm
 def test_cli_addsig_pkcs11_with_setup_read_certs_from_file(
     cli_runner, p11_config, post_validate, platform
 ):
@@ -221,6 +230,42 @@ def test_cli_addsig_pkcs11_with_setup_read_certs_from_file(
     if platform == 'softhsm' and p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     cfg['pkcs11-setups']['test']['user-pin'] = p11_config.user_pin
+    if p11_config.signing_pin is not None:
+        cfg['pkcs11-setups']['test']['signing-pin-mode'] = 'reauthenticate'
+        cfg['pkcs11-setups']['test']['signing-pin'] = p11_config.signing_pin
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs11',
+            '--p11-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+@pytest.mark.hsm(platform='safenet')
+def test_cli_addsig_pkcs11_with_setup_and_signing_pin_prompt(
+    cli_runner, p11_config, post_validate, platform, monkeypatch
+):
+    cfg = _pkcs11_setup_config_pull_certs(p11_config)
+
+    def _resp(*_args, prompt, **_kwargs):
+        if 'signing' in prompt:
+            return p11_config.signing_pin
+        else:
+            return p11_config.user_pin
+
+    monkeypatch.setattr(getpass, 'getpass', value=_resp)
+    if p11_config.signing_pin is not None:
+        cfg['pkcs11-setups']['test']['signing-pin-mode'] = 'prompt'
     _write_config(cfg)
     result = cli_runner.invoke(
         cli_root,
@@ -247,6 +292,31 @@ def test_cli_addsig_pkcs11_with_setup_and_env_pin(
     cfg = _pkcs11_setup_config_pull_certs(p11_config)
     if p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs11',
+            '--p11-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+@pytest.mark.hsm(platform='safenet')
+def test_cli_addsig_pkcs11_with_setup_and_env_signing_pin(
+    cli_runner, p11_config, post_validate
+):
+    cli_runner.env[P11_PIN_ENV_VAR] = p11_config.user_pin
+    cli_runner.env[P11_SIGNING_PIN_ENV_VAR] = p11_config.signing_pin
+    cfg = _pkcs11_setup_config_pull_certs(p11_config)
     _write_config(cfg)
     result = cli_runner.invoke(
         cli_root,

@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives import hashes
 from pyhanko.config.pkcs11 import (
     PKCS11PinEntryMode,
     PKCS11SignatureConfig,
+    PKCS11SigningPinEntryMode,
     TokenCriteria,
 )
 from pyhanko.pdf_utils.misc import coalesce
@@ -815,6 +816,9 @@ class PKCS11SigningContext:
             raise SigningError(
                 f"PKCS#11 error while opening session to {config.module_path}: [{type(ex).__name__}] {ex}"
             ) from ex
+        base_signing_kwargs = {}
+        if config.signing_pin_mode == PKCS11SigningPinEntryMode.REAUTHENTICATE:
+            base_signing_kwargs["pin"] = config.signing_pin or pin
         signer = PKCS11Signer(
             session,
             config.cert_label,
@@ -828,6 +832,7 @@ class PKCS11SigningContext:
             cert_id=config.cert_id,
             signing_cert=config.signing_certificate,
             signature_mechanism=config.signature_mechanism,
+            base_sign_kwargs=base_signing_kwargs,
         )
         if config.only_resident_certs:
             signer.default_cert_query_params[Attribute.TOKEN] = True

@@ -1,3 +1,5 @@
+import contextlib
+import dataclasses
 import getpass
 import os
 from typing import ContextManager, List, Optional
@@ -11,6 +13,7 @@ from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.pkcs11 import (
     PKCS11PinEntryMode,
     PKCS11SignatureConfig,
+    PKCS11SigningPinEntryMode,
     TokenCriteria,
 )
 from pyhanko.keys import load_certs_from_pemder
@@ -29,6 +32,7 @@ except ImportError:  # pragma: nocover
 
 
 P11_PIN_ENV_VAR = "PYHANKO_PKCS11_PIN"
+P11_SIGNING_PIN_ENV_VAR = "PYHANKO_PKCS11_SIGNING_PIN"
 UNAVAIL_MSG = "This subcommand requires python-pkcs11 to be installed."
 
 
@@ -115,6 +119,7 @@ class PKCS11Plugin(SigningCommandPlugin):
         return _pkcs11_signer_context(context, **kwargs)
 
 
+@contextlib.contextmanager
 def _pkcs11_signer_context(
     ctx: CLIContext,
     lib,
@@ -179,9 +184,26 @@ def _pkcs11_signer_context(
         if pin_env:
             pin = pin_env.strip()
 
+    signing_pin_env = os.environ.get(P11_SIGNING_PIN_ENV_VAR, None)
+    if signing_pin_env:
+        pkcs11_config = dataclasses.replace(
+            pkcs11_config,
+            signing_pin_mode=PKCS11SigningPinEntryMode.REAUTHENTICATE,
+            signing_pin=signing_pin_env.strip(),
+        )
+
     if pkcs11_config.prompt_pin == PKCS11PinEntryMode.PROMPT and pin is None:
         pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
-    return pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin)
+
+    with pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin) as signer:
+        if pkcs11_config.signing_pin_mode == PKCS11SigningPinEntryMode.PROMPT:
+
+            def _signing_kwargs(*_args, **_kwargs):
+                signing_pin = getpass.getpass(prompt='PKCS#11 signing PIN: ')
+                return {'pin': signing_pin}
+
+            signer.sign_kwargs = _signing_kwargs
+        yield signer
 
 
 class ModuleConfigWrapper:

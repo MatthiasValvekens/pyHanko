@@ -10,7 +10,12 @@ from pyhanko.config.errors import ConfigurationError
 from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
 from pyhanko.pdf_utils.misc import get_and_apply
 
-__all__ = ['PKCS11PinEntryMode', 'PKCS11SignatureConfig', 'TokenCriteria']
+__all__ = [
+    'PKCS11PinEntryMode',
+    'PKCS11SigningPinEntryMode',
+    'PKCS11SignatureConfig',
+    'TokenCriteria',
+]
 
 
 @dataclass(frozen=True)
@@ -89,6 +94,54 @@ class PKCS11PinEntryMode(enum.Enum):
             # fallback for backwards compatibility
             return (
                 PKCS11PinEntryMode.PROMPT if value else PKCS11PinEntryMode.SKIP
+            )
+
+
+class PKCS11SigningPinEntryMode(enum.Enum):
+    """
+    Pin entry behaviour for signing operations.
+
+    .. note::
+        If these options are not specific enough for your needs (e.g. because
+        the authentication procedure depends on the data being signed in some
+        form), then you also have the option to override the
+        :meth:`~pyhanko.sign.pkcs11.PKCS11Signer.sign_kwargs` method
+        in :class:`~pyhanko.sign.pkcs11.PKCS11Signer`.
+    """
+
+    SKIP = enum.auto()
+    """
+    Do not attempt to reauthenticate prior to signing (the default).
+
+    .. note::
+        Some modules may of course perform their own authentication
+        regardless.
+    """
+
+    PROMPT = enum.auto()
+    """
+    Prompt for a PIN.
+
+    .. note::
+        This value is only processed by the CLI, and ignored when the PKCS#11
+        signer is called from library code. In those cases, the behaviour
+        is effectively the same as :attr:`SKIP`.
+    """
+
+    REAUTHENTICATE = enum.auto()
+    """
+    Reauthenticate prior to signing using the value of ``signing_pin``.
+    If undefined, use the login PIN.
+    """
+
+    @staticmethod
+    def parse_mode_setting(value: Any) -> 'PKCS11SigningPinEntryMode':
+        try:
+            return PKCS11SigningPinEntryMode.__members__[value.upper()]
+        except KeyError:
+            raise ConfigurationError(
+                f"Invalid signing PIN entry mode {value!r}; must be one of "
+                f"{', '.join(repr(x.name) for x in PKCS11SigningPinEntryMode)}."
             )
 
 
@@ -212,6 +265,16 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
         pyHanko's default choice of parameters.
     """
 
+    signing_pin_mode: PKCS11SigningPinEntryMode = PKCS11SigningPinEntryMode.SKIP
+    """
+    Specify pre-sign PIN entry behaviour.
+    """
+
+    signing_pin: Optional[str] = None
+    """
+    Signing PIN, used in accordance with :attr:`signing_pin_mode`.
+    """
+
     @classmethod
     def check_config_keys(cls, keys_supplied: Set[str]):
         # make sure we don't ding token_label since we actually still
@@ -274,6 +337,13 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
             'prompt_pin',
             PKCS11PinEntryMode.parse_mode_setting,
             default=PKCS11PinEntryMode.PROMPT,
+        )
+
+        config_dict['signing_pin_mode'] = get_and_apply(
+            config_dict,
+            'signing_pin_mode',
+            PKCS11SigningPinEntryMode.parse_mode_setting,
+            default=PKCS11SigningPinEntryMode.SKIP,
         )
 
         if 'token_label' in config_dict:

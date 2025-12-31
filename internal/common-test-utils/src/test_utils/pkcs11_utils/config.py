@@ -20,6 +20,7 @@ class P11TestConfig:
     cert_chain_labels: List[str]
     cert_chain: List[x509.Certificate]
     freeze_time_spec: Optional[str]
+    signing_pin: Optional[str]
 
     @property
     def session(self):
@@ -45,3 +46,10 @@ class P11TestConfig:
                 return ValidationContext(**kwargs)
         else:
             return ValidationContext(**kwargs)
+
+    @property
+    def signing_kwargs(self):
+        signing_kwargs = dict()
+        if self.signing_pin is not None:
+            signing_kwargs["pin"] = self.signing_pin
+        return signing_kwargs

@@ -13,7 +13,11 @@ from asn1crypto import algos
 from certomancer.registry import CertLabel
 from pkcs11 import Mechanism, PKCS11Error
 from pkcs11 import types as p11_types
-from pyhanko.config.pkcs11 import PKCS11PinEntryMode, PKCS11SignatureConfig
+from pyhanko.config.pkcs11 import (
+    PKCS11PinEntryMode,
+    PKCS11SignatureConfig,
+    PKCS11SigningPinEntryMode,
+)
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import pkcs11, signers
@@ -34,7 +38,7 @@ from test_utils.signing_commons import (
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm
 def test_simple_sign(bulk_fetch, p11_config, any_algo, platform):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -47,6 +51,7 @@ def test_simple_sign(bulk_fetch, p11_config, any_algo, platform):
             bulk_fetch=bulk_fetch,
             use_raw_mechanism=platform == "softhsm"
             and p11_config.algo == "ecdsa",
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -57,7 +62,7 @@ def test_simple_sign(bulk_fetch, p11_config, any_algo, platform):
 
 
 @pytest.mark.algo('rsa')
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm(exclude='safenet')
 def test_simple_sign_with_rsassa_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -68,6 +73,7 @@ def test_simple_sign_with_rsassa_pss(p11_config):
             key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             prefer_pss=True,
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -80,7 +86,7 @@ def test_simple_sign_with_rsassa_pss(p11_config):
 
 
 @pytest.mark.algo('rsa')
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm
 def test_simple_sign_with_rsassa_pss_custom_parameters(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -109,6 +115,7 @@ def test_simple_sign_with_rsassa_pss_custom_parameters(p11_config):
             signature_mechanism=algos.SignedDigestAlgorithm(
                 {'algorithm': 'rsassa_pss', 'parameters': pss_params},
             ),
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -137,6 +144,7 @@ def test_simple_sign_legacy_open_session_by_token_label(p11_config):
                 p11_config.cert_label,
                 key_label=p11_config.key_label,
                 other_certs_to_pull=p11_config.cert_chain_labels,
+                base_sign_kwargs=p11_config.signing_kwargs,
             )
             out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -147,7 +155,7 @@ def test_simple_sign_legacy_open_session_by_token_label(p11_config):
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm
 def test_sign_external_certs(bulk_fetch, p11_config):
     # Test to see if unnecessary fetches for intermediate certs are skipped
 
@@ -160,6 +168,7 @@ def test_sign_external_certs(bulk_fetch, p11_config):
             key_label=p11_config.key_label,
             ca_chain=(p11_config.cert_chain[1],),
             bulk_fetch=bulk_fetch,
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         orig_fetcher = signer._pull_single_cert
 
@@ -180,7 +189,7 @@ def test_sign_external_certs(bulk_fetch, p11_config):
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
-@pytest.mark.hsm(platform='softhsm,yubihsm')
+@pytest.mark.hsm(exclude='yubikey-nano')
 def test_sign_multiple_cert_sources(bulk_fetch, p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -192,6 +201,7 @@ def test_sign_multiple_cert_sources(bulk_fetch, p11_config):
             other_certs_to_pull=(p11_config.cert_chain_labels[0],),
             ca_chain=(p11_config.cert_chain[1],),
             bulk_fetch=bulk_fetch,
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         assert isinstance(signer.cert_registry, SimpleCertificateStore)
         assert len(list(signer.cert_registry)) == 2
@@ -215,6 +225,7 @@ def test_wrong_key_label(bulk_fetch, p11_config):
             other_certs_to_pull=p11_config.cert_chain_labels,
             bulk_fetch=bulk_fetch,
             key_label='NoSuchKeyExists',
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         with pytest.raises(PKCS11Error, match="Could not find private key"):
             signers.sign_pdf(w, meta, signer=signer)
@@ -233,6 +244,7 @@ def test_wrong_key_id(bulk_fetch, p11_config):
             other_certs_to_pull=p11_config.cert_chain_labels,
             bulk_fetch=bulk_fetch,
             key_id=binascii.unhexlify(b'deadbeef'),
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         with pytest.raises(PKCS11Error, match="Could not find private key"):
             signers.sign_pdf(w, meta, signer=signer)
@@ -250,6 +262,7 @@ def test_wrong_cert(bulk_fetch, p11_config):
             other_certs_to_pull=p11_config.cert_chain_labels,
             bulk_fetch=bulk_fetch,
             cert_id=binascii.unhexlify(b'deadbeef'),
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         with pytest.raises(PKCS11Error, match='Could not find cert'):
             signers.sign_pdf(w, meta, signer=signer)
@@ -265,6 +278,7 @@ def test_provided_certs(p11_config):
             cert_label=p11_config.cert_label,
             signing_cert=signer_cert,
             ca_chain=list(p11_config.cert_chain),
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -286,6 +300,7 @@ def test_signer_provided_others_pulled(bulk_fetch, p11_config):
             sess,
             p11_config.cert_label,
             ca_chain=list(p11_config.cert_chain),
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -308,6 +323,7 @@ def test_signer_pulled_others_provided(bulk_fetch, p11_config):
             other_certs_to_pull=p11_config.cert_chain_labels,
             signing_cert=signer_cert,
             bulk_fetch=bulk_fetch,
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -339,6 +355,7 @@ def test_auto_use_only_key_if_cert_is_known(p11_config):
             sess,
             signing_cert=signer_cert,
             other_certs_to_pull=p11_config.cert_chain_labels,
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -347,7 +364,7 @@ def test_auto_use_only_key_if_cert_is_known(p11_config):
     val_trusted(emb, vc=p11_config.validation_context)
 
 
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm(exclude='safenet')
 def test_simple_sign_from_config(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -357,6 +374,31 @@ def test_simple_sign_from_config(p11_config):
         cert_label=p11_config.cert_label,
         key_label=p11_config.key_label,
         user_pin=p11_config.user_pin,
+        other_certs_to_pull=None,
+        only_resident_certs=True,
+    )
+
+    with PKCS11SigningContext(config) as signer:
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, vc=p11_config.validation_context)
+
+
+@pytest.mark.hsm(platform='safenet')
+def test_simple_sign_from_config_with_signing_pin(p11_config):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    config = PKCS11SignatureConfig(
+        module_path=p11_config.module,
+        token_criteria=TokenCriteria(p11_config.token_label),
+        cert_label=p11_config.cert_label,
+        key_label=p11_config.key_label,
+        user_pin=p11_config.user_pin,
+        signing_pin_mode=PKCS11SigningPinEntryMode.REAUTHENTICATE,
+        signing_pin=p11_config.signing_pin,
         other_certs_to_pull=None,
         only_resident_certs=True,
     )
@@ -425,7 +467,7 @@ def test_sign_deferred_auth(p11_config):
 
 
 @pytest.mark.algo('rsa')
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm(platform='softhsm')
 def test_simple_sign_with_raw_rsa(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -462,6 +504,7 @@ def test_simple_sign_with_raw_dsa(p11_config):
             key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             use_raw_mechanism=True,
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
@@ -486,6 +529,7 @@ def test_no_raw_pss(p11_config):
             other_certs_to_pull=p11_config.cert_chain_labels,
             use_raw_mechanism=True,
             prefer_pss=True,
+            base_sign_kwargs=p11_config.signing_kwargs,
         )
         with pytest.raises(NotImplementedError, match='PSS not available'):
             signers.sign_pdf(w, meta, signer=signer)
@@ -560,7 +604,7 @@ def test_pull_err_fmt(label, cert_id, no_results, exp_err):
 
 
 @pytest.mark.asyncio
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm(exclude='safenet')
 async def test_simple_sign_from_config_async(any_algo, p11_config, platform):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -585,7 +629,7 @@ async def test_simple_sign_from_config_async(any_algo, p11_config, platform):
 
 @pytest.mark.asyncio
 @pytest.mark.algo('rsa')
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm(exclude='safenet')
 async def test_simple_sign_from_config_async_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -608,7 +652,7 @@ async def test_simple_sign_from_config_async_pss(p11_config):
     await async_val_trusted(emb, vc=p11_config.validation_context)
 
 
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm
 def test_token_does_not_exist(p11_config):
     with pytest.raises(PKCS11Error, match='No token matching criteria'):
         pkcs11.open_pkcs11_session(

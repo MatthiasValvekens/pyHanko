@@ -6,7 +6,6 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
-import pyhanko.config.pkcs11
 import pytest
 import yaml
 from asn1crypto import x509
@@ -20,10 +19,10 @@ from pyhanko.cli.commands.signing.pkcs11_cli import ModuleConfigWrapper
 from pyhanko.cli.commands.signing.simple import KeyFileConfigWrapper
 from pyhanko.cli.config import CLIConfig
 from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE
+from pyhanko.config import pkcs11 as pkcs11_cfg
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import DEFAULT_ROOT_LOGGER_LEVEL, StdLogOutput
-from pyhanko.config.pkcs11 import TokenCriteria
 from pyhanko.pdf_utils import layout
 from pyhanko.pdf_utils.content import ImportedPdfPage
 from pyhanko.sign.signers.pdf_cms import (
@@ -627,7 +626,7 @@ def test_read_pkcs11_config():
     with pytest.raises(ConfigurationError):
         ModuleConfigWrapper(cli_config).get_pkcs11_config('bar')
 
-    assert setup.token_criteria == TokenCriteria('testrsa')
+    assert setup.token_criteria == pkcs11_cfg.TokenCriteria('testrsa')
     assert setup.module_path == '/path/to/libfoo.so'
     assert not setup.only_resident_certs
     assert len(setup.other_certs) == 2
@@ -647,7 +646,7 @@ def test_read_pkcs11_config_legacy():
     with pytest.deprecated_call():
         setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
-    assert setup.token_criteria == TokenCriteria('testrsa')
+    assert setup.token_criteria == pkcs11_cfg.TokenCriteria('testrsa')
     assert not setup.only_resident_certs
 
 
@@ -668,7 +667,7 @@ def test_read_pkcs11_config_legacy_with_extra_criteria():
     with pytest.deprecated_call():
         setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
-    assert setup.token_criteria == TokenCriteria(
+    assert setup.token_criteria == pkcs11_cfg.TokenCriteria(
         label='testrsa', serial=b'\xde\xad\xbe\xef'
     )
     assert setup.only_resident_certs
@@ -861,14 +860,14 @@ def test_read_pkcs11_config_key_label_not_from_cert_label_if_key_id_defined():
 @pytest.mark.parametrize(
     'literal,exp_val',
     [
-        ('prompt', pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT),
-        ('skip', pyhanko.config.pkcs11.PKCS11PinEntryMode.SKIP),
-        ('defer', pyhanko.config.pkcs11.PKCS11PinEntryMode.DEFER),
+        ('prompt', pkcs11_cfg.PKCS11PinEntryMode.PROMPT),
+        ('skip', pkcs11_cfg.PKCS11PinEntryMode.SKIP),
+        ('defer', pkcs11_cfg.PKCS11PinEntryMode.DEFER),
         # fallbacks
-        ('true', pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT),
-        ('false', pyhanko.config.pkcs11.PKCS11PinEntryMode.SKIP),
-        ('1', pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT),
-        ('0', pyhanko.config.pkcs11.PKCS11PinEntryMode.SKIP),
+        ('true', pkcs11_cfg.PKCS11PinEntryMode.PROMPT),
+        ('false', pkcs11_cfg.PKCS11PinEntryMode.SKIP),
+        ('1', pkcs11_cfg.PKCS11PinEntryMode.PROMPT),
+        ('0', pkcs11_cfg.PKCS11PinEntryMode.SKIP),
     ],
 )
 def test_read_pkcs11_prompt_pin(literal, exp_val):
@@ -899,7 +898,8 @@ def test_read_pkcs11_prompt_pin_default():
         """
     )
     setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
-    assert setup.prompt_pin == pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT
+    assert setup.prompt_pin == pkcs11_cfg.PKCS11PinEntryMode.PROMPT
+    assert setup.signing_pin_mode == pkcs11_cfg.PKCS11SigningPinEntryMode.SKIP
 
 
 def test_read_pkcs11_prompt_pin_invalid():
@@ -912,6 +912,46 @@ def test_read_pkcs11_prompt_pin_invalid():
                     label: testrsa
                 cert-label: signer
                 prompt-pin: foobar
+        """
+    )
+    with pytest.raises(ConfigurationError, match='Invalid'):
+        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+
+
+@pytest.mark.parametrize(
+    'literal,exp_val',
+    [
+        ('prompt', pkcs11_cfg.PKCS11SigningPinEntryMode.PROMPT),
+        ('reauthenticate', pkcs11_cfg.PKCS11SigningPinEntryMode.REAUTHENTICATE),
+        ('skip', pkcs11_cfg.PKCS11SigningPinEntryMode.SKIP),
+    ],
+)
+def test_read_pkcs11_signing_pin_mode(literal, exp_val):
+    cli_config = _parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-criteria:
+                    label: testrsa
+                cert-label: signer
+                signing-pin-mode: {literal}
+        """
+    )
+    setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
+    assert setup.signing_pin_mode == exp_val
+
+
+def test_read_pkcs11_signing_pin_invalid():
+    cli_config = _parse_cli_config(
+        """
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-criteria:
+                    label: testrsa
+                cert-label: signer
+                signing-pin-mode: foobar
         """
     )
     with pytest.raises(ConfigurationError, match='Invalid'):

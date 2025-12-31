@@ -90,17 +90,24 @@ def p11_global_test_config(platform):
                             cert_path,
                             cert.subject.human_friendly,
                         )
+                user_pin = os.environ[cfg['user_pin_env_var']]
+                signing_pin_var = cfg.get('signing_pin_env_var', None)
+                if signing_pin_var is not None:
+                    signing_pin = os.environ[signing_pin_var]
+                else:
+                    signing_pin = None
                 configs[algo] = P11TestConfig(
                     platform=platform,
                     token_label=cfg.get('token_label', None),
                     module=cfg['module'],
-                    user_pin=os.environ[cfg['user_pin_env_var']],
+                    user_pin=user_pin,
                     cert_label=cfg['cert_label'],
                     key_label=cfg.get('key_label', None),
                     algo=algo,
                     cert_chain_labels=cfg.get('cert_chain_labels', []),
                     cert_chain=cert_chain,
                     freeze_time_spec=cfg.get('freeze_time_spec', None),
+                    signing_pin=signing_pin,
                 )
             configs['default'] = configs[platform_cfg['default']]
         return configs
@@ -120,6 +127,7 @@ def p11_global_test_config(platform):
                 cert_chain_labels=['root', 'interm'],
                 cert_chain=[],
                 freeze_time_spec='2020-11-01',
+                signing_pin=None,
             )
             for k in DEFAULT_SUPPORTED_ALGOS
         }
@@ -139,9 +147,14 @@ def p11_config(request, p11_global_test_config, declared_algo, platform):
     supported_platforms = {
         p
         for mark in request.node.iter_markers(name='hsm')
-        for p in mark.kwargs['platform'].split(',')
+        for p in mark.kwargs.get('platform', 'all').split(',')
     }
-    if (
+    excluded_platforms = {
+        p
+        for mark in request.node.iter_markers(name='hsm')
+        for p in mark.kwargs.get('exclude', '').split(',')
+    }
+    if platform in excluded_platforms or (
         supported_platforms
         and platform not in supported_platforms
         and 'all' not in supported_platforms
