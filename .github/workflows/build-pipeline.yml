@@ -219,7 +219,9 @@ jobs:
         env:
           YUBIHSM_PKCS11_PIN: ${{ secrets.YUBIHSM_PKCS11_PIN }}
           YUBIKEY_NANO_PIN: ${{ secrets.YUBIKEY_NANO_PIN }}
-          PKCS11_PLATFORMS: yubihsm,yubikey-nano
+          SAFENET_PKCS11_USER_PIN: ${{ secrets.SAFENET_PKCS11_USER_PIN }}
+          SAFENET_PKCS11_SIGNING_PIN: ${{ secrets.SAFENET_PKCS11_SIGNING_PIN }}
+          PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet
       - name: Stash coverage report
         uses: actions/upload-artifact@v6
         with:
