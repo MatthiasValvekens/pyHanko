@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import logging
 import os
 
 import pytest
@@ -155,12 +154,18 @@ def _write_config(config: dict, fname: str = 'pyhanko.yml'):
         yaml.dump(config, outf)
 
 
-logger = logging.getLogger(__name__)
+def _test_log(msg: str, *args):
+    # Use print instead of logger for now,
+    # since the `click` output stream management
+    # messes with the logging settings otherwise,
+    # causing writes to closed I/O handles.
+    # TODO: figure out how to handle this properly
+    print(msg.format(*args))
 
 
 def _validate_last_sig_in(root: x509.Certificate, pdf_file, *, strict):
     with open(pdf_file, 'rb') as result:
-        logger.info(f"Validating last signature in {pdf_file}...")
+        _test_log(f"Validating last signature in {pdf_file}...")
         r = PdfFileReader(result, strict=strict)
         # Little hack for the tests with encrypted files
         if r.security_handler is not None:
@@ -195,7 +200,7 @@ def _validate_last_sig_in(root: x509.Certificate, pdf_file, *, strict):
                 last_sig, signer_validation_context=vc
             )
         assert status.bottom_line, status.pretty_print_details()
-        logger.info("Validation successful")
+        _test_log("Validation successful")
 
 
 @pytest.fixture
@@ -207,7 +212,7 @@ def post_validate(root_cert_data):
             with open(INPUT_PATH, 'rb') as inf:
                 PdfFileReader(inf)
         except PdfStrictReadError:
-            logger.info(
+            _test_log(
                 f"Input file {INPUT_PATH} can't be opened in strict mode, "
                 f"will validate output {SIGNED_OUTPUT_PATH} in "
                 f"nonstrict mode as well"

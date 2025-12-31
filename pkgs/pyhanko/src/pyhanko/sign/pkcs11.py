@@ -522,7 +522,7 @@ class PKCS11Signer(Signer):
             signing_cert=signing_cert,
             signature_mechanism=signature_mechanism,
         )
-        if ca_chain is not None:
+        if ca_chain:
             self._cert_registry.register_multiple(ca_chain)
         if signing_cert is not None:
             self._cert_registry.register(signing_cert)

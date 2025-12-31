@@ -41,7 +41,8 @@ def test_simple_sign(bulk_fetch, p11_config, any_algo, platform):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             bulk_fetch=bulk_fetch,
             use_raw_mechanism=platform == "softhsm"
@@ -63,7 +64,8 @@ def test_simple_sign_with_rsassa_pss(p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             prefer_pss=True,
         )
@@ -100,7 +102,8 @@ def test_simple_sign_with_rsassa_pss_custom_parameters(p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             prefer_pss=True,
             signature_mechanism=algos.SignedDigestAlgorithm(
@@ -131,7 +134,8 @@ def test_simple_sign_legacy_open_session_by_token_label(p11_config):
         ) as sess:
             signer = pkcs11.PKCS11Signer(
                 sess,
-                p11_config.key_label,
+                p11_config.cert_label,
+                key_label=p11_config.key_label,
                 other_certs_to_pull=p11_config.cert_chain_labels,
             )
             out = signers.sign_pdf(w, meta, signer=signer)
@@ -152,14 +156,15 @@ def test_sign_external_certs(bulk_fetch, p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
             ca_chain=(p11_config.cert_chain[1],),
             bulk_fetch=bulk_fetch,
         )
         orig_fetcher = signer._pull_single_cert
 
         def _trap_pull(*, label=None, cert_id=None):
-            if label != p11_config.key_label:
+            if label != p11_config.cert_label:
                 raise RuntimeError
             return orig_fetcher(label=label, cert_id=cert_id)
 
@@ -175,14 +180,15 @@ def test_sign_external_certs(bulk_fetch, p11_config):
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
-@pytest.mark.hsm(platform='all')
+@pytest.mark.hsm(platform='softhsm,yubihsm')
 def test_sign_multiple_cert_sources(bulk_fetch, p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
             other_certs_to_pull=(p11_config.cert_chain_labels[0],),
             ca_chain=(p11_config.cert_chain[1],),
             bulk_fetch=bulk_fetch,
@@ -205,7 +211,7 @@ def test_wrong_key_label(bulk_fetch, p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            cert_label=p11_config.key_label,
+            cert_label=p11_config.cert_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             bulk_fetch=bulk_fetch,
             key_label='NoSuchKeyExists',
@@ -222,7 +228,8 @@ def test_wrong_key_id(bulk_fetch, p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             bulk_fetch=bulk_fetch,
             key_id=binascii.unhexlify(b'deadbeef'),
@@ -239,7 +246,7 @@ def test_wrong_cert(bulk_fetch, p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            key_label=p11_config.key_label,
+            key_label=p11_config.cert_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             bulk_fetch=bulk_fetch,
             cert_id=binascii.unhexlify(b'deadbeef'),
@@ -255,7 +262,7 @@ def test_provided_certs(p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            key_label=p11_config.key_label,
+            cert_label=p11_config.cert_label,
             signing_cert=signer_cert,
             ca_chain=list(p11_config.cert_chain),
         )
@@ -277,7 +284,7 @@ def test_signer_provided_others_pulled(bulk_fetch, p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
             ca_chain=list(p11_config.cert_chain),
         )
         out = signers.sign_pdf(w, meta, signer=signer)
@@ -297,7 +304,7 @@ def test_signer_pulled_others_provided(bulk_fetch, p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            key_label=p11_config.key_label,
+            key_label=p11_config.cert_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             signing_cert=signer_cert,
             bulk_fetch=bulk_fetch,
@@ -347,7 +354,8 @@ def test_simple_sign_from_config(p11_config):
     config = PKCS11SignatureConfig(
         module_path=p11_config.module,
         token_criteria=TokenCriteria(p11_config.token_label),
-        cert_label=p11_config.key_label,
+        cert_label=p11_config.cert_label,
+        key_label=p11_config.key_label,
         user_pin=p11_config.user_pin,
         other_certs_to_pull=None,
         only_resident_certs=True,
@@ -367,7 +375,7 @@ def test_config_init_failure_signing_error(p11_config):
     config = PKCS11SignatureConfig(
         module_path='.',
         token_criteria=TokenCriteria(p11_config.token_label),
-        cert_label=p11_config.key_label,
+        cert_label=p11_config.cert_label,
         user_pin=p11_config.user_pin,
         other_certs_to_pull=None,
     )
@@ -384,7 +392,7 @@ def test_sign_skip_login_fail(p11_config):
     config = PKCS11SignatureConfig(
         module_path=p11_config.module,
         token_criteria=TokenCriteria(label=p11_config.token_label),
-        cert_label=p11_config.key_label,
+        cert_label=p11_config.cert_label,
         prompt_pin=PKCS11PinEntryMode.SKIP,
     )
 
@@ -404,7 +412,7 @@ def test_sign_deferred_auth(p11_config):
     config = PKCS11SignatureConfig(
         module_path=p11_config.module,
         token_criteria=TokenCriteria(p11_config.token_label),
-        cert_label=p11_config.key_label,
+        cert_label=p11_config.cert_label,
         prompt_pin=PKCS11PinEntryMode.DEFER,
     )
 
@@ -424,7 +432,8 @@ def test_simple_sign_with_raw_rsa(p11_config):
     config = PKCS11SignatureConfig(
         module_path=p11_config.module,
         token_criteria=TokenCriteria(p11_config.token_label),
-        cert_label=p11_config.key_label,
+        cert_label=p11_config.cert_label,
+        key_label=p11_config.key_label,
         user_pin=p11_config.user_pin,
         other_certs_to_pull=None,
         raw_mechanism=True,
@@ -449,7 +458,8 @@ def test_simple_sign_with_raw_dsa(p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             use_raw_mechanism=True,
         )
@@ -471,7 +481,8 @@ def test_no_raw_pss(p11_config):
     with p11_config.session as sess:
         signer = pkcs11.PKCS11Signer(
             sess,
-            p11_config.key_label,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             use_raw_mechanism=True,
             prefer_pss=True,
@@ -557,7 +568,8 @@ async def test_simple_sign_from_config_async(any_algo, p11_config, platform):
         module_path=p11_config.module,
         token_criteria=TokenCriteria(p11_config.token_label),
         other_certs_to_pull=p11_config.cert_chain_labels,
-        cert_label=p11_config.key_label,
+        cert_label=p11_config.cert_label,
+        key_label=p11_config.key_label,
         user_pin=p11_config.user_pin,
         raw_mechanism=platform == 'softhsm' and p11_config.algo == 'ecdsa',
     )
@@ -582,7 +594,8 @@ async def test_simple_sign_from_config_async_pss(p11_config):
         token_criteria=TokenCriteria(p11_config.token_label),
         other_certs_to_pull=p11_config.cert_chain_labels,
         prefer_pss=True,
-        cert_label=p11_config.key_label,
+        cert_label=p11_config.cert_label,
+        key_label=p11_config.key_label,
         user_pin=p11_config.user_pin,
     )
     async with PKCS11SigningContext(config=config) as signer:

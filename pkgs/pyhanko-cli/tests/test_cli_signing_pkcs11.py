@@ -19,7 +19,7 @@ from .conftest import (
         for k in ('rsa', 'ecdsa', 'ed25519', 'ed448')
     ]
 )
-def root_cert_data(p11_config, any_algo):
+def root_cert_data(p11_config):
     return p11_config.cert_chain[0]
 
 
@@ -82,24 +82,41 @@ def test_cli_pkcs11_setup_config_unreadable(cli_runner):
     assert "Error while reading PKCS#11 config" in result.output
 
 
-def _pkcs11_setup_config(p11_test_config: P11TestConfig):
-    cfg = {
-        'pkcs11-setups': {
-            'test': {
-                'module-path': p11_test_config.module,
-                'token-criteria': {
-                    'label': p11_test_config.token_label,
-                },
-                'cert-label': p11_test_config.key_label,
-                'other-certs-to-pull': p11_test_config.cert_chain_labels[1],
-            }
-        }
+def _pkcs11_setup_config_pull_certs(p11_test_config: P11TestConfig):
+    test_cfg = {
+        'module-path': p11_test_config.module,
+        'token-criteria': {
+            'label': p11_test_config.token_label,
+        },
+        'cert-label': p11_test_config.cert_label,
+        'key-label': p11_test_config.key_label,
+        'other-certs-to-pull': p11_test_config.cert_chain_labels[1],
     }
+    with open('interm.crt', 'wb') as certf:
+        certf.write(p11_test_config.cert_chain[1].dump())
+    test_cfg['other-certs'] = 'interm.crt'
+    cfg = {'pkcs11-setups': {'test': test_cfg}}
     return cfg
 
 
-@pytest.mark.hsm(platform='all')
-def test_cli_addsig_pkcs11(
+def _pkcs11_setup_config_read_certs_from_file(p11_test_config: P11TestConfig):
+    with open('interm.crt', 'wb') as certf:
+        certf.write(p11_test_config.cert_chain[1].dump())
+    test_cfg = {
+        'module-path': p11_test_config.module,
+        'token-criteria': {
+            'label': p11_test_config.token_label,
+        },
+        'cert-label': p11_test_config.cert_label,
+        'key-label': p11_test_config.key_label,
+        'other-certs': 'interm.crt',
+    }
+    cfg = {'pkcs11-setups': {'test': test_cfg}}
+    return cfg
+
+
+@pytest.mark.hsm(platform='softhsm,yubihsm')
+def test_cli_addsig_pkcs11_pull_interm(
     cli_runner, post_validate, monkeypatch, p11_config, platform
 ):
     args = [
@@ -108,12 +125,14 @@ def test_cli_addsig_pkcs11(
         '--token-label',
         p11_config.token_label,
         '--cert-label',
-        p11_config.key_label,
+        p11_config.cert_label,
         '--other-cert',
         p11_config.cert_chain_labels[1],
     ]
     if platform == "softhsm" and p11_config.algo == 'ecdsa':
         args += ['--raw-mechanism']
+    if p11_config.key_label:
+        args += ['--key-label', p11_config.key_label]
     monkeypatch.setattr(getpass, 'getpass', value=_const(p11_config.user_pin))
     result = cli_runner.invoke(
         cli_root,
@@ -132,10 +151,73 @@ def test_cli_addsig_pkcs11(
 
 
 @pytest.mark.hsm(platform='all')
-def test_cli_addsig_pkcs11_with_setup(
+def test_cli_addsig_pkcs11_read_interm_from_file(
+    cli_runner, post_validate, monkeypatch, p11_config, platform
+):
+    with open('interm.crt', 'wb') as certf:
+        certf.write(p11_config.cert_chain[1].dump())
+    args = [
+        '--lib',
+        p11_config.module,
+        '--token-label',
+        p11_config.token_label,
+        '--cert-label',
+        p11_config.cert_label,
+        '--other-cert-file',
+        'interm.crt',
+    ]
+    if platform == "softhsm" and p11_config.algo == 'ecdsa':
+        args += ['--raw-mechanism']
+    if p11_config.key_label:
+        args += ['--key-label', p11_config.key_label]
+    monkeypatch.setattr(getpass, 'getpass', value=_const(p11_config.user_pin))
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs11',
+            *args,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+@pytest.mark.hsm(platform='softhsm,yubihsm')
+def test_cli_addsig_pkcs11_with_setup_pull_certs(
     cli_runner, p11_config, post_validate, platform
 ):
-    cfg = _pkcs11_setup_config(p11_config)
+    cfg = _pkcs11_setup_config_pull_certs(p11_config)
+    if platform == 'softhsm' and p11_config.algo == 'ecdsa':
+        cfg['pkcs11-setups']['test']['raw-mechanism'] = True
+    cfg['pkcs11-setups']['test']['user-pin'] = p11_config.user_pin
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs11',
+            '--p11-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+@pytest.mark.hsm(platform='all')
+def test_cli_addsig_pkcs11_with_setup_read_certs_from_file(
+    cli_runner, p11_config, post_validate, platform
+):
+    cfg = _pkcs11_setup_config_read_certs_from_file(p11_config)
     if platform == 'softhsm' and p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     cfg['pkcs11-setups']['test']['user-pin'] = p11_config.user_pin
@@ -162,7 +244,7 @@ def test_cli_addsig_pkcs11_with_setup_and_env_pin(
     cli_runner, p11_config, post_validate
 ):
     cli_runner.env[P11_PIN_ENV_VAR] = p11_config.user_pin
-    cfg = _pkcs11_setup_config(p11_config)
+    cfg = _pkcs11_setup_config_pull_certs(p11_config)
     if p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     _write_config(cfg)
@@ -185,12 +267,9 @@ def test_cli_addsig_pkcs11_with_setup_and_env_pin(
 
 @pytest.mark.hsm(platform='softhsm')
 def test_cli_addsig_pkcs11_with_setup_and_pin_prompt(
-    cli_runner,
-    post_validate,
-    monkeypatch,
-    p11_config,
+    cli_runner, post_validate, monkeypatch, p11_config
 ):
-    cfg = _pkcs11_setup_config(p11_config)
+    cfg = _pkcs11_setup_config_pull_certs(p11_config)
     if p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     _write_config(cfg)

@@ -13,6 +13,7 @@ from pyhanko.config.pkcs11 import (
     PKCS11SignatureConfig,
     TokenCriteria,
 )
+from pyhanko.keys import load_certs_from_pemder
 from pyhanko.sign import Signer
 
 __all__ = ['PKCS11Plugin']
@@ -99,6 +100,13 @@ class PKCS11Plugin(SigningCommandPlugin):
                 help='label of other cert to pull (multiple uses allowed)',
                 multiple=True,
             ),
+            click.Option(
+                ('--other-cert-file',),
+                type=str,
+                required=False,
+                help='file names of other certs to include in the payload',
+                multiple=True,
+            ),
         ]
 
     def create_signer(
@@ -118,6 +126,7 @@ def _pkcs11_signer_context(
     p11_setup,
     raw_mechanism,
     other_cert,
+    other_cert_file,
 ):
     from pyhanko.sign import pkcs11
 
@@ -147,6 +156,8 @@ def _pkcs11_signer_context(
             else PKCS11PinEntryMode.PROMPT
         )
 
+        other_certs_from_files = list(load_certs_from_pemder(other_cert_file))
+
         pkcs11_config = PKCS11SignatureConfig(
             module_path=lib,
             cert_label=cert_label,
@@ -157,6 +168,7 @@ def _pkcs11_signer_context(
             prompt_pin=pinentry_mode,
             raw_mechanism=raw_mechanism,
             other_certs_to_pull=other_cert,
+            other_certs=other_certs_from_files,
         )
 
     pin = pkcs11_config.user_pin

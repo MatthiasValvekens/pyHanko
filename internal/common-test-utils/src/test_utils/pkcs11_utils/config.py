@@ -14,7 +14,8 @@ class P11TestConfig:
     token_label: str
     module: str
     user_pin: str
-    key_label: str
+    cert_label: str
+    key_label: Optional[str]
     algo: str
     cert_chain_labels: List[str]
     cert_chain: List[x509.Certificate]

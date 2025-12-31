@@ -1,10 +1,13 @@
+import logging
 import os
+from pathlib import Path
 
 import pytest
 import yaml
 from asn1crypto import x509
 from freezegun import freeze_time
 from pyhanko.config.pkcs11 import TokenCriteria
+from pyhanko.keys import load_cert_from_pemder
 
 from .config import P11TestConfig
 
@@ -73,15 +76,30 @@ def p11_global_test_config(platform):
             for algo, cfg in platform_cfg['configs'].items():
                 if algo not in DEFAULT_SUPPORTED_ALGOS:
                     continue
+                cert_chain = []
+                if 'cert_chain' in cfg:
+                    cert_dir = Path(config_file).parent
+                    for fname in cfg['cert_chain']:
+                        cert_path = Path(fname)
+                        if not cert_path.is_absolute():
+                            cert_path = cert_dir / cert_path
+                        cert = load_cert_from_pemder(str(cert_path))
+                        cert_chain.append(cert)
+                        logging.info(
+                            "Loaded certificate from %s: %s",
+                            cert_path,
+                            cert.subject.human_friendly,
+                        )
                 configs[algo] = P11TestConfig(
                     platform=platform,
                     token_label=cfg.get('token_label', None),
                     module=cfg['module'],
                     user_pin=os.environ[cfg['user_pin_env_var']],
-                    key_label=cfg['key_label'],
+                    cert_label=cfg['cert_label'],
+                    key_label=cfg.get('key_label', None),
                     algo=algo,
-                    cert_chain_labels=cfg['cert_chain'],
-                    cert_chain=[],
+                    cert_chain_labels=cfg.get('cert_chain_labels', []),
+                    cert_chain=cert_chain,
                     freeze_time_spec=cfg.get('freeze_time_spec', None),
                 )
             configs['default'] = configs[platform_cfg['default']]
@@ -96,7 +114,8 @@ def p11_global_test_config(platform):
                 token_label=f"test{k}",
                 module=pkcs11_test_module,
                 user_pin='1234',
-                key_label='signer1',
+                cert_label='signer1',
+                key_label=None,
                 algo=k,
                 cert_chain_labels=['root', 'interm'],
                 cert_chain=[],
@@ -118,8 +137,9 @@ def p11_config(request, p11_global_test_config, declared_algo, platform):
         pytest.skip(f"No config available for '{declared_algo}'")
 
     supported_platforms = {
-        mark.kwargs['platform']
+        p
         for mark in request.node.iter_markers(name='hsm')
+        for p in mark.kwargs['platform'].split(',')
     }
     if (
         supported_platforms

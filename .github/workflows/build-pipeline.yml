@@ -206,7 +206,8 @@ jobs:
             -m hsm tests/test_pkcs11.py
         env:
           YUBIHSM_PKCS11_PIN: ${{ secrets.YUBIHSM_PKCS11_PIN }}
-          PKCS11_PLATFORMS: yubihsm
+          YUBIKEY_NANO_PIN: ${{ secrets.YUBIKEY_NANO_PIN }}
+          PKCS11_PLATFORMS: yubihsm,yubikey-nano
       - name: Test CLI against HSM testbench
         run: |
           uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing \
@@ -215,7 +216,8 @@ jobs:
             -m hsm tests/test_cli_signing_pkcs11.py
         env:
           YUBIHSM_PKCS11_PIN: ${{ secrets.YUBIHSM_PKCS11_PIN }}
-          PKCS11_PLATFORMS: yubihsm
+          YUBIKEY_NANO_PIN: ${{ secrets.YUBIKEY_NANO_PIN }}
+          PKCS11_PLATFORMS: yubihsm,yubikey-nano
       - name: Stash coverage report
         uses: actions/upload-artifact@v6
         with:
