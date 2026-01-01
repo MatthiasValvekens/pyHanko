@@ -222,11 +222,11 @@ jobs:
           SAFENET_PKCS11_USER_PIN: ${{ secrets.SAFENET_PKCS11_USER_PIN }}
           SAFENET_PKCS11_SIGNING_PIN: ${{ secrets.SAFENET_PKCS11_SIGNING_PIN }}
           PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet
-      - name: Stash coverage report
+      - name: Stash coverage reports
         uses: actions/upload-artifact@v6
         with:
           name: coverage-hsm
-          path: "pkgs/pyhanko/*-coverage.xml"
+          path: "pkgs/*/*-coverage.xml"
   smoke-tests:
     runs-on: ubuntu-latest
     needs: build
