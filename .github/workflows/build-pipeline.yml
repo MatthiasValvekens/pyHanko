@@ -209,7 +209,8 @@ jobs:
           YUBIKEY_NANO_PIN: ${{ secrets.YUBIKEY_NANO_PIN }}
           SAFENET_PKCS11_USER_PIN: ${{ secrets.SAFENET_PKCS11_USER_PIN }}
           SAFENET_PKCS11_SIGNING_PIN: ${{ secrets.SAFENET_PKCS11_SIGNING_PIN }}
-          PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet
+          PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet,nitrokey
+          NITROKEY_PKCS11_PIN: ${{ secrets.NITROKEY_PKCS11_PIN }}
       - name: Test CLI against HSM testbench
         run: |
           uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing \
@@ -221,7 +222,8 @@ jobs:
           YUBIKEY_NANO_PIN: ${{ secrets.YUBIKEY_NANO_PIN }}
           SAFENET_PKCS11_USER_PIN: ${{ secrets.SAFENET_PKCS11_USER_PIN }}
           SAFENET_PKCS11_SIGNING_PIN: ${{ secrets.SAFENET_PKCS11_SIGNING_PIN }}
-          PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet
+          PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet,nitrokey
+          NITROKEY_PKCS11_PIN: ${{ secrets.NITROKEY_PKCS11_PIN }}
       - name: Stash coverage reports
         uses: actions/upload-artifact@v6
         with:

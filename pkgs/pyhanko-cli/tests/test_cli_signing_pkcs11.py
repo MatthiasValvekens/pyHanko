@@ -121,7 +121,7 @@ def _pkcs11_setup_config_read_certs_from_file(
     return cfg
 
 
-@pytest.mark.hsm(platform='softhsm,yubihsm')
+@pytest.mark.hsm(platform='softhsm,yubihsm,nitrokey')
 def test_cli_addsig_pkcs11_pull_interm(
     cli_runner, post_validate, monkeypatch, p11_config, platform
 ):
