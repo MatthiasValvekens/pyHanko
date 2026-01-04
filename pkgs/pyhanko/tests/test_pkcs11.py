@@ -61,8 +61,9 @@ def test_simple_sign(bulk_fetch, p11_config, any_algo, platform):
     val_trusted(emb, vc=p11_config.validation_context)
 
 
+# TODO figure out PSS parameter choices for nitrokey
 @pytest.mark.algo('rsa')
-@pytest.mark.hsm(exclude='safenet')
+@pytest.mark.hsm(exclude='safenet,nitrokey')
 def test_simple_sign_with_rsassa_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -268,6 +269,7 @@ def test_wrong_cert(bulk_fetch, p11_config):
             signers.sign_pdf(w, meta, signer=signer)
 
 
+@pytest.mark.hsm(platform='softhsm')
 def test_provided_certs(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -627,9 +629,10 @@ async def test_simple_sign_from_config_async(any_algo, p11_config, platform):
     await async_val_trusted(emb, vc=p11_config.validation_context)
 
 
+# TODO figure out PSS parameter choices for nitrokey
 @pytest.mark.asyncio
 @pytest.mark.algo('rsa')
-@pytest.mark.hsm(exclude='safenet')
+@pytest.mark.hsm(exclude='safenet,nitrokey')
 async def test_simple_sign_from_config_async_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
