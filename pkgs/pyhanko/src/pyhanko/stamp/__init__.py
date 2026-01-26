@@ -16,6 +16,7 @@ from .functions import qr_stamp_file, text_stamp_file
 from .qr import QRPosition, QRStamp, QRStampStyle
 from .static import StaticContentStamp, StaticStampStyle
 from .text import TextStamp, TextStampStyle
+from .preserve import PreserveStampStyle
 
 __all__ = [
     "STAMP_ART_CONTENT",
@@ -30,6 +31,7 @@ __all__ = [
     "StaticStampStyle",
     "TextStamp",
     "TextStampStyle",
+    "PreserveStampStyle",
     "qr_stamp_file",
     "text_stamp_file",
 ]
