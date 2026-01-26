@@ -103,7 +103,7 @@ class BaseStampStyle(ConfigurableMixin):
         writer: BasePdfFileWriter,
         box: layout.BoxConstraints,
         text_params: dict,
-    ) -> 'BaseStamp':
+    ) -> Optional['BaseStamp']:
         raise NotImplementedError
 
 

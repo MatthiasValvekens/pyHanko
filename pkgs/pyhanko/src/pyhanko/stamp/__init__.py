@@ -13,6 +13,7 @@ from .appearances import CoordinateSystem
 from .art import STAMP_ART_CONTENT
 from .base import BaseStamp, BaseStampStyle
 from .functions import qr_stamp_file, text_stamp_file
+from .noop import NoOpStampStyle
 from .qr import QRPosition, QRStamp, QRStampStyle
 from .static import StaticContentStamp, StaticStampStyle
 from .text import TextStamp, TextStampStyle
@@ -30,6 +31,7 @@ __all__ = [
     "StaticStampStyle",
     "TextStamp",
     "TextStampStyle",
+    "NoOpStampStyle",
     "qr_stamp_file",
     "text_stamp_file",
 ]

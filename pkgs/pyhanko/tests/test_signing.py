@@ -48,7 +48,7 @@ from pyhanko.sign.validation import (
     validate_pdf_timestamp,
 )
 from pyhanko.sign.validation.errors import SignatureValidationError
-from pyhanko.stamp import QRStampStyle
+from pyhanko.stamp import NoOpStampStyle, QRStampStyle
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.authority import (
     CertTrustAnchor,
@@ -1885,3 +1885,28 @@ def test_do_not_enforce_key_usage_if_signer_is_root():
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     val_trusted(emb, vc=vc)
+
+
+def test_sign_appearance_noop():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    spec = fields.SigFieldSpec(
+        sig_field_name='Sig1',
+        empty_field_appearance=True,
+        box=(20, 20, 80, 40),
+    )
+    fields.append_signature_field(w, sig_field_spec=spec)
+
+    w.write_in_place()
+    w = IncrementalPdfFileWriter(buf)
+
+    appearance_old = w.root['/AcroForm']['/Fields'][0]['/AP']['/N'].data
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+
+    out = signers.PdfSigner(
+        meta, signer=SELF_SIGN, stamp_style=NoOpStampStyle()
+    ).sign_pdf(w)
+
+    r = PdfFileReader(out)
+    appearance_new = r.root['/AcroForm']['/Fields'][0]['/AP']['/N'].data
+    assert appearance_old == appearance_new

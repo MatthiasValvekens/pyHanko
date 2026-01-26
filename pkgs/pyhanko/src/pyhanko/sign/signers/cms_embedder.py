@@ -262,7 +262,8 @@ class SigAppearanceSetup:
             stamp = self._appearance_stamp(
                 writer, BoxConstraints(width=w, height=h)
             )
-            stamp.apply_appearance(sig_annot)
+            if stamp:
+                stamp.apply_appearance(sig_annot)
 
     def _appearance_stamp(self, writer, box):
         style = self.style
