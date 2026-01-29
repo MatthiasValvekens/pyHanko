@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 ACCEPTABLE_STRICT_CERT_CONTENT_TYPES = frozenset(
     [
         'application/pkix-cert',
+        'application/pkix-ca',
         'application/pkcs7-mime',
         'application/x-x509-ca-cert',
         'application/x-pkcs7-certificates',
