@@ -6,6 +6,7 @@ import asyncio
 import enum
 import logging
 import uuid
+import itertools
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -1894,7 +1895,7 @@ class PdfSigningSession:
         if last_ts is not None:
             ts_validator = CertificateValidator(
                 last_ts.signer_cert,
-                intermediate_certs=signer.cert_registry,
+                intermediate_certs=itertools.chain(signer.cert_registry, last_ts.other_embedded_certs),
                 validation_context=validation_context,
             )
             try:
