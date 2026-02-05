@@ -83,7 +83,7 @@ testing-base = [
     "pytest-asyncio>=1.1.0,<2.0",
 ]
 testing-aiohttp = [
-    "aiohttp>=3.9,<3.13",
+    "aiohttp>=3.9,<3.14",
     "pytest-aiohttp>=1.0.4,<1.2.0",
 ]
 testing = [
