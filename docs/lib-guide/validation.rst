@@ -8,12 +8,6 @@ Validation functionality
     :ref:`validation-factors` for some background on the validation process.
 
 
-.. danger::
-    In addition to the caveats outlined in :doc:`../cli-guide/validation`,
-    you should be aware that the validation API is still very much in flux,
-    and likely to change by the time pyHanko reaches its beta stage.
-
-
 .. |EmbeddedPdfSignature| replace:: :class:`~.pyhanko.sign.validation.pdf_embedded.EmbeddedPdfSignature`
 .. |SignatureStatus| replace:: :class:`~.pyhanko.sign.validation.status.SignatureStatus`
 .. |PdfSignatureStatus| replace:: :class:`~.pyhanko.sign.validation.status.PdfSignatureStatus`

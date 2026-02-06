@@ -910,7 +910,7 @@ Here's what that might look like in a toy example.
 
     # Note: in the meantime, we could've serialised and deserialised
     # the contents of 'output', of course
-    await PdfTBSDocument.async_finish_signing(output, prep_digest)
+    await PdfTBSDocument.async_finish_signing(output, prep_digest, signature_container)
 
     # If you want, you can now proceed to tack on additional revisions
     # with revocation information, document timestamps and the like.

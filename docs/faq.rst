@@ -89,6 +89,19 @@ is of course allowed, but bear in mind that PKCS#11 usage issues are generally d
 diagnose remotely without access to the hardware in question.
 Be prepared to do your own troubleshooting.
 
+In addition to tests with SoftHSMv2, a subset of PyHanko's PKCS#11 test suite
+runs in CI against physical hardware.
+As of February 2026, the test bench consists of the following devices:
+
+* YubiHSM2 (graciously provided by Yubico);
+* YubiKey 5 Nano;
+* Nitrokey HSM;
+* SafeNet eToken 5110+ CC (940C).
+
+  * The SafeNet token is configured with a signing-only private key
+    generated on-device, and with a signing PIN that differs from the
+    token user PIN.
+
 
 I want to put Unicode text in my signatures, but I'm only seeing blanks. What gives?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

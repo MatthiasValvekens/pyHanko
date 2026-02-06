@@ -14,6 +14,10 @@ This page lists some TODOs and known limitations of pyHanko.
   a compliant manner is impossible (in fact, generating a signature
   with an embedded font is often sufficient), but pyHanko itself
   will not attempt to enforce any additional restrictions.
+  It is, however, a design goal of pyHanko to not unnecessarily break conformance
+  with these standards when the API is used reasonably. When in doubt,
+  feel free to start a thread
+  on `the discussion forum <https://github.com/MatthiasValvekens/pyHanko/discussions>`_.
 * The signature appearance generation code in pyHanko is quite primitive, since
   pyHanko's principal focus is on the signing process itself.
   If the appearance generation code behaves in ways you do not expect,

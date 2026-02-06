@@ -9,10 +9,6 @@ Developing CLI plugins
 .. |SigningCommandPlugin| replace:: :class:`~pyhanko.cli.plugin_api.SigningCommandPlugin`
 
 
-.. warning::
-    This is an incubating feature. API adjustments are still possible.
-
-
 Since version ``0.18.0``, pyHanko's CLI can load |Signer| implementations
 from external sources with minimal configuration.
 
@@ -24,9 +20,6 @@ is install it, and pyHanko will automagically detect the plugin.
 
 This page aims to provide you with some pointers to upgrade your
 |Signer| implementation into a CLI-integrated plugin.
-
-.. note::
-    Plugins are only supported on Python 3.8 and up.
 
 
 General principles
