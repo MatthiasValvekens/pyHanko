@@ -364,3 +364,54 @@ to use this sample implementation.
     the API doesn't allow passing through the parameter choices anywhere!
     As such, getting them wrong will result in the signing process completing without errors,
     but with a garbage signature.
+
+
+.. _yubihsm:
+
+A custom |Signer| implementation with the YubiHSM SDK
+-----------------------------------------------------
+
+
+There are several ways to use pyHanko with a YubiHSM 2 to sign PDFs.
+The `PKCS #11 interface <https://developers.yubico.com/yubihsm-shell/yubihsm-pkcs11.html>`_
+is of course an option, but using the `YubiHSM Python SDK <https://docs.yubico.com/hardware/yubihsm-2/hsm-2-user-guide/hsm2-sdk-tools-libraries.html#python-library>`_
+also works. Here's a basic example.
+
+
+.. code-block:: python
+
+    from pyhanko.keys.internal import translate_pyca_cryptography_cert_to_asn1
+    from pyhanko.sign.signers.pdf_cms import Signer
+    from pyhanko_certvalidator.registry import SimpleCertificateStore
+    from pyhanko_certvalidator.util import get_pyca_cryptography_hash
+
+    from yubihsm.core import AuthSession
+    from yubihsm.objects import AsymmetricKey, Opaque
+
+
+
+    class YubiHsmECDSASigner(Signer):
+        def __init__(self, session: AuthSession, key_obj_id: int, other_cert_object_ids: list[int]):
+            self.key = AsymmetricKey(session, key_obj_id)
+
+            signing_cert = translate_pyca_cryptography_cert_to_asn1(
+                self.key.get_certificate()
+            )
+            cert_registry = SimpleCertificateStore()
+            for cert_id in other_cert_object_ids:
+                cert = translate_pyca_cryptography_cert_to_asn1(
+                    Opaque(session, cert_id).get_certificate()
+                )
+                cert_registry.register(cert)
+            super().__init__(
+                signing_cert=signing_cert,
+                cert_registry=cert_registry
+            )
+
+        async def async_sign_raw(
+            self, data: bytes, digest_algorithm: str, dry_run=False
+        ) -> bytes:
+            return self.key.sign_ecdsa(
+                data,
+                get_pyca_cryptography_hash(digest_algorithm)
+            )
