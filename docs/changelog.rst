@@ -7,6 +7,44 @@ pyHanko
 -------
 
 
+.. _release-0.33.0:
+
+0.33.0
+======
+
+*Release date:* 2026-02-08
+
+
+Dependency changes
+------------------
+
+ * Fix inconsistent ``aiohttp`` version bounds.
+ * Relax ``uharfbuzz`` upper bound to ``<0.54.0``.
+ * Bump ``python-barcode`` to ``==0.16.1``.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Explicitly define a no-op stamping style
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Integrate some actual signing hardware into CI processes.
+
+
+Bugs fixed
+----------
+
+ * Use embedded intermediate certificates when validating existing timestamps.
+
+
+
 .. _release-0.32.0:
 
 0.32.0
@@ -2409,6 +2447,18 @@ Initial release.
 ---------------------
 pyhanko-certvalidator
 ---------------------
+
+
+.. _certvalidator-release-0.29.1:
+
+0.29.1
+======
+
+*Release date:* 2026-02-08
+
+ * Fix inconsistent ``aiohttp`` bounds.
+ * Add nonstandard ``application/pkix-ca`` content type.
+
 
 .. _certvalidator-release-0.29.0:
 
