@@ -8,11 +8,9 @@ from freezegun import freeze_time
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers
-from pyhanko.sign.ades.report import AdESIndeterminate
 from pyhanko.sign.timestamps import HTTPTimeStamper, TimestampRequestError
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.timestamps.common_utils import handle_tsp_response
-from pyhanko_certvalidator import ValidationContext
 from test_data.samples import MINIMAL_ONE_FIELD
 from test_utils.signing_commons import (
     DUMMY_HTTP_TS,
@@ -23,33 +21,9 @@ from test_utils.signing_commons import (
 
 from .test_pades import ts_response_callback
 
-# Run some tests against a real TSA
-EXTERNAL_TSA_URL = 'http://timestamp.entrust.net/TSS/RFC3161sha2TS'
 FETCH_TIMEOUT = 30
 MESSAGE = b'Hello world!'
 MESSAGE_DIGEST = hashlib.sha256(MESSAGE).digest()
-
-
-@pytest.mark.asyncio
-async def test_ts_fetch_aiohttp():
-    async with aiohttp.ClientSession() as session:
-        ts = AIOHttpTimeStamper(
-            EXTERNAL_TSA_URL, session, timeout=FETCH_TIMEOUT
-        )
-        ts_result = await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
-        from pyhanko.sign.validation.generic_cms import validate_tst_signed_data
-
-        result = await validate_tst_signed_data(
-            ts_result['content'],
-            ValidationContext(trust_roots=[]),
-            expected_tst_imprint=MESSAGE_DIGEST,
-        )
-        assert result['valid'] and result['intact']
-        # empty trust root list
-        assert (
-            result['trust_problem_indic']
-            == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
-        )
 
 
 @pytest.mark.asyncio
@@ -60,25 +34,6 @@ async def test_ts_fetch_aiohttp_error():
                 "http://example.invalid", session, timeout=FETCH_TIMEOUT
             )
             await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
-
-
-@pytest.mark.asyncio
-async def test_ts_fetch_requests():
-    ts = HTTPTimeStamper(EXTERNAL_TSA_URL, timeout=FETCH_TIMEOUT)
-    ts_result = await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
-    from pyhanko.sign.validation.generic_cms import validate_tst_signed_data
-
-    result = await validate_tst_signed_data(
-        ts_result['content'],
-        ValidationContext(trust_roots=[]),
-        expected_tst_imprint=MESSAGE_DIGEST,
-    )
-    assert result['valid'] and result['intact']
-    # empty trust root list
-    assert (
-        result['trust_problem_indic']
-        == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
-    )
 
 
 @pytest.mark.asyncio

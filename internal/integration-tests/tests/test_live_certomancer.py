@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import os
 from io import BytesIO
@@ -16,6 +17,7 @@ from pyhanko.keys.internal import (
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers
+from pyhanko.sign.ades.report import AdESIndeterminate
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.fields import SigSeedSubFilter
 from pyhanko.sign.signers import SimpleSigner
@@ -440,3 +442,53 @@ def test_pades_lta_live_with_cli():
         )
         assert not result.exception, result.output
         asyncio.run(_check())
+
+
+MESSAGE = b'Hello world!'
+MESSAGE_DIGEST = hashlib.sha256(MESSAGE).digest()
+FETCH_TIMEOUT = 30
+
+
+@run_if_live
+@pytest.mark.asyncio
+async def test_ts_fetch_requests():
+    arch = "testing-ca"
+    url = f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa"
+    ts = HTTPTimeStamper(url, timeout=FETCH_TIMEOUT)
+    ts_result = await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
+    from pyhanko.sign.validation.generic_cms import validate_tst_signed_data
+
+    result = await validate_tst_signed_data(
+        ts_result['content'],
+        ValidationContext(trust_roots=[]),
+        expected_tst_imprint=MESSAGE_DIGEST,
+    )
+    assert result['valid'] and result['intact']
+    # empty trust root list
+    assert (
+        result['trust_problem_indic']
+        == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
+    )
+
+
+@run_if_live
+@pytest.mark.asyncio
+async def test_ts_fetch_aiohttp():
+    arch = "testing-ca"
+    url = f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa"
+    async with aiohttp.ClientSession() as session:
+        ts = AIOHttpTimeStamper(url, session, timeout=FETCH_TIMEOUT)
+        ts_result = await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
+        from pyhanko.sign.validation.generic_cms import validate_tst_signed_data
+
+        result = await validate_tst_signed_data(
+            ts_result['content'],
+            ValidationContext(trust_roots=[]),
+            expected_tst_imprint=MESSAGE_DIGEST,
+        )
+        assert result['valid'] and result['intact']
+        # empty trust root list
+        assert (
+            result['trust_problem_indic']
+            == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
+        )
