@@ -220,11 +220,11 @@ If you need to, you can also put the user PIN right in the configuration:
     If you do this, you should obviously take care to keep your configuration file in a safe place.
 
 
-To use a named PKCS#11 configuration from the command line, invoke pyHanko like this:
+To use a named PKCS#11 configuration (named ``config.yaml``) from the command line, invoke pyHanko like this:
 
 .. code-block:: bash
 
-    pyhanko sign addsig pkcs11 --p11-setup test-setup input.pdf output.pdf
+    pyhanko --config config.yaml sign addsig pkcs11 --p11-setup test-setup input.pdf output.pdf
 
 
 Named PKCS#11 setups also allow you to access certain advanced features that otherwise aren't
