@@ -2,7 +2,7 @@
 name = "integration-tests"
 version = "0.dev0"
 description = "Internal package with integration tests"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "certomancer", "pyhanko", "pyhanko-certvalidator", "pyhanko-cli", "common-test-utils[csc]",
     "pytest>=6.1.1",
