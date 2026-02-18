@@ -71,7 +71,7 @@ pkcs11 = ["python-pkcs11~=0.9.3"]
 async-http = ["aiohttp>=3.9,<3.14"]
 etsi = [
     "xsdata>=24.4,<27.0",
-    "signxml>=4.2.0,<4.3"
+    "signxml>=4.2.0"
 ]
 
 [dependency-groups]

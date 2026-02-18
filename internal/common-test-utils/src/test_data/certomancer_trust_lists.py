@@ -114,6 +114,7 @@ def _sign_tl(
         cert=pem.armor(
             "CERTIFICATE", pki_arch.get_cert(tlso_cert_label).dump()
         ),
+        always_add_key_value=False,
     )
     return tostring(signed).decode('utf8')
 

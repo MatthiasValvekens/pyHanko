@@ -1808,7 +1808,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qrcode", marker = "extra == 'qr'", specifier = ">=7.3.1" },
     { name = "requests", specifier = ">=2.31.0" },
-    { name = "signxml", marker = "extra == 'etsi'", specifier = ">=4.2.0,<4.3" },
+    { name = "signxml", marker = "extra == 'etsi'", specifier = ">=4.2.0" },
     { name = "tzlocal", specifier = ">=4.3" },
     { name = "uharfbuzz", marker = "extra == 'opentype'", specifier = ">=0.25.0,<0.54.0" },
     { name = "xsdata", marker = "extra == 'etsi'", specifier = ">=24.4,<27.0" },
@@ -2337,16 +2337,16 @@ wheels = [
 
 [[package]]
 name = "signxml"
-version = "4.2.2"
+version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
     { name = "cryptography" },
     { name = "lxml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f9/f2/54c528935ff30a1097d2b07ac48f0e139e18ecd9086a73ea85f03645165a/signxml-4.2.2.tar.gz", hash = "sha256:bd2f9b739c869261a1f4edfda925f75feef95ebfc09858a080942fbfc80a7021", size = 1611966, upload-time = "2026-01-21T14:06:47.269Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/09/ad/552c69f6d00282416bb1cb2ab4f08345f516d694d2c64b5892448d34bc8c/signxml-4.3.0.tar.gz", hash = "sha256:a3704b1cdd14efa03ae485111c5f1fbf6f4000d97aedbf20cb7efd34a65a83a0", size = 1612526, upload-time = "2026-02-14T19:03:38.533Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/55/fc/2c77fbf869227b1f828f3d3e873e184704c41f4dfe25c923d250e65cea48/signxml-4.2.2-py3-none-any.whl", hash = "sha256:005aaa037f3e925f8cc4553b3d771b52e4048e5a15bb1d9c50595a243add4ef4", size = 59781, upload-time = "2026-01-21T14:06:45.983Z" },
+    { url = "https://files.pythonhosted.org/packages/58/fa/8ce84f29d0545974a9c4d018c94e54ae94de9672f988ee87d6b6e894891d/signxml-4.3.0-py3-none-any.whl", hash = "sha256:86999162f2e70032ae2b1a4cd748a0eb1ee777ea85be12441b98a64f7793a288", size = 59988, upload-time = "2026-02-14T19:03:37.097Z" },
 ]
 
 [[package]]
