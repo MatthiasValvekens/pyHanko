@@ -14,6 +14,11 @@ Note that a configuration file is usually not required, although some
 of pyHanko's behaviour cannot be fully customised using command line options.
 In these cases, the configuration must be sourced from a config file.
 
+.. note::
+
+    The commands below presume that the config file is available at its
+    default location.
+
 
 Configuration options
 ---------------------
