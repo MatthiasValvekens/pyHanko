@@ -108,7 +108,6 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
 
 
 def _load_plugins(root_config: Optional[CLIRootConfig], plugins_enabled: bool):
-    import sys
     from importlib import metadata
 
     # we always load the default ones
@@ -123,15 +122,9 @@ def _load_plugins(root_config: Optional[CLIRootConfig], plugins_enabled: bool):
         if root_config is not None:
             to_load += [str(mod) for mod in root_config.plugin_endpoints]
 
-        # need to use dict interface for 3.8 interop
-        if sys.version_info < (3, 10):
-            eps_from_metadata = metadata.entry_points().get(
-                SIGNING_PLUGIN_ENTRY_POINT_GROUP, []
-            )
-        else:
-            eps_from_metadata = metadata.entry_points(
-                group=SIGNING_PLUGIN_ENTRY_POINT_GROUP
-            )
+        eps_from_metadata = metadata.entry_points(
+            group=SIGNING_PLUGIN_ENTRY_POINT_GROUP
+        )
 
     # noinspection PyArgumentList
     to_load_as_endpoints: Iterable[metadata.EntryPoint] = [
