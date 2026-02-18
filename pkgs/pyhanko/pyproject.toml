@@ -69,7 +69,10 @@ image-support = [
 ]
 pkcs11 = ["python-pkcs11~=0.9.3"]
 async-http = ["aiohttp>=3.9,<3.14"]
-etsi = ["xsdata>=24.4,<26.0", "signxml>=4.2.0,<4.3"]
+etsi = [
+    "xsdata>=24.4,<27.0",
+    "signxml>=4.2.0,<4.3"
+]
 
 [dependency-groups]
 testing-base = [
