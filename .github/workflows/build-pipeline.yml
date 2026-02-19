@@ -56,8 +56,14 @@ jobs:
         run: |
           uv run python dev/apply_version.py ${{ inputs.package }} ${{ inputs.version }}
           git diff
-      - name: Build release artifacts
-        run: uv build --all-packages
+      - name: Build release wheels
+        run: uv build --all-packages --wheel
+      - name: Include internal testing commons in sdist for pyhanko & pyhanko-cli
+        run: |
+          uv run python dev/include_pyhanko_testing_commons.py
+          git diff
+      - name: Build release sdists
+        run: uv build --all-packages --sdist
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v7
         with:
