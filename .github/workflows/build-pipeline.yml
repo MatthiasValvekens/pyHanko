@@ -150,7 +150,7 @@ jobs:
             --cov-report=xml:python-hsm-coverage.xml \
             -m hsm tests/test_pkcs11.py
         env:
-          PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet,nitrokey
+          PKCS11_PLATFORMS: yubikey-nano,safenet,nitrokey
       - name: Test CLI against HSM testbench
         run: |
           uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing \

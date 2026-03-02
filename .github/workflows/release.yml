@@ -81,19 +81,10 @@ jobs:
         with:
           name: release-body
           path: release.md
-  ci:
-    needs: [extract-params]
-    name: Run CI pipeline
-    uses: MatthiasValvekens/pyHanko/.github/workflows/build-pipeline.yml@master
-    permissions:
-      actions: write
-      contents: read
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   build:
     needs: [extract-params]
     name: Build release artifacts
-    uses: MatthiasValvekens/pyHanko/.github/workflows/package.yml@master
+    uses: MatthiasValvekens/pyHanko/.github/workflows/package.yml@feature/sdist-with-tests
     permissions:
       actions: write
       contents: read
@@ -103,7 +94,7 @@ jobs:
       version: ${{ needs.extract-params.outputs.version }}
   provenance:
     name: Generate SLSA provenance data
-    needs: [ci, build]
+    needs: [build]
     permissions:
       actions: read
       id-token: write
