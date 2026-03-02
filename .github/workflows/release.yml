@@ -90,25 +90,32 @@ jobs:
       contents: read
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  build:
+    needs: [extract-params]
+    name: Build release artifacts
+    uses: MatthiasValvekens/pyHanko/.github/workflows/package.yml@master
+    permissions:
+      actions: write
+      contents: read
     with:
       package: ${{ needs.extract-params.outputs.package }}
       wheel: ${{ needs.extract-params.outputs.wheel }}
       version: ${{ needs.extract-params.outputs.version }}
   provenance:
     name: Generate SLSA provenance data
-    needs: [ci]
+    needs: [ci, build]
     permissions:
       actions: read
       id-token: write
       contents: write  # https://github.com/slsa-framework/slsa-github-generator/issues/2044 :(
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
-      base64-subjects: "${{ needs.ci.outputs.hashes }}"
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
       upload-assets: false
       provenance-name: multiple.intoto.jsonl
   publish:
     name: Publish release artifacts
-    needs: [extract-params, provenance]
+    needs: [extract-params, build, provenance]
     runs-on: ubuntu-latest
     environment: ${{ needs.extract-params.outputs.publish-env }}
     permissions:

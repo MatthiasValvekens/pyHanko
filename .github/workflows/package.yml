@@ -1,0 +1,70 @@
+name: Package flow
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        type: string
+        description: "package being released (subdir of pkgs/)"
+      wheel:
+        type: string
+        description: "wheel being released"
+      version:
+        type: string
+        description: "version to release"
+    outputs:
+      hashes:
+        description: "Hashes of the artifacts that were built"
+        value: ${{ jobs.build.outputs.hashes }}
+  workflow_dispatch: {}
+permissions:
+  actions: read
+  contents: read
+env:
+  UV_NO_MANAGED_PYTHON: 1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.artifact-hashes.outputs.hashes }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install build tools
+        run: uv sync --group release
+      - name: Apply package version for release
+        if: inputs.package != ''
+        run: |
+          uv run python dev/apply_version.py ${{ inputs.package }} ${{ inputs.version }}
+          git diff
+      - name: Build release wheels
+        run: uv build --all-packages --wheel
+      - name: Include internal testing commons in sdist for pyhanko & pyhanko-cli
+        run: |
+          uv run python dev/include_pyhanko_testing_commons.py
+          git diff
+      - name: Build release sdists
+        run: uv build --all-packages --sdist
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: pyhanko-dist
+          path: dist/
+      - name: Record release artifact hashes
+        if: inputs.package != ''
+        id: artifact-hashes
+        run: cd dist && echo "hashes=$(sha256sum $PATTERN | base64 -w0)" >> "$GITHUB_OUTPUT"
+        env:
+          PATTERN: ${{ inputs.wheel }}-${{ inputs.version }}*
+      - name: Upload dist artifacts for release
+        if: inputs.package != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: pyhanko-release-dist
+          path: dist/${{ inputs.wheel }}-${{ inputs.version }}*
