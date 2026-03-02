@@ -110,9 +110,7 @@ def _summarise_attrs(
     # commitment_type_indication (SACommitmentTypeIndicationType)
     try:
         commitment_type: cades_asn1.CommitmentTypeIndication = (
-            find_unique_cms_attribute(
-                signed_attrs, 'commitment_type_indication'
-            )
+            find_unique_cms_attribute(signed_attrs, 'commitment_type')
         )
         oid = commitment_type['commitment_type_id']
         kwargs['commitment_type_indication'] = (
@@ -213,15 +211,10 @@ def _summarise_attrs(
 
     # message_digest (SAMessageDigestType)
     # for invalid sigs, this is worth reporting as specified
-    try:
-        message_digest = find_unique_cms_attribute(
-            signed_attrs, 'message_digest'
-        )
-        kwargs['message_digest'] = ts_11910202.SAMessageDigestType(
-            signed=True, digest=message_digest.native
-        )
-    except NonexistentAttributeError:
-        pass
+    message_digest = find_unique_cms_attribute(signed_attrs, 'message_digest')
+    kwargs['message_digest'] = ts_11910202.SAMessageDigestType(
+        signed=True, digest=message_digest.native
+    )
     # dss (SADSSType)
     # TODO (emitting validation objects)
     # vri (SAVRIType)
@@ -246,20 +239,18 @@ def _summarise_attrs(
             contact_info_element=str(embedded_sig.sig_object['/ContactInfo']),
         )
     # sub_filter (SASubFilterType)
-    if '/SubFilter' in embedded_sig.sig_object:
-        kwargs['sub_filter'] = ts_11910202.SASubFilterType(
-            signed=True,
-            sub_filter_element=str(embedded_sig.sig_object['/SubFilter'])[1:],
-        )
+    kwargs['sub_filter'] = ts_11910202.SASubFilterType(
+        signed=True,
+        sub_filter_element=str(embedded_sig.sig_object['/SubFilter'])[1:],
+    )
     # byte_range: (int, int, int, int)
     kwargs['byte_range'] = tuple(
         int(x) for x in embedded_sig.sig_object['/ByteRange']
     )
     # filter (SAFilterType)
-    if '/Filter' in embedded_sig.sig_object:
-        kwargs['filter'] = ts_11910202.SAFilterType(
-            filter=str(embedded_sig.sig_object['/Filter'])[1:],
-        )
+    kwargs['filter'] = ts_11910202.SAFilterType(
+        filter=str(embedded_sig.sig_object['/Filter'])[1:],
+    )
     return ts_11910202.SignatureAttributesType(**kwargs)
 
 

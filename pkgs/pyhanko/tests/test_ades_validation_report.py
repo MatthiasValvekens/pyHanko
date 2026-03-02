@@ -195,6 +195,10 @@ async def test_pades_with_attributes_report_smoke_test(requests_mock):
                         ],
                     ),
                 ),
+                name="John Doe",
+                reason="Testing",
+                contact_info="john.doe@example.com",
+                location="Somewhere",
             ),
             signer=signer,
             timestamper=DUMMY_TS,
@@ -206,3 +210,8 @@ async def test_pades_with_attributes_report_smoke_test(requests_mock):
     assert 'claimed' in report
     assert 'certified' in report
     assert 'urn:etsi:019102:validationprocess:LTA' in report
+    assert 'vr:CommitmentTypeIndication' in report
+    assert 'vr:Name' in report
+    assert 'vr:Reason' in report
+    assert 'vr:ContactInfo' in report
+    assert 'vr:SignatureProductionPlace' in report
