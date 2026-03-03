@@ -325,6 +325,44 @@ async def test_embedded_cades_happy_path(requests_mock):
 
 
 @pytest.mark.asyncio
+async def test_embedded_cades_basic_tampered(requests_mock):
+    with freeze_time('2020-11-01'):
+        signature = await FROM_CA.async_sign_general_data(
+            b'Hello world!', 'sha256', detached=False, use_cades=True
+        )
+        signature['content']['encap_content_info']['content'] = (
+            b'Tampered content'
+        )
+        signature = cms.ContentInfo.load(signature.dump())
+
+    with freeze_time('2020-11-25'):
+        live_testing_vc(requests_mock)
+        result = await ades.ades_basic_validation(
+            signature['content'],
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
+        )
+        assert result.ades_subindic == AdESFailure.HASH_FAILURE
+
+
+@pytest.mark.asyncio
+async def test_embedded_cades_sig_tampered(requests_mock):
+    with freeze_time('2020-11-01'):
+        signature = await FROM_CA.async_sign_general_data(
+            b'Hello world!', 'sha256', detached=False, use_cades=True
+        )
+        signature['content']['signer_infos'][0]['signature'] = b''
+        signature = cms.ContentInfo.load(signature.dump())
+
+    with freeze_time('2020-11-25'):
+        live_testing_vc(requests_mock)
+        result = await ades.ades_basic_validation(
+            signature['content'],
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
+        )
+        assert result.ades_subindic == AdESFailure.SIG_CRYPTO_FAILURE
+
+
+@pytest.mark.asyncio
 async def test_embedded_cades_with_time_happy_path(requests_mock):
     with freeze_time('2020-11-01'):
         signature = await FROM_CA.async_sign_general_data(
@@ -346,6 +384,58 @@ async def test_embedded_cades_with_time_happy_path(requests_mock):
         assert result.best_signature_time == datetime.datetime(
             2020, 11, 1, tzinfo=datetime.timezone.utc
         )
+
+
+@pytest.mark.asyncio
+async def test_embedded_cades_with_time_tampered_timestamp(requests_mock):
+    with freeze_time('2020-11-01'):
+        signature = await FROM_CA.async_sign_general_data(
+            b'Hello world!',
+            'sha256',
+            detached=False,
+            timestamper=DUMMY_TS,
+            use_cades=True,
+        )
+        dummy = await DUMMY_TS.async_timestamp(b"\x00" * 32, 'sha256')
+
+        signature['content']['signer_infos'][0]['unsigned_attrs'][0] = (
+            cms.CMSAttribute(
+                {'type': 'signature_time_stamp_token', 'values': [dummy]}
+            )
+        )
+        signature = cms.ContentInfo.load(signature.dump())
+
+    with freeze_time('2020-11-25'):
+        live_testing_vc(requests_mock)
+        result = await ades.ades_with_time_validation(
+            signature['content'],
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
+        )
+        assert result.ades_subindic == AdESFailure.HASH_FAILURE
+
+
+@pytest.mark.asyncio
+async def test_embedded_cades_with_time_sig_tampered_timestamp(requests_mock):
+    with freeze_time('2020-11-01'):
+        signature = await FROM_CA.async_sign_general_data(
+            b'Hello world!',
+            'sha256',
+            detached=False,
+            timestamper=DUMMY_TS,
+            use_cades=True,
+        )
+        si = signature['content']['signer_infos'][0]
+        tst = si['unsigned_attrs'][0]['values'][0]['content']
+        tst['signer_infos'][0]['signature'] = b''
+        signature = cms.ContentInfo.load(signature.dump())
+
+    with freeze_time('2020-11-25'):
+        live_testing_vc(requests_mock)
+        result = await ades.ades_with_time_validation(
+            signature['content'],
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
+        )
+        assert result.ades_subindic == AdESFailure.SIG_CRYPTO_FAILURE
 
 
 @pytest.mark.asyncio
