@@ -1194,8 +1194,12 @@ class FieldMDPSpec:
         for scoped_field_name in self.fields or ():
             # treat non-terminal field in/exclusions as including the whole
             # tree beneath them
-            if field_name.startswith(scoped_field_name):
+            if (
+                field_name.startswith(scoped_field_name + ".")
+                or field_name == scoped_field_name
+            ):
                 return lock_result
+
         return not lock_result
 
 

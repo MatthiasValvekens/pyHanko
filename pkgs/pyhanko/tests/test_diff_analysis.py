@@ -2723,3 +2723,33 @@ def test_signature_without_type_is_form_filling():
         assert (
             s.diff_result.modification_level == ModificationLevel.FORM_FILLING
         )
+
+
+@freeze_time('2020-11-01')
+def test_fieldmdp_include_does_not_lock_field_with_shared_name_prefix():
+    # Ensure a FieldMDP lock on "Signature1" does not incorrectly flag "Signature10" as locked due to "Signature1" being a prefix of "Signature10"
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(field_name="Signature1"),
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name="Signature1",
+            field_mdp_spec=fields.FieldMDPSpec(
+                fields.FieldMDPAction.INCLUDE, ["Signature1"]
+            ),
+        ),
+        signer=FROM_CA,
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(field_name="Signature10"),
+        signer=FROM_CA,
+    )
+
+    r = PdfFileReader(out)
+    for sig in r.embedded_signatures:
+        status = validate_pdf_signature(sig, simple_v_context())
+        assert status.docmdp_ok
+        assert status.bottom_line
