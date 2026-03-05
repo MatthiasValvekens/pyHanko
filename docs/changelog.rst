@@ -6,6 +6,39 @@ Release history
 pyHanko
 -------
 
+.. _release-0.34.0:
+
+*Release date:* 2026-03-05
+
+
+Breaking changes
+-----------------
+
+ * Drop support for Python 3.9
+
+
+Dependency changes
+------------------
+
+ * Relax upper bound on ``xsdata`` to ``<27.0``.
+
+
+New features and enhancements
+-----------------------------
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Include tests in sdists again, and graft common testing tooling
+   onto the sdists so they can be tested in a self-contained way.
+
+
+Bugs fixed
+----------
+
+ * Fix signed attribute enumeration in AdES report.
+ * FieldMDP INCLUDE/EXCLUDE incorrectly locking fields with shared name prefix.
+
 
 .. _release-0.33.0:
 
@@ -2449,6 +2482,22 @@ pyhanko-certvalidator
 ---------------------
 
 
+.. _certvalidator-release-0.30.0:
+
+0.30.0
+======
+
+*Release date:* 2026-03-05
+
+
+ * Drop support for Python 3.9
+ * Drop TLS-specific validation code (breaking change)
+ * Drop poorly supported whitelist feature (breaking change)
+ * Remove deprecated methods from ``ValidationContext`` (breaking change)
+ * Clean up test fixtures
+ * Include tests in sdist again.
+
+
 .. _certvalidator-release-0.29.1:
 
 0.29.1
@@ -3086,6 +3135,17 @@ The impact on the high-level API should be small to nonexistent, but caution whe
 -----------
 pyhanko-cli
 -----------
+
+
+.. _cli-release-0.3.0:
+
+0.3.0
+=====
+
+*Release date:* 2026-03-05
+
+Drop support for Python 3.9
+
 
 .. _cli-release-0.2.1:
 
