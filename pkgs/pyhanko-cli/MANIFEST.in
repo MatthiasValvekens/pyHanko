@@ -1,1 +1,2 @@
 graft pyhanko_testing_commons
+graft tests
