@@ -1,2 +1,3 @@
 graft pyhanko_testing_commons
 graft tests
+global-exclude *.py[cod]
