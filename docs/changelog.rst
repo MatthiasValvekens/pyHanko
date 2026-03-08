@@ -6,7 +6,24 @@ Release history
 pyHanko
 -------
 
+.. _release-0.34.1:
+
+0.34.1
+======
+
+*Release date:* 2026-03-08
+
+
+Bugs fixed
+----------
+
+ * Address a packaging error with ``tests`` directory in sdists.
+
+
 .. _release-0.34.0:
+
+0.34.0
+======
 
 *Release date:* 2026-03-05
 
@@ -2482,6 +2499,16 @@ pyhanko-certvalidator
 ---------------------
 
 
+.. _release-0.30.1:
+
+0.30.1
+======
+
+*Release date:* 2026-03-08
+
+Address a packaging error with ``tests`` directory in sdists.
+
+
 .. _certvalidator-release-0.30.0:
 
 0.30.0
@@ -3135,6 +3162,15 @@ The impact on the high-level API should be small to nonexistent, but caution whe
 -----------
 pyhanko-cli
 -----------
+
+.. _cli-release-0.3.1:
+
+0.3.1
+=====
+
+*Release date:* 2026-03-08
+
+Address a packaging error with ``tests`` directory in sdists.
 
 
 .. _cli-release-0.3.0:
