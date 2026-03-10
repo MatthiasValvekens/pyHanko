@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 EIDAS_START_DATE = datetime(
-    2016, 7, 1, 0, 0, 0, tzinfo=zoneinfo.ZoneInfo('CET')
+    2016, 7, 1, 0, 0, 0, tzinfo=zoneinfo.ZoneInfo('Europe/Brussels')
 )
 
 PRE_EIDAS_QCP_POLICY = '0.4.0.1456.1.1'
@@ -203,7 +203,9 @@ class QualificationAssessor:
             )
         prelim_status = QualificationAssessor._process_qc_statements(cert)
         path_policies = path.qualified_policies()
-        reference_time = moment or datetime.now(tz=zoneinfo.ZoneInfo('CET'))
+        reference_time = moment or datetime.now(
+            tz=zoneinfo.ZoneInfo('Europe/Brussels')
+        )
         if reference_time < EIDAS_START_DATE and path_policies:
             # check QCP / QCP+ policy
             policy_oids = {q.user_domain_policy_id for q in path_policies}

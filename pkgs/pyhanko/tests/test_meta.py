@@ -83,7 +83,7 @@ def test_incremental_update_meta_view():
 @pytest.mark.parametrize('writer_type', ('fresh', 'from_data', 'incremental'))
 def test_writer_meta_view_does_not_persist_changes(writer_type):
     exp_value = datetime(
-        2020, 9, 5, 19, 30, 57, tzinfo=zoneinfo.ZoneInfo('CET')
+        2020, 9, 5, 19, 30, 57, tzinfo=zoneinfo.ZoneInfo('Europe/Brussels')
     )
     if writer_type == 'fresh':
         w = PdfFileWriter()
