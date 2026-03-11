@@ -58,7 +58,7 @@ testing-base = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
-    "certomancer>=0.13.0,<0.14",
+    "certomancer>=0.13.0,<0.15",
     "pytest-cov>=4.0,<7.1",
     "pytest-asyncio>=1.1.0,<2.0",
 ]
