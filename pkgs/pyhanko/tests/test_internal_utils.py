@@ -400,6 +400,16 @@ def test_page_import(file_no, inherit_filters):
     assert b'0 1 0 rg /a0 gs' in xobj.data
 
 
+def test_page_import_no_media_box():
+    with open(PDF_DATA_DIR + '/no-mediabox.pdf', 'rb') as f:
+        image_input = PdfFileReader(f)
+        w = writer.PdfFileWriter()
+        with pytest.raises(
+            misc.PdfReadError, match="Page 0 does not have a /MediaBox"
+        ):
+            w.import_page_as_xobject(image_input)
+
+
 @pytest.mark.parametrize(
     'stream_xrefs,with_objstreams,encrypt',
     [

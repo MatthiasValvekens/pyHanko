@@ -33,7 +33,7 @@ from pyhanko.pdf_utils.misc import (
     PdfWriteError,
     instance_test,
 )
-from pyhanko.pdf_utils.rw_common import PdfHandler
+from pyhanko.pdf_utils.rw_common import PdfHandler, find_inherited_value_in_tree
 from pyhanko.pdf_utils.xref import (
     OBJSTREAM_FORBIDDEN,
     ObjectStream,
@@ -817,18 +817,9 @@ class BasePdfFileWriter(PdfHandler):
         page_obj = page_ref.get_object()
 
         # find the page's /MediaBox by going up the tree until we encounter it
-        pagetree_obj = page_obj
-        while True:
-            try:
-                mb = pagetree_obj['/MediaBox']
-                break
-            except KeyError:
-                try:
-                    pagetree_obj = pagetree_obj['/Parent']
-                except KeyError:  # pragma: nocover
-                    raise PdfReadError(
-                        f'Page {page_ix} does not have a /MediaBox'
-                    )
+        mb = find_inherited_value_in_tree(page_obj, '/MediaBox', '/Parent')
+        if mb is None:
+            raise PdfReadError(f'Page {page_ix} does not have a /MediaBox')
 
         stream_dict = {
             pdf_name('/BBox'): mb,

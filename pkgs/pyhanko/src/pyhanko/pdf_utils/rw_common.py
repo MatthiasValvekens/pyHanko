@@ -6,7 +6,20 @@ from . import generic, misc
 from .metadata.model import DocumentMetadata
 from .misc import PdfError
 
-__all__ = ['PdfHandler']
+__all__ = ['PdfHandler', 'find_inherited_value_in_tree']
+
+
+def find_inherited_value_in_tree(init_obj, key, parent_key):
+    obj = init_obj
+    while True:
+        try:
+            return obj[key]
+        except KeyError:
+            try:
+                obj = obj[parent_key]
+            except KeyError:
+                break
+    return None
 
 
 class PdfHandler:
