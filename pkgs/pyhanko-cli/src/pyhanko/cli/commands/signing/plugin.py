@@ -176,9 +176,6 @@ def preconfigured_identity_command(
         # To make sure the semantics of the "identity <key>" invocation
         #  are the exact same as those of the underlying plugin's command,
         #  we invoke the _actual_ command here
-        # args = [
-        #    *(f"--{k}", v for k, v in identity_obj.parameters.items())
-        # ]
         valid_keys = {p.name for p in plugin.params}
         params = {}
         for k, v in identity_obj.parameters.items():

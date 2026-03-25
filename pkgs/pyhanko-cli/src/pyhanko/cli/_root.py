@@ -3,8 +3,9 @@ import logging
 from typing import Iterable, Optional
 
 import click
+import yaml
 from pyhanko.cli._ctx import CLIContext
-from pyhanko.cli.config import CLIRootConfig, parse_cli_config
+from pyhanko.cli.config import CLIRootConfig, parse_cli_config_from_dict
 from pyhanko.cli.plugin_api import (
     SIGNING_PLUGIN_ENTRY_POINT_GROUP,
     SIGNING_PLUGIN_REGISTRY,
@@ -71,7 +72,7 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
     ctx_obj: CLIContext = ctx.obj
     cfg: Optional[CLIRootConfig] = None
     if config_text is not None:
-        cfg = parse_cli_config(config_text)
+        cfg = load_root_config(yaml.safe_load(config_text), no_plugins)
         ctx_obj.config = cfg.config
         log_config = cfg.log_config
     else:
@@ -105,6 +106,20 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
         logging.debug(f'Finished reading configuration from {config}.')
     else:
         logging.debug('There was no configuration to parse.')
+
+
+def load_root_config(config_dict, only_default_plugins=False) -> CLIRootConfig:
+
+    cfg = parse_cli_config_from_dict(config_dict)
+
+    from .commands.signing import register
+
+    plugins_to_register = _load_plugins(
+        cfg, plugins_enabled=not only_default_plugins
+    )
+    register(plugins_to_register)
+
+    return cfg
 
 
 def _load_plugins(root_config: Optional[CLIRootConfig], plugins_enabled: bool):

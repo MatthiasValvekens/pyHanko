@@ -250,7 +250,10 @@ STAMP_STYLE_TYPES: Dict[str, Type[BaseStampStyle]] = {
 
 
 def parse_cli_config(yaml_str) -> CLIRootConfig:
-    config_dict = yaml.safe_load(yaml_str) or {}
+    return parse_cli_config_from_dict(yaml.safe_load(yaml_str) or {})
+
+
+def parse_cli_config_from_dict(config_dict) -> CLIRootConfig:
     return CLIRootConfig(
         **process_root_config_settings(config_dict),
         config=CLIConfig(

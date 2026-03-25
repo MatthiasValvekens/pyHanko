@@ -3,6 +3,7 @@ import getpass
 import itertools
 from typing import Optional
 
+import click
 import pytest
 from asn1crypto import pem
 from asn1crypto.cms import ContentInfo
@@ -10,8 +11,11 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from cryptography.hazmat.primitives import serialization
 from pyhanko.cli import cli_root
+from pyhanko.cli._ctx import CLIContext
+from pyhanko.cli._root import load_root_config
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.sign import PdfSignatureMetadata
 from pyhanko.sign.validation import async_validate_detached_cms
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_testing_commons.test_data.samples import (
@@ -290,6 +294,43 @@ def test_cli_addsig_pemder_with_setup_in_custom_config_file(
         ],
     )
     assert not result.exception, result.output
+
+
+def test_cli_addsig_pemder_with_identity_programmatically(
+    cli_runner, cert_chain, user_key
+):
+
+    root_cert, interm_cert, user_cert = cert_chain
+    cfg = {
+        'identities': {
+            'test': {
+                'plugin': 'pemder',
+                'parameters': {
+                    'key': user_key,
+                    'cert': user_cert,
+                    'chain': [interm_cert, root_cert],
+                    'no-pass': True,
+                },
+            }
+        }
+    }
+    from pyhanko.cli.commands.signing import addsig
+
+    cfg_obj = load_root_config(cfg)
+    identity_cmd = addsig.commands['identity']
+    ctx = click.Context(
+        addsig,
+        obj=CLIContext(
+            config=cfg_obj.config,
+            sig_settings=PdfSignatureMetadata(field_name='Sig1'),
+        ),
+    )
+    ctx.invoke(
+        identity_cmd,
+        identity="test",
+        infile=INPUT_PATH,
+        outfile=SIGNED_OUTPUT_PATH,
+    )
 
 
 @pytest.mark.parametrize('loc', ['config', 'passfile', 'prompt'])
