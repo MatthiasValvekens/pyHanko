@@ -3,6 +3,7 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional, Type, Union
 
 import yaml
+from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import LogConfig, parse_logging_config
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
@@ -10,6 +11,31 @@ from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.stamp import BaseStampStyle, QRStampStyle, TextStampStyle
 
 DEFAULT_TIME_TOLERANCE: timedelta = timedelta(seconds=30)
+
+
+@dataclass(frozen=True)
+class Identity(ConfigurableMixin):
+    """
+    Utility abstraction for storing plugin arguments in config.
+    """
+
+    plugin: str
+    """
+    Plugin name.
+    """
+
+    parameters: Dict[str, str]
+    """
+    Plugin parameters.
+    """
+
+    @classmethod
+    def from_config(cls, config_dict):
+        parameters = config_dict.get('parameters', {})
+        config_dict['parameters'] = {
+            key.replace('-', '_'): v for key, v in parameters.items()
+        }
+        return super().from_config(config_dict)
 
 
 @dataclass
@@ -85,6 +111,11 @@ class CLIConfig:
     """
     Location to store cached data. Derived from the platform's
     user cache dir by default.
+    """
+
+    identities: Dict[str, Identity]
+    """
+    List of identities (i.e. plugin parameters stored in config).
     """
 
     raw_config: dict
@@ -284,6 +315,10 @@ def process_config_dict(config_dict: dict) -> dict:
     time_tolerance = parse_time_tolerance(config_dict)
     retroactive_revinfo = bool(config_dict.get('retroactive-revinfo', False))
     cache_dir = config_dict.get('cache-dir', None)
+
+    raw_identities = config_dict.get('identities', {})
+    identities = {k: Identity.from_config(v) for k, v in raw_identities.items()}
+
     return dict(
         validation_contexts=vcs,
         default_validation_context=default_vc,
@@ -292,4 +327,5 @@ def process_config_dict(config_dict: dict) -> dict:
         stamp_styles=stamp_configs,
         default_stamp_style=default_stamp_style,
         cache_dir=cache_dir,
+        identities=identities,
     )

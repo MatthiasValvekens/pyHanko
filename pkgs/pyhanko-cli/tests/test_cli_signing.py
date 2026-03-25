@@ -160,6 +160,41 @@ def test_cli_addsig_pemder_with_setup(cli_runner, cert_chain, user_key):
     assert not result.exception, result.output
 
 
+def test_cli_addsig_pemder_with_identity_setup(
+    cli_runner, cert_chain, user_key
+):
+
+    root_cert, interm_cert, user_cert = cert_chain
+    cfg = {
+        'identities': {
+            'test': {
+                'plugin': 'pemder',
+                'parameters': {
+                    'key': user_key,
+                    'cert': user_cert,
+                    'chain': [interm_cert, root_cert],
+                    'no-pass': True,
+                },
+            }
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'identity',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
 @pytest.mark.parametrize('pki_arch_name', ['ed25519'])
 def test_cli_addsig_pemder_with_wrong_key_usage(
     cli_runner, cert_chain, user_key, root_cert, pki_arch_name

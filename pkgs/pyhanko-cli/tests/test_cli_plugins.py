@@ -156,3 +156,113 @@ def test_trigger_unavailable_plugin(cli_runner):
     )
     assert result.exit_code == 1
     assert 'plugin always unavailable' in result.output
+
+
+def test_identity_setup_with_too_few_parameters(cli_runner):
+    cfg = {'identities': {'test': {'plugin': 'pemder', 'parameters': {}}}}
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'identity',
+            'test',
+            'input.pdf',
+            'output.pdf',
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert 'option must be provided' in result.output
+
+
+def test_identity_setup_with_unknown_parameters(cli_runner):
+    cfg = {
+        'identities': {
+            'test': {
+                'plugin': 'pemder',
+                'parameters': {
+                    'key': "blah.key",
+                    'cert': "blah.cert",
+                    'no-pass': True,
+                    'zzz': 'blah',
+                },
+            }
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'identity',
+            'test',
+            'input.pdf',
+            'output.pdf',
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert "Parameter 'zzz' defined by 'test' not known" in result.output
+
+
+def test_identity_setup_with_unknown_plugin(cli_runner):
+    cfg = {'identities': {'test': {'plugin': 'zzz', 'parameters': {}}}}
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'identity',
+            'test',
+            'input.pdf',
+            'output.pdf',
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert "Plugin 'zzz'" in result.output
+
+
+def test_unknown_identity(cli_runner):
+    cfg = {'identities': {}}
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'identity',
+            'test',
+            'input.pdf',
+            'output.pdf',
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert "Identity 'test' not found" in result.output
+
+
+def test_identity_without_config(cli_runner):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'identity',
+            'test',
+            'input.pdf',
+            'output.pdf',
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert "Identity command requires a config file" in result.output

@@ -7,7 +7,10 @@ from pyhanko.cli._trust import (
     build_vc_kwargs,
     trust_options,
 )
-from pyhanko.cli.commands.signing.plugin import command_from_plugin
+from pyhanko.cli.commands.signing.plugin import (
+    command_from_plugin,
+    preconfigured_identity_command,
+)
 from pyhanko.cli.commands.stamp import select_style
 from pyhanko.cli.utils import parse_field_location_spec
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -273,9 +276,12 @@ def register(plugins: List[SigningCommandPlugin]):
     # we reset the command list before (re)populating it, in order to
     # make the tests more consistent
     addsig.commands = {}
+    available_commands = {}
     for signer_plugin in plugins:
         if signer_plugin.is_available():
-            addsig.add_command(command_from_plugin(signer_plugin))
+            cmd = command_from_plugin(signer_plugin)
+            addsig.add_command(cmd)
+            available_commands[signer_plugin.subcommand_name] = cmd
         else:
             addsig.add_command(
                 click.Command(
@@ -284,6 +290,7 @@ def register(plugins: List[SigningCommandPlugin]):
                     callback=_unavailable(signer_plugin),
                 )
             )
+    addsig.add_command(preconfigured_identity_command(available_commands))
 
 
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)

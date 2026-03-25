@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import click
 import tzlocal
@@ -145,4 +145,60 @@ def command_from_plugin(plugin: SigningCommandPlugin) -> click.Command:
         callback=_callback,
         help=plugin.help_summary,
         params=params,
+    )
+
+
+def preconfigured_identity_command(
+    plugins_by_name: Dict[str, click.Command],
+) -> click.Command:
+
+    def _callback(*, identity: str, infile: str, outfile: str):
+        ctx = click.get_current_context()
+        cli_ctx: CLIContext = ctx.obj
+        config = cli_ctx.config
+        if config is None:
+            raise click.ClickException(
+                "Identity command requires a config file"
+            )
+        try:
+            identity_obj = config.identities[identity]
+        except KeyError:
+            raise click.ClickException(
+                f"Identity {identity!r} not found in config file"
+            )
+        try:
+            plugin = plugins_by_name[identity_obj.plugin]
+        except KeyError:
+            raise click.ClickException(
+                f"Plugin {identity_obj.plugin!r} referenced by "
+                f"identity {identity!r} is not available"
+            )
+        # To make sure the semantics of the "identity <key>" invocation
+        #  are the exact same as those of the underlying plugin's command,
+        #  we invoke the _actual_ command here
+        # args = [
+        #    *(f"--{k}", v for k, v in identity_obj.parameters.items())
+        # ]
+        valid_keys = {p.name for p in plugin.params}
+        params = {}
+        for k, v in identity_obj.parameters.items():
+            if k not in valid_keys:
+                raise click.ClickException(
+                    f"Parameter {k!r} defined by {identity!r} "
+                    f"not known for plugin {identity_obj.plugin!r}."
+                )
+            params[k] = v
+        params['infile'] = infile
+        params['outfile'] = outfile
+        ctx.invoke(plugin, **params)
+
+    return click.Command(
+        name="identity",
+        callback=_callback,
+        help="sign using identity defined in config file",
+        params=[
+            click.Argument(('identity',), type=str),
+            click.Argument(('infile',), type=readable_file),
+            click.Argument(('outfile',), type=writable_file),
+        ],
     )
