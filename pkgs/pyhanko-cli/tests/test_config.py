@@ -1305,6 +1305,7 @@ def test_cache_dir_config():
         time_tolerance=timedelta(seconds=1),
         retroactive_revinfo=True,
         cache_dir=None,
+        identities={},
         raw_config={},
     )
     assert cache.get_cache_dir(cli_config) is not None
