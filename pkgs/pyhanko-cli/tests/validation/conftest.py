@@ -1,11 +1,11 @@
 import asyncio
-import getpass
 from io import BytesIO
 from typing import Optional
 
 import pytest
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel, ServiceLabel
+from pyhanko.cli._ctx import CLIContext, UXContext
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, fields, sign_pdf
@@ -21,7 +21,7 @@ from pyhanko_testing_commons.test_data.samples import (
     MINIMAL_AES256,
 )
 
-from ..conftest import _const
+from ..conftest import DummyPrompter
 
 
 @pytest.fixture
@@ -125,18 +125,22 @@ def write_ltv_input_to_validate(
 
 
 @pytest.fixture(params=["regular", "encrypted"])
-def input_to_validate(
-    pki_arch: PKIArchitecture, monkeypatch, request, signer_cert_label
-):
+def input_to_validate(pki_arch: PKIArchitecture, request, signer_cert_label):
     if request.param == "encrypted":
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_AES256))
-        monkeypatch.setattr(getpass, 'getpass', value=_const('ownersecret'))
         w.encrypt(b"ownersecret")
     else:
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
     return write_input_to_validate(
         pki_arch, 'to-validate.pdf', w, signer_cert_label=signer_cert_label
+    )
+
+
+@pytest.fixture()
+def cli_context():
+    return CLIContext(
+        ux=UXContext(prompter=DummyPrompter("ownersecret")),
     )
 
 

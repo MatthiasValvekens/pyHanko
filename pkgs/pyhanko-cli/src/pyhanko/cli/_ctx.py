@@ -1,3 +1,5 @@
+import getpass
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -5,6 +7,39 @@ from pyhanko.cli.config import CLIConfig
 from pyhanko.sign.fields import SigFieldSpec
 from pyhanko.sign.signers import PdfSignatureMetadata
 from pyhanko.stamp import BaseStampStyle
+
+__all__ = [
+    'PasswordPrompter',
+    'GetpassPrompter',
+    'UXContext',
+    'CLIContext',
+]
+
+
+class PasswordPrompter(ABC):
+    """
+    Interface for prompting the user for a password / passphrase / PIN.
+    """
+
+    @abstractmethod
+    def prompt_for_password(self, prompt: str) -> str:
+        """
+        Prompt the user for a password.
+
+        :param prompt: The prompt string to display to the user.
+        :return: The password entered by the user.
+        """
+        raise NotImplementedError
+
+
+class GetpassPrompter(PasswordPrompter):
+    """
+    Default :class:`PasswordPrompter` implementation that uses
+    :func:`getpass.getpass`.
+    """
+
+    def prompt_for_password(self, prompt: str) -> str:
+        return getpass.getpass(prompt=prompt)
 
 
 @dataclass
@@ -19,6 +54,12 @@ class UXContext:
     """
     Set to `True` if the user explicitly specifies `--field` with a bounding box
     or passes `--style-name` explicitly.
+    """
+
+    prompter: PasswordPrompter = field(default_factory=GetpassPrompter)
+    """
+    Implementation to use when prompting the user for a password, passphrase
+    or PIN.
     """
 
 

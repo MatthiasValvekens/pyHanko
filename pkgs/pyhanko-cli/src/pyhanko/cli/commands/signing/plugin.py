@@ -103,7 +103,9 @@ def _callback_logic(
                 out.write(output_bytes)
         else:
             with open_for_signing(
-                infile_path=infile, lenient=cli_ctx.lenient
+                infile_path=infile,
+                lenient=cli_ctx.lenient,
+                prompter=cli_ctx.ux.prompter,
             ) as w:
                 if cli_ctx.ux.visible_signature_desired:
                     _ensure_field_visible(

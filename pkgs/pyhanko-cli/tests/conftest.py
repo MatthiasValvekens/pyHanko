@@ -12,6 +12,7 @@ from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, ServiceLabel
 from click.testing import CliRunner
 from freezegun import freeze_time
+from pyhanko.cli._ctx import PasswordPrompter
 from pyhanko.pdf_utils.misc import PdfStrictReadError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import (
@@ -46,11 +47,12 @@ SIGNED_OUTPUT_PATH = 'output.pdf'
 DUMMY_PASSPHRASE = "secret"
 
 
-def _const(v):
-    def f(*_args, **_kwargs):
-        return v
+class DummyPrompter(PasswordPrompter):
+    def __init__(self, password):
+        self.password = password
 
-    return f
+    def prompt_for_password(self, prompt: str) -> str:
+        return self.password
 
 
 DEFAULT_CERTOMANCER_ARCHITECTURES = ["rsa", "ecdsa", "ed25519", "ed448"]

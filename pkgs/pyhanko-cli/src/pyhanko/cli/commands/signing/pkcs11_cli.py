@@ -1,13 +1,12 @@
 import contextlib
 import dataclasses
-import getpass
 import os
 from typing import ContextManager, List, Optional
 
 import click
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli.config import CLIConfig
-from pyhanko.cli.plugin_api import SigningCommandPlugin
+from pyhanko.cli.plugin_api import SigningCommandPlugin, prompt_for_password
 from pyhanko.cli.utils import logger, readable_file
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.pkcs11 import (
@@ -193,13 +192,15 @@ def _pkcs11_signer_context(
         )
 
     if pkcs11_config.prompt_pin == PKCS11PinEntryMode.PROMPT and pin is None:
-        pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
+        pin = prompt_for_password(prompt='PKCS#11 user PIN: ')
 
     with pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin) as signer:
         if pkcs11_config.signing_pin_mode == PKCS11SigningPinEntryMode.PROMPT:
 
             def _signing_kwargs(*_args, **_kwargs):
-                signing_pin = getpass.getpass(prompt='PKCS#11 signing PIN: ')
+                signing_pin = prompt_for_password(
+                    prompt='PKCS#11 signing PIN: '
+                )
                 return {'pin': signing_pin}
 
             signer.sign_kwargs = _signing_kwargs

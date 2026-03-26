@@ -1,5 +1,4 @@
 import asyncio
-import getpass
 import warnings
 from dataclasses import replace
 from datetime import datetime
@@ -14,6 +13,7 @@ from pyhanko.cli._trust import (
     trust_options,
 )
 from pyhanko.cli.commands.signing import signing
+from pyhanko.cli.plugin_api import prompt_for_password
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import logger
 from pyhanko.keys import load_certs_from_pemder
@@ -192,7 +192,7 @@ def _open_file_for_validation(infile, no_strict_syntax, password):
             # operation, so this is in line with expected UX in other viewers.
             empty_auth_result = r.decrypt("")
             if empty_auth_result.status == crypt.AuthStatus.FAILED:
-                password = getpass.getpass(prompt='File password: ')
+                password = prompt_for_password(prompt='File password: ')
             else:
                 auth_result = empty_auth_result
         if not auth_result:

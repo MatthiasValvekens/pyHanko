@@ -1,16 +1,19 @@
-import getpass
 from typing import BinaryIO, Optional
 
 import click
+from pyhanko.cli._ctx import PasswordPrompter
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.crypt import AuthStatus
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 
 class OpenForSigning:
-    def __init__(self, infile_path: str, lenient: bool):
+    def __init__(
+        self, infile_path: str, lenient: bool, prompter: PasswordPrompter
+    ):
         self.infile_path = infile_path
         self.lenient = lenient
+        self.prompter = prompter
         self.handle: Optional[BinaryIO] = None
 
     def __enter__(self) -> IncrementalPdfFileWriter:
@@ -21,7 +24,7 @@ class OpenForSigning:
         if writer.prev.encrypted:
             sh = writer.prev.security_handler
             if isinstance(sh, crypt.StandardSecurityHandler):
-                pdf_pass = getpass.getpass(
+                pdf_pass = self.prompter.prompt_for_password(
                     prompt='Password for encrypted file \'%s\': '
                     % self.infile_path
                 )
@@ -45,8 +48,10 @@ class OpenForSigning:
         self.handle.close()
 
 
-def open_for_signing(infile_path: str, lenient: bool):
-    return OpenForSigning(infile_path, lenient)
+def open_for_signing(
+    infile_path: str, lenient: bool, prompter: PasswordPrompter
+):
+    return OpenForSigning(infile_path, lenient, prompter=prompter)
 
 
 def get_text_params(ctx):

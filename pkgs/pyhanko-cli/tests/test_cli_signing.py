@@ -11,7 +11,7 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from cryptography.hazmat.primitives import serialization
 from pyhanko.cli import cli_root
-from pyhanko.cli._ctx import CLIContext
+from pyhanko.cli._ctx import CLIContext, UXContext
 from pyhanko.cli._root import load_root_config
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -32,7 +32,7 @@ from .conftest import (
     INPUT_PATH,
     LTV_CERTOMANCER_ARCHITECTURES,
     SIGNED_OUTPUT_PATH,
-    _const,
+    DummyPrompter,
     _write_cert,
     _write_config,
 )
@@ -102,12 +102,8 @@ def test_cli_addsig_pemder(cli_runner, cert_chain, user_key):
     assert not result.exception, result.output
 
 
-def test_cli_addsig_pemder_without_nopass(
-    cli_runner, cert_chain, user_key, monkeypatch
-):
+def test_cli_addsig_pemder_without_nopass(cli_runner, cert_chain, user_key):
     # expect a warning, but no errors
-    monkeypatch.setattr(getpass, 'getpass', _const(""))
-
     root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
@@ -126,6 +122,7 @@ def test_cli_addsig_pemder_without_nopass(
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter(""))),
     )
     assert not result.exception, result.output
 
@@ -335,19 +332,25 @@ def test_cli_addsig_pemder_with_identity_programmatically(
 
 @pytest.mark.parametrize('loc', ['config', 'passfile', 'prompt'])
 def test_cli_addsig_pemder_with_setup_encrypted_key(
-    cli_runner, cert_chain, encrypted_user_key, monkeypatch, loc
+    cli_runner, cert_chain, encrypted_user_key, loc
 ):
     cfg = _pemder_setup_config(encrypted_user_key, cert_chain)
     if loc == 'config':
         cfg['pemder-setups']['test']['key-passphrase'] = DUMMY_PASSPHRASE
         args = []
+        extra = {}
     elif loc == 'passfile':
         with open('passfile', 'w') as passf:
             passf.write(DUMMY_PASSPHRASE)
         args = ['--passfile', 'passfile']
+        extra = {}
     else:
         args = []
-        monkeypatch.setattr(getpass, 'getpass', _const(DUMMY_PASSPHRASE))
+        extra = dict(
+            obj=CLIContext(
+                ux=UXContext(prompter=DummyPrompter(DUMMY_PASSPHRASE))
+            )
+        )
 
     _write_config(cfg)
     result = cli_runner.invoke(
@@ -364,6 +367,7 @@ def test_cli_addsig_pemder_with_setup_encrypted_key(
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        **extra,
     )
     assert not result.exception, result.output
 
@@ -543,8 +547,7 @@ def test_cli_addsig_pemder_detached_no_field_arg(
     assert '--field is not compatible with --detach' in result.output
 
 
-def test_cli_addsig_p12(cli_runner, p12_keys, monkeypatch):
-    monkeypatch.setattr(getpass, 'getpass', value=_const(DUMMY_PASSPHRASE))
+def test_cli_addsig_p12(cli_runner, p12_keys):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -557,6 +560,7 @@ def test_cli_addsig_p12(cli_runner, p12_keys, monkeypatch):
             SIGNED_OUTPUT_PATH,
             p12_keys,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter(DUMMY_PASSPHRASE))),
     )
     assert not result.exception, result.output
 
@@ -579,12 +583,7 @@ def test_cli_addsig_unencrypted_p12(cli_runner, unencrypted_p12):
     assert not result.exception, result.output
 
 
-def test_cli_addsig_unencrypted_p12_without_nopass(
-    cli_runner, unencrypted_p12, monkeypatch
-):
-    # expect a warning, but no errors
-    monkeypatch.setattr(getpass, 'getpass', _const(""))
-
+def test_cli_addsig_unencrypted_p12_without_nopass(cli_runner, unencrypted_p12):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -597,14 +596,13 @@ def test_cli_addsig_unencrypted_p12_without_nopass(
             SIGNED_OUTPUT_PATH,
             unencrypted_p12,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter(""))),
     )
     assert not result.exception, result.output
 
 
 @pytest.mark.parametrize('passphrase_loc', ['config', 'prompt', 'file'])
-def test_cli_addsig_p12_with_setup(
-    cli_runner, p12_keys, monkeypatch, passphrase_loc
-):
+def test_cli_addsig_p12_with_setup(cli_runner, p12_keys, passphrase_loc):
     cfg = {
         'pkcs12-setups': {
             'test': {
@@ -613,10 +611,15 @@ def test_cli_addsig_p12_with_setup(
         }
     }
     args = []
+    extra = {}
     if passphrase_loc == 'config':
         cfg['pkcs12-setups']['test']['pfx_passphrase'] = DUMMY_PASSPHRASE
     elif passphrase_loc == 'prompt':
-        monkeypatch.setattr(getpass, 'getpass', value=_const(DUMMY_PASSPHRASE))
+        extra = dict(
+            obj=CLIContext(
+                ux=UXContext(prompter=DummyPrompter(DUMMY_PASSPHRASE))
+            )
+        )
     elif passphrase_loc == 'file':
         args = ['--passfile', 'passfile']
         with open('passfile', 'w') as pf:
@@ -637,6 +640,7 @@ def test_cli_addsig_p12_with_setup(
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        **extra,
     )
     assert not result.exception, result.output
 
@@ -707,7 +711,6 @@ def test_cli_addsig_p12_setup_corrupted_keystore(cli_runner):
             SIGNED_OUTPUT_PATH,
         ],
     )
-    print(result.output)
     assert result.exit_code == 1
     assert "Could not load key material" in result.output
 
@@ -752,10 +755,11 @@ def test_cli_addsig_p12_passfile(cli_runner, p12_keys):
     assert not result.exception, result.output
 
 
-def test_cli_sign_pkcs12_visible_while_creating_field(
-    cli_runner, monkeypatch, p12_keys, post_validate
-):
-    monkeypatch.setattr(getpass, 'getpass', value=_const(DUMMY_PASSPHRASE))
+def test_cli_sign_getpass(cli_runner, monkeypatch, p12_keys, post_validate):
+    def _resp(*_args, **_kwargs):
+        return DUMMY_PASSPHRASE
+
+    monkeypatch.setattr(getpass, 'getpass', value=_resp)
     result = cli_runner.invoke(
         cli_root,
         [
@@ -768,6 +772,26 @@ def test_cli_sign_pkcs12_visible_while_creating_field(
             SIGNED_OUTPUT_PATH,
             p12_keys,
         ],
+    )
+    assert not result.exception, result.output
+
+
+def test_cli_sign_pkcs12_visible_while_creating_field(
+    cli_runner, p12_keys, post_validate
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            'pkcs12',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            p12_keys,
+        ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter(DUMMY_PASSPHRASE))),
     )
     assert not result.exception, result.output
 
@@ -1061,12 +1085,9 @@ def test_cli_pades_lta_nonstrict(
     assert not result.exception, result.output
 
 
-def test_cli_addsig_pemder_encrypted_file(
-    cli_runner, cert_chain, user_key, monkeypatch
-):
+def test_cli_addsig_pemder_encrypted_file(cli_runner, cert_chain, user_key):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_AES256)
-    monkeypatch.setattr(getpass, 'getpass', _const("ownersecret"))
     cfg = _pemder_setup_config(user_key, cert_chain)
     _write_config(cfg)
     result = cli_runner.invoke(
@@ -1083,6 +1104,7 @@ def test_cli_addsig_pemder_encrypted_file(
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("ownersecret"))),
     )
     assert not result.exception, result.output
 
@@ -1120,10 +1142,9 @@ def test_cli_addsig_no_pubkey_encryption(cli_runner):
     assert "Public-key document encryption is not supported" in result.output
 
 
-def test_cli_addsig_wrong_password(cli_runner, monkeypatch):
+def test_cli_addsig_wrong_password(cli_runner):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_AES256)
-    monkeypatch.setattr(getpass, 'getpass', _const("wrong"))
     cfg = {
         'pemder-setups': {
             'test': {
@@ -1149,6 +1170,7 @@ def test_cli_addsig_wrong_password(cli_runner, monkeypatch):
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("wrong"))),
     )
     assert result.exit_code == 1
     assert "Invalid password" in result.output

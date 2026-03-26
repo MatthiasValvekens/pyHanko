@@ -1,12 +1,11 @@
 import contextlib
-import getpass
 from typing import ContextManager, List, Optional
 
 import click
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli._trust import grab_certs
 from pyhanko.cli.config import CLIConfig
-from pyhanko.cli.plugin_api import SigningCommandPlugin
+from pyhanko.cli.plugin_api import SigningCommandPlugin, prompt_for_password
 from pyhanko.cli.utils import _warn_empty_passphrase, logger, readable_file
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.local_keys import (
@@ -147,7 +146,9 @@ def _pemder_signer(
         passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
     elif pemder_config.prompt_passphrase and not no_pass:
-        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+        passphrase = prompt_for_password(prompt='Key passphrase: ').encode(
+            'utf-8'
+        )
         if not passphrase:
             _warn_empty_passphrase()
             passphrase = None
@@ -246,7 +247,7 @@ def _pkcs12_signer(ctx: CLIContext, pfx, chain, passfile, p12_setup, no_pass):
         passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
     elif pkcs12_config.prompt_passphrase and not no_pass:
-        passphrase = getpass.getpass(prompt='PKCS#12 passphrase: ').encode(
+        passphrase = prompt_for_password(prompt='PKCS#12 passphrase: ').encode(
             'utf-8'
         )
         if not passphrase:

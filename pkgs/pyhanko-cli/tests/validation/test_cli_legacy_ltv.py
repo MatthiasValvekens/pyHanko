@@ -18,7 +18,7 @@ def catch_ltv_warning():
 
 
 def test_ltv_validate_success(
-    cli_runner, root_cert, ltv_input_to_validate, catch_ltv_warning
+    cli_runner, root_cert, ltv_input_to_validate, catch_ltv_warning, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -31,6 +31,7 @@ def test_ltv_validate_success(
             root_cert,
             ltv_input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED' in result.output
@@ -39,7 +40,7 @@ def test_ltv_validate_success(
 
 
 def test_ltv_validate_adobe_style(
-    cli_runner, pki_arch, root_cert, catch_ltv_warning
+    cli_runner, pki_arch, root_cert, catch_ltv_warning, cli_context
 ):
     fname = write_ltv_input_to_validate(
         pki_arch,
@@ -58,6 +59,7 @@ def test_ltv_validate_adobe_style(
             root_cert,
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED' in result.output
@@ -66,7 +68,7 @@ def test_ltv_validate_adobe_style(
 
 
 def test_ltv_validate_fail_no_revinfo(
-    cli_runner, root_cert, input_to_validate, catch_ltv_warning
+    cli_runner, root_cert, input_to_validate, catch_ltv_warning, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -79,13 +81,14 @@ def test_ltv_validate_fail_no_revinfo(
             root_cert,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'REVINFO_FAILURE' in result.output
 
 
 def test_ltv_validate_fail_no_revinfo_pretty(
-    cli_runner, root_cert, input_to_validate, catch_ltv_warning
+    cli_runner, root_cert, input_to_validate, catch_ltv_warning, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -99,13 +102,14 @@ def test_ltv_validate_fail_no_revinfo_pretty(
             root_cert,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'No DSS found' in result.output
 
 
 def test_ltv_validate_not_compatible_with_validation_time(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -120,6 +124,7 @@ def test_ltv_validate_not_compatible_with_validation_time(
             root_cert,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'not compatible with --ltv-profile' in result.output

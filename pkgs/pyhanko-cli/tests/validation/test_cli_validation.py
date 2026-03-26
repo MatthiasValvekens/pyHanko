@@ -1,5 +1,4 @@
 import datetime
-import getpass
 import re
 from io import BytesIO
 
@@ -9,6 +8,7 @@ from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko.cli import cli_root
+from pyhanko.cli._ctx import CLIContext, UXContext
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -25,14 +25,14 @@ from pyhanko_testing_commons.test_data.samples import (
 from ..conftest import (
     FREEZE_DT,
     INPUT_PATH,
-    _const,
+    DummyPrompter,
     _write_cert,
     _write_config,
 )
 from .conftest import write_input_to_validate
 
 
-def test_basic_validate(cli_runner, root_cert, input_to_validate):
+def test_basic_validate(cli_runner, root_cert, input_to_validate, cli_context):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -42,6 +42,7 @@ def test_basic_validate(cli_runner, root_cert, input_to_validate):
             root_cert,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
@@ -49,7 +50,7 @@ def test_basic_validate(cli_runner, root_cert, input_to_validate):
 
 @pytest.mark.parametrize('pki_mocks_enabled', [False])
 def test_basic_validate_fail_without_revinfo(
-    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -60,6 +61,7 @@ def test_basic_validate_fail_without_revinfo(
             root_cert,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'INTACT:UNTRUSTED' in result.output
@@ -67,7 +69,7 @@ def test_basic_validate_fail_without_revinfo(
 
 @pytest.mark.parametrize('pki_mocks_enabled', [True, False])
 def test_basic_validate_with_soft_revocation(
-    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -79,13 +81,14 @@ def test_basic_validate_with_soft_revocation(
             '--soft-revocation-check',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
 def test_basic_validate_with_required_revinfo(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -97,6 +100,7 @@ def test_basic_validate_with_required_revinfo(
             '--force-revinfo',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
@@ -104,7 +108,7 @@ def test_basic_validate_with_required_revinfo(
 
 @pytest.mark.parametrize('pki_mocks_enabled', [False])
 def test_basic_validate_fail_without_required_revinfo(
-    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -116,6 +120,7 @@ def test_basic_validate_fail_without_required_revinfo(
             '--force-revinfo',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1, result.output
     assert 'UNTRUSTED' in result.output
@@ -123,7 +128,7 @@ def test_basic_validate_fail_without_required_revinfo(
 
 @pytest.mark.parametrize('pki_mocks_enabled', [False])
 def test_basic_validate_without_revinfo_check(
-    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -135,6 +140,7 @@ def test_basic_validate_without_revinfo_check(
             '--no-revocation-check',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
@@ -142,7 +148,7 @@ def test_basic_validate_without_revinfo_check(
 
 @pytest.mark.parametrize('pki_mocks_enabled', [False])
 def test_inconsistent_revo_settings(
-    cli_runner, root_cert, input_to_validate, pki_mocks_enabled
+    cli_runner, root_cert, input_to_validate, pki_mocks_enabled, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -155,20 +161,18 @@ def test_inconsistent_revo_settings(
             '--soft-revocation-check',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'incompatible' in result.output
 
 
-def test_validate_encrypted_wrong_password(
-    cli_runner, pki_arch, root_cert, monkeypatch
-):
+def test_validate_encrypted_wrong_password(cli_runner, pki_arch, root_cert):
     fname = 'encrypted.pdf'
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_AES256))
     w.encrypt("ownersecret")
     write_input_to_validate(pki_arch, fname, w)
 
-    monkeypatch.setattr(getpass, 'getpass', _const("badpassword"))
     result = cli_runner.invoke(
         cli_root,
         [
@@ -178,13 +182,14 @@ def test_validate_encrypted_wrong_password(
             root_cert,
             fname,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("badpassword"))),
     )
     assert result.exit_code == 1
     assert "Password didn't match." in result.output
 
 
 def test_validate_encrypted_empty_user_password(
-    cli_runner, pki_arch, root_cert, monkeypatch
+    cli_runner, pki_arch, root_cert, monkeypatch, cli_context
 ):
     fname = 'encrypted.pdf'
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
@@ -201,13 +206,14 @@ def test_validate_encrypted_empty_user_password(
             root_cert,
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
 def test_validate_encrypted_empty_user_password_wrong_explicit_password(
-    cli_runner, pki_arch, root_cert, monkeypatch
+    cli_runner, pki_arch, root_cert, monkeypatch, cli_context
 ):
     fname = 'encrypted.pdf'
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
@@ -226,13 +232,14 @@ def test_validate_encrypted_empty_user_password_wrong_explicit_password(
             root_cert,
             fname,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "Password didn't match." in result.output
 
 
 def test_validate_encrypted_explicit_empty_password(
-    cli_runner, pki_arch, root_cert, monkeypatch
+    cli_runner, pki_arch, root_cert, monkeypatch, cli_context
 ):
     fname = 'encrypted.pdf'
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
@@ -251,13 +258,14 @@ def test_validate_encrypted_explicit_empty_password(
             root_cert,
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
 def test_validate_encrypted_wrong_explicit_empty_password(
-    cli_runner, pki_arch, root_cert, monkeypatch
+    cli_runner, pki_arch, root_cert, monkeypatch, cli_context
 ):
     fname = 'encrypted.pdf'
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
@@ -276,13 +284,14 @@ def test_validate_encrypted_wrong_explicit_empty_password(
             root_cert,
             fname,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "Password didn't match." in result.output
 
 
 def test_validate_unsupported_handler(
-    cli_runner, pki_arch, root_cert, monkeypatch
+    cli_runner, pki_arch, root_cert, monkeypatch, cli_context
 ):
     fname = 'encrypted.pdf'
 
@@ -298,12 +307,15 @@ def test_validate_unsupported_handler(
             root_cert,
             fname,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "only password-based encryption" in result.output
 
 
-def test_basic_validate_summary(cli_runner, root_cert, input_to_validate):
+def test_basic_validate_summary(
+    cli_runner, root_cert, input_to_validate, cli_context
+):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -314,13 +326,14 @@ def test_basic_validate_summary(cli_runner, root_cert, input_to_validate):
             root_cert,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     pattern = re.compile("Sig1:.*:VALID$")
     assert pattern.match(result.output)
 
 
-def test_validate_inconsistent_print_settings(cli_runner):
+def test_validate_inconsistent_print_settings(cli_runner, cli_context):
     with open('file.pdf', 'wb') as inf:
         inf.write(MINIMAL)
     result = cli_runner.invoke(
@@ -332,12 +345,15 @@ def test_validate_inconsistent_print_settings(cli_runner):
             '--pretty-print',
             'file.pdf',
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'incompatible' in result.output
 
 
-def test_basic_validate_pretty_print(cli_runner, root_cert, input_to_validate):
+def test_basic_validate_pretty_print(
+    cli_runner, root_cert, input_to_validate, cli_context
+):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -348,13 +364,14 @@ def test_basic_validate_pretty_print(cli_runner, root_cert, input_to_validate):
             root_cert,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
 
 
 def test_basic_validate_with_validation_time(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, cli_context
 ):
     with freeze_time(FREEZE_DT + datetime.timedelta(days=3650)):
         result = cli_runner.invoke(
@@ -368,14 +385,13 @@ def test_basic_validate_with_validation_time(
                 root_cert,
                 input_to_validate,
             ],
+            obj=cli_context,
         )
         assert not result.exception, result.output
         assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
-def test_validation_time_syntax_error(
-    cli_runner,
-):
+def test_validation_time_syntax_error(cli_runner, cli_context):
     with open('file.pdf', 'wb') as inf:
         inf.write(MINIMAL_ONE_FIELD)
 
@@ -389,13 +405,14 @@ def test_validation_time_syntax_error(
                 '2020-99-99T99:99:99Z',
                 'file.pdf',
             ],
+            obj=cli_context,
         )
         assert result.exit_code == 1
         assert 'could not be parsed'
 
 
 def test_basic_validate_with_claimed_time(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, cli_context
 ):
     with freeze_time(FREEZE_DT + datetime.timedelta(days=3650)):
         result = cli_runner.invoke(
@@ -409,12 +426,15 @@ def test_basic_validate_with_claimed_time(
                 root_cert,
                 input_to_validate,
             ],
+            obj=cli_context,
         )
         assert not result.exception, result.output
         assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
-def test_basic_validate_untrusted(cli_runner, root_cert, input_to_validate):
+def test_basic_validate_untrusted(
+    cli_runner, root_cert, input_to_validate, cli_context
+):
     with freeze_time(FREEZE_DT + datetime.timedelta(days=3650)):
         result = cli_runner.invoke(
             cli_root,
@@ -425,12 +445,13 @@ def test_basic_validate_untrusted(cli_runner, root_cert, input_to_validate):
                 root_cert,
                 input_to_validate,
             ],
+            obj=cli_context,
         )
         assert result.exit_code == 1
 
 
 @pytest.mark.parametrize('pretty', [True, False])
-def test_basic_validate_with_weak_hash(cli_runner, pretty):
+def test_basic_validate_with_weak_hash(cli_runner, pretty, cli_context):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     fname = write_input_to_validate(
         TESTING_CA, 'to_validate.pdf', w, weakened=True
@@ -445,6 +466,7 @@ def test_basic_validate_with_weak_hash(cli_runner, pretty):
             *(('--pretty-print',) if pretty else ()),
             fname,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'An error occurred while' in result.output
@@ -452,7 +474,9 @@ def test_basic_validate_with_weak_hash(cli_runner, pretty):
 
 
 @pytest.mark.parametrize('verbosity', ['default', 'verbose', 'pretty'])
-def test_basic_validate_signed_with_wrong_key(cli_runner, verbosity):
+def test_basic_validate_signed_with_wrong_key(
+    cli_runner, verbosity, cli_context
+):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     fname = write_input_to_validate(
         TESTING_CA, 'to_validate.pdf', w, wrong_key=True
@@ -468,6 +492,7 @@ def test_basic_validate_signed_with_wrong_key(cli_runner, verbosity):
             *(('--pretty-print',) if verbosity == 'pretty' else ()),
             fname,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'INVALID' in result.output
@@ -480,7 +505,7 @@ def test_basic_validate_signed_with_wrong_key(cli_runner, verbosity):
 
 
 def test_basic_validate_with_default_context(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, cli_context
 ):
     _write_config({'validation-contexts': {'default': {'trust': root_cert}}})
     result = cli_runner.invoke(
@@ -490,12 +515,15 @@ def test_basic_validate_with_default_context(
             'validate',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
-def test_basic_validate_with_system_trust(cli_runner, input_to_validate):
+def test_basic_validate_with_system_trust(
+    cli_runner, input_to_validate, cli_context
+):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -503,12 +531,13 @@ def test_basic_validate_with_system_trust(cli_runner, input_to_validate):
             'validate',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
 
 
 def test_basic_validate_with_explicit_context(
-    cli_runner, root_cert, input_to_validate
+    cli_runner, root_cert, input_to_validate, cli_context
 ):
     _write_config({'validation-contexts': {'test': {'trust': root_cert}}})
     result = cli_runner.invoke(
@@ -520,6 +549,7 @@ def test_basic_validate_with_explicit_context(
             'test',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
@@ -552,6 +582,7 @@ def test_basic_validate_lacking_intermediate(
     cli_runner,
     root_cert,
     pki_arch,
+    cli_context,
 ):
     fname = _write_input_to_validate_with_missing_intermediate(pki_arch)
     with open('interm.crt', 'wb') as outf:
@@ -571,6 +602,7 @@ def test_basic_validate_lacking_intermediate(
             'validate',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
@@ -580,6 +612,7 @@ def test_basic_validate_lacking_intermediate_with_trust_arg(
     cli_runner,
     root_cert,
     pki_arch,
+    cli_context,
 ):
     fname = _write_input_to_validate_with_missing_intermediate(pki_arch)
     with open('interm.crt', 'wb') as outf:
@@ -597,13 +630,16 @@ def test_basic_validate_lacking_intermediate_with_trust_arg(
             'interm.crt',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
 
 
 @pytest.mark.parametrize('setup_type', ['default', 'explicit'])
-def test_basic_validate_context_config_wrong(cli_runner, setup_type):
+def test_basic_validate_context_config_wrong(
+    cli_runner, setup_type, cli_context
+):
     _write_config(
         {'validation-contexts': {setup_type: {'thismakesnosense': "blah"}}}
     )
@@ -619,6 +655,7 @@ def test_basic_validate_context_config_wrong(cli_runner, setup_type):
             ),
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "validation context" in result.output
@@ -626,7 +663,7 @@ def test_basic_validate_context_config_wrong(cli_runner, setup_type):
 
 @pytest.mark.parametrize('setup_type', ['default', 'explicit'])
 def test_basic_validate_context_config_nonsensical_other_certs(
-    cli_runner, setup_type
+    cli_runner, setup_type, cli_context
 ):
     _write_config({'validation-contexts': {setup_type: {'other-certs': 1234}}})
     result = cli_runner.invoke(
@@ -641,12 +678,13 @@ def test_basic_validate_context_config_nonsensical_other_certs(
             ),
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "validation context" in result.output
 
 
-def test_basic_validate_context_without_config_file(cli_runner):
+def test_basic_validate_context_without_config_file(cli_runner, cli_context):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -656,12 +694,13 @@ def test_basic_validate_context_without_config_file(cli_runner):
             'test',
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "No config file" in result.output
 
 
-def test_basic_validate_context_incompatible_args(cli_runner):
+def test_basic_validate_context_incompatible_args(cli_runner, cli_context):
     result = cli_runner.invoke(
         cli_root,
         [
@@ -673,12 +712,13 @@ def test_basic_validate_context_incompatible_args(cli_runner):
             INPUT_PATH,
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "--validation-context is incompatible with" in result.output
 
 
-def test_basic_validate_context_file_not_found(cli_runner):
+def test_basic_validate_context_file_not_found(cli_runner, cli_context):
     _write_config(
         {'validation-contexts': {'test': {'trust': 'no-such-cert.crt'}}}
     )
@@ -691,12 +731,13 @@ def test_basic_validate_context_file_not_found(cli_runner):
             'test',
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "I/O problem" in result.output
 
 
-def test_basic_validate_context_malformed_cert(cli_runner):
+def test_basic_validate_context_malformed_cert(cli_runner, cli_context):
     with open('cert.crt', 'wb') as outf:
         outf.write(b"\xde\xad\xbe\xef")
 
@@ -710,6 +751,7 @@ def test_basic_validate_context_malformed_cert(cli_runner):
             'test',
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert "processing problem" in result.output
@@ -732,7 +774,7 @@ def detached_input_to_validate(pki_arch: PKIArchitecture, detached_input_type):
 
 
 def test_basic_detached_validate(
-    cli_runner, root_cert, detached_input_to_validate
+    cli_runner, root_cert, detached_input_to_validate, cli_context
 ):
     result = cli_runner.invoke(
         cli_root,
@@ -745,6 +787,7 @@ def test_basic_detached_validate(
             root_cert,
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'INTACT:TRUSTED' in result.output
@@ -752,7 +795,11 @@ def test_basic_detached_validate(
 
 @pytest.mark.parametrize('detached_input_type', ['der'])
 def test_fail_detached_validate(
-    cli_runner, root_cert, detached_input_to_validate, detached_input_type
+    cli_runner,
+    root_cert,
+    detached_input_to_validate,
+    detached_input_type,
+    cli_context,
 ):
     with open(detached_input_to_validate, 'rb') as inf:
         d = inf.read()
@@ -771,14 +818,13 @@ def test_fail_detached_validate(
             root_cert,
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'Error: INVALID' in result.output
 
 
-def test_detached_validate_malformed_input(
-    cli_runner,
-):
+def test_detached_validate_malformed_input(cli_runner, cli_context):
     with open('data.pem', 'wb') as f:
         f.write(b"\xde\xad\xbe\xef")
 
@@ -791,14 +837,13 @@ def test_detached_validate_malformed_input(
             'data.pem',
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'Could not parse CMS object' in result.output
 
 
-def test_detached_validate_bad_cms_type(
-    cli_runner,
-):
+def test_detached_validate_bad_cms_type(cli_runner, cli_context):
     with open('data.der', 'wb') as f:
         f.write(cms.ContentInfo({'content_type': 'data'}).dump())
 
@@ -811,6 +856,7 @@ def test_detached_validate_bad_cms_type(
             'data.der',
             INPUT_PATH,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'CMS content type is not signedData' in result.output

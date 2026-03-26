@@ -11,6 +11,7 @@ __all__ = [
     'CLIContext',
     'SigningCommandPlugin',
     'register_signing_plugin',
+    'prompt_for_password',
 ]
 
 
@@ -118,3 +119,15 @@ def register_signing_plugin(cls):
     """
     SIGNING_PLUGIN_REGISTRY.append(cls())
     return cls
+
+
+def prompt_for_password(prompt: str) -> str:
+    """
+    Prompt for a password using the prompter active in the current context.
+
+    :param prompt:
+        The prompt string to display to the user.
+    :return:
+    """
+    ctx_obj: CLIContext = click.get_current_context().obj
+    return ctx_obj.ux.prompter.prompt_for_password(prompt=prompt)

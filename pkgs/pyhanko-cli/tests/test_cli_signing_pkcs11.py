@@ -1,8 +1,8 @@
-import getpass
 from typing import Any, Dict
 
 import pytest
 from pyhanko.cli import cli_root
+from pyhanko.cli._ctx import CLIContext, PasswordPrompter, UXContext
 from pyhanko.cli.commands.signing.pkcs11_cli import (
     P11_PIN_ENV_VAR,
     P11_SIGNING_PIN_ENV_VAR,
@@ -12,7 +12,7 @@ from pyhanko_testing_commons.test_utils.pkcs11_utils.config import P11TestConfig
 from .conftest import (
     INPUT_PATH,
     SIGNED_OUTPUT_PATH,
-    _const,
+    DummyPrompter,
     _write_config,
 )
 
@@ -25,6 +25,11 @@ from .conftest import (
 )
 def root_cert_data(p11_config):
     return p11_config.cert_chain[0]
+
+
+@pytest.fixture
+def pinentry_context(p11_config):
+    return CLIContext(ux=UXContext(prompter=DummyPrompter(p11_config.user_pin)))
 
 
 @pytest.mark.hsm(platform='softhsm')
@@ -123,7 +128,11 @@ def _pkcs11_setup_config_read_certs_from_file(
 
 @pytest.mark.hsm(platform='softhsm,yubihsm,nitrokey')
 def test_cli_addsig_pkcs11_pull_interm(
-    cli_runner, post_validate, monkeypatch, p11_config, platform
+    cli_runner,
+    post_validate,
+    p11_config,
+    platform,
+    pinentry_context,
 ):
     args = [
         '--lib',
@@ -139,7 +148,6 @@ def test_cli_addsig_pkcs11_pull_interm(
         args += ['--raw-mechanism']
     if p11_config.key_label:
         args += ['--key-label', p11_config.key_label]
-    monkeypatch.setattr(getpass, 'getpass', value=_const(p11_config.user_pin))
     result = cli_runner.invoke(
         cli_root,
         [
@@ -152,13 +160,18 @@ def test_cli_addsig_pkcs11_pull_interm(
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        obj=pinentry_context,
     )
     assert not result.exception, result.output
 
 
 @pytest.mark.hsm(exclude='safenet')
 def test_cli_addsig_pkcs11_read_interm_from_file(
-    cli_runner, post_validate, monkeypatch, p11_config, platform
+    cli_runner,
+    post_validate,
+    p11_config,
+    platform,
+    pinentry_context,
 ):
     with open('interm.crt', 'wb') as certf:
         certf.write(p11_config.cert_chain[1].dump())
@@ -176,7 +189,6 @@ def test_cli_addsig_pkcs11_read_interm_from_file(
         args += ['--raw-mechanism']
     if p11_config.key_label:
         args += ['--key-label', p11_config.key_label]
-    monkeypatch.setattr(getpass, 'getpass', value=_const(p11_config.user_pin))
     result = cli_runner.invoke(
         cli_root,
         [
@@ -189,6 +201,7 @@ def test_cli_addsig_pkcs11_read_interm_from_file(
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        obj=pinentry_context,
     )
     assert not result.exception, result.output
 
@@ -253,17 +266,20 @@ def test_cli_addsig_pkcs11_with_setup_read_certs_from_file(
 
 @pytest.mark.hsm(platform='safenet')
 def test_cli_addsig_pkcs11_with_setup_and_signing_pin_prompt(
-    cli_runner, p11_config, post_validate, platform, monkeypatch
+    cli_runner,
+    p11_config,
+    post_validate,
+    platform,
 ):
     cfg = _pkcs11_setup_config_pull_certs(p11_config)
 
-    def _resp(*_args, prompt, **_kwargs):
-        if 'signing' in prompt:
-            return p11_config.signing_pin
-        else:
-            return p11_config.user_pin
+    class SpecialDummyPrompter(PasswordPrompter):
+        def prompt_for_password(self, prompt: str) -> str:
+            if 'signing' in prompt:
+                return p11_config.signing_pin
+            else:
+                return p11_config.user_pin
 
-    monkeypatch.setattr(getpass, 'getpass', value=_resp)
     if p11_config.signing_pin is not None:
         cfg['pkcs11-setups']['test']['signing-pin-mode'] = 'prompt'
     _write_config(cfg)
@@ -280,6 +296,7 @@ def test_cli_addsig_pkcs11_with_setup_and_signing_pin_prompt(
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        obj=CLIContext(ux=UXContext(prompter=SpecialDummyPrompter())),
     )
     assert not result.exception, result.output
 
@@ -337,14 +354,16 @@ def test_cli_addsig_pkcs11_with_setup_and_env_signing_pin(
 
 @pytest.mark.hsm(platform='softhsm')
 def test_cli_addsig_pkcs11_with_setup_and_pin_prompt(
-    cli_runner, post_validate, monkeypatch, p11_config
+    cli_runner,
+    post_validate,
+    p11_config,
+    pinentry_context,
 ):
     cfg = _pkcs11_setup_config_pull_certs(p11_config)
     if p11_config.algo == 'ecdsa':
         cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     _write_config(cfg)
 
-    monkeypatch.setattr(getpass, 'getpass', value=_const(p11_config.user_pin))
     result = cli_runner.invoke(
         cli_root,
         [
@@ -358,5 +377,6 @@ def test_cli_addsig_pkcs11_with_setup_and_pin_prompt(
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
         ],
+        obj=pinentry_context,
     )
     assert not result.exception, result.output

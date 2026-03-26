@@ -68,7 +68,7 @@ def tl_cache(pki_arch):
 
 
 @pytest.mark.nosmoke
-def test_validate_eutl(cli_runner, input_to_validate, tl_cache):
+def test_validate_eutl(cli_runner, input_to_validate, tl_cache, cli_context):
     _write_config(
         {
             'cache-dir': CACHE_DIR,
@@ -89,13 +89,16 @@ def test_validate_eutl(cli_runner, input_to_validate, tl_cache):
             '--eutl-all',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
 
 
 @pytest.mark.nosmoke
-def test_validate_eutl_bogus_tl(cli_runner, input_to_validate, tl_cache):
+def test_validate_eutl_bogus_tl(
+    cli_runner, input_to_validate, tl_cache, cli_context
+):
     _write_config(
         {
             'cache-dir': CACHE_DIR,
@@ -117,13 +120,16 @@ def test_validate_eutl_bogus_tl(cli_runner, input_to_validate, tl_cache):
             '--eutl-all',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'judged INVALID' in result.output
 
 
 @pytest.mark.nosmoke
-def test_validate_eutl_bogus_lotl(cli_runner, input_to_validate, tl_cache):
+def test_validate_eutl_bogus_lotl(
+    cli_runner, input_to_validate, tl_cache, cli_context
+):
     _write_config(
         {
             'cache-dir': CACHE_DIR,
@@ -145,13 +151,16 @@ def test_validate_eutl_bogus_lotl(cli_runner, input_to_validate, tl_cache):
             '--eutl-all',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'Trust list processing failed' in result.output
 
 
 @pytest.mark.nosmoke
-def test_validate_eutl_with_extra_roots_ca_is_extra(cli_runner, tl_cache):
+def test_validate_eutl_with_extra_roots_ca_is_extra(
+    cli_runner, tl_cache, cli_context
+):
     fname = 'to-validate.pdf'
     writer = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     write_input_to_validate(
@@ -190,6 +199,7 @@ def test_validate_eutl_with_extra_roots_ca_is_extra(cli_runner, tl_cache):
             '--no-revocation-check',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
@@ -197,7 +207,7 @@ def test_validate_eutl_with_extra_roots_ca_is_extra(cli_runner, tl_cache):
 
 @pytest.mark.nosmoke
 def test_validate_eutl_with_extra_roots_ca_on_tl(
-    cli_runner, input_to_validate, tl_cache
+    cli_runner, input_to_validate, tl_cache, cli_context
 ):
     with open('extra-root.cert.pem', 'wb') as tlso:
         tlso.write(
@@ -227,6 +237,7 @@ def test_validate_eutl_with_extra_roots_ca_on_tl(
             '--eutl-all',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
@@ -235,7 +246,7 @@ def test_validate_eutl_with_extra_roots_ca_on_tl(
 @pytest.mark.nosmoke
 @pytest.mark.parametrize('territories', ['be,fr', 'be', ['be', 'fr'], ['be']])
 def test_validate_config_eutl_limited_territories(
-    cli_runner, input_to_validate, tl_cache, territories
+    cli_runner, input_to_validate, tl_cache, territories, cli_context
 ):
     _write_config(
         {
@@ -257,6 +268,7 @@ def test_validate_config_eutl_limited_territories(
             '--pretty-print',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
@@ -265,7 +277,7 @@ def test_validate_config_eutl_limited_territories(
 @pytest.mark.nosmoke
 @pytest.mark.parametrize('territories', ['de,fr', 'de', ['de', 'fr'], [], ''])
 def test_validate_eutl_config_limited_territories_not_included(
-    cli_runner, input_to_validate, tl_cache, territories
+    cli_runner, input_to_validate, tl_cache, territories, cli_context
 ):
     _write_config(
         {
@@ -287,6 +299,7 @@ def test_validate_eutl_config_limited_territories_not_included(
             '--pretty-print',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'judged INVALID' in result.output
@@ -295,7 +308,7 @@ def test_validate_eutl_config_limited_territories_not_included(
 @pytest.mark.nosmoke
 @pytest.mark.parametrize('territories', ['de,fr', 'de', ['de', 'fr'], [], ''])
 def test_validate_eutl_config_limited_territories_overridden_in_cli(
-    cli_runner, input_to_validate, tl_cache, territories
+    cli_runner, input_to_validate, tl_cache, territories, cli_context
 ):
     _write_config(
         {
@@ -318,6 +331,7 @@ def test_validate_eutl_config_limited_territories_overridden_in_cli(
             '--eutl-all',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
@@ -326,7 +340,7 @@ def test_validate_eutl_config_limited_territories_overridden_in_cli(
 @pytest.mark.nosmoke
 @pytest.mark.parametrize('territories', ['be,fr', 'be'])
 def test_validate_arg_eutl_limited_territories(
-    cli_runner, input_to_validate, tl_cache, territories
+    cli_runner, input_to_validate, tl_cache, territories, cli_context
 ):
     _write_config(
         {
@@ -349,13 +363,14 @@ def test_validate_arg_eutl_limited_territories(
             territories,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'judged VALID' in result.output
 
 
 @pytest.mark.nosmoke
-def test_validate_territories_arg_empty(cli_runner):
+def test_validate_territories_arg_empty(cli_runner, cli_context):
     with open('file.pdf', 'wb') as outf:
         outf.write(MINIMAL)
     result = cli_runner.invoke(
@@ -368,13 +383,14 @@ def test_validate_territories_arg_empty(cli_runner):
             '',
             'file.pdf',
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'must be non-empty' in result.output
 
 
 @pytest.mark.nosmoke
-def test_validate_inconsistent_eutl_args(cli_runner):
+def test_validate_inconsistent_eutl_args(cli_runner, cli_context):
     with open('file.pdf', 'wb') as outf:
         outf.write(MINIMAL)
 
@@ -389,6 +405,7 @@ def test_validate_inconsistent_eutl_args(cli_runner):
             'be',
             'file.pdf',
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'mutually exclusive' in result.output
@@ -397,7 +414,7 @@ def test_validate_inconsistent_eutl_args(cli_runner):
 @pytest.mark.nosmoke
 @pytest.mark.parametrize('territories', ['de,fr', 'de'])
 def test_validate_eutl_arg_limited_territories_not_included(
-    cli_runner, input_to_validate, tl_cache, territories
+    cli_runner, input_to_validate, tl_cache, territories, cli_context
 ):
     _write_config(
         {
@@ -420,6 +437,7 @@ def test_validate_eutl_arg_limited_territories_not_included(
             territories,
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'judged INVALID' in result.output
@@ -427,7 +445,7 @@ def test_validate_eutl_arg_limited_territories_not_included(
 
 @pytest.mark.nosmoke
 def test_force_attempt_eutl_download(
-    cli_runner, input_to_validate, tl_cache, monkeypatch
+    cli_runner, input_to_validate, tl_cache, monkeypatch, cli_context
 ):
     _write_config(
         {
@@ -453,6 +471,7 @@ def test_force_attempt_eutl_download(
             '--eutl-force-redownload',
             input_to_validate,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'Trust list processing failed' in result.output
@@ -464,7 +483,13 @@ def test_force_attempt_eutl_download(
     list(itertools.product([True, False], [True, False])),
 )
 def test_validate_eutl_ades(
-    cli_runner, pki_arch, tl_cache, root_cert, overloaded_trust, pades_style
+    cli_runner,
+    pki_arch,
+    tl_cache,
+    root_cert,
+    overloaded_trust,
+    pades_style,
+    cli_context,
 ):
     fname = write_ltv_input_to_validate(
         pki_arch,
@@ -477,10 +502,6 @@ def test_validate_eutl_ades(
         'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
     }
     if overloaded_trust:
-        # Regression scenario against issue where registering
-        # a CA on the TL independently via trust=[] would cause it
-        # to be considered non-qualified (since non-listed roots
-        # are registered as unqualified)
         vc_settings['trust'] = root_cert
     _write_config(
         {
@@ -497,6 +518,7 @@ def test_validate_eutl_ades(
             '--eutl-all',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'The signer\'s certificate is qualified' in result.output
@@ -507,7 +529,7 @@ def test_validate_eutl_ades(
 
 @pytest.mark.nosmoke
 def test_validate_eutl_ades_qual_required(
-    cli_runner, pki_arch, tl_cache, root_cert
+    cli_runner, pki_arch, tl_cache, root_cert, cli_context
 ):
     fname = write_ltv_input_to_validate(
         pki_arch,
@@ -534,13 +556,16 @@ def test_validate_eutl_ades_qual_required(
             '--require-qualified',
             fname,
         ],
+        obj=cli_context,
     )
     assert 'INTACT:TRUSTED' in result.output
     assert 'UNTRUSTED' not in result.output
 
 
 @pytest.mark.nosmoke
-def test_validate_eutl_ades_not_qualified(cli_runner, pki_arch, tl_cache):
+def test_validate_eutl_ades_not_qualified(
+    cli_runner, pki_arch, tl_cache, cli_context
+):
     fname = write_ltv_input_to_validate(
         pki_arch,
         signer_cert_label=CertLabel('not-qualified'),
@@ -566,6 +591,7 @@ def test_validate_eutl_ades_not_qualified(cli_runner, pki_arch, tl_cache):
             '--eutl-all',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'The signer\'s certificate is not qualified' in result.output
@@ -574,7 +600,7 @@ def test_validate_eutl_ades_not_qualified(cli_runner, pki_arch, tl_cache):
 
 @pytest.mark.nosmoke
 def test_validate_eutl_ades_not_qualified_summary(
-    cli_runner, pki_arch, tl_cache
+    cli_runner, pki_arch, tl_cache, cli_context
 ):
     fname = write_ltv_input_to_validate(
         pki_arch,
@@ -600,13 +626,16 @@ def test_validate_eutl_ades_not_qualified_summary(
             '--eutl-all',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'NOT_QUALIFIED' in result.output
 
 
 @pytest.mark.nosmoke
-def test_validate_eutl_ades_qualified_summary(cli_runner, pki_arch, tl_cache):
+def test_validate_eutl_ades_qualified_summary(
+    cli_runner, pki_arch, tl_cache, cli_context
+):
     fname = write_ltv_input_to_validate(
         pki_arch,
         signer_cert_label=CertLabel('esig-qualified'),
@@ -631,6 +660,7 @@ def test_validate_eutl_ades_qualified_summary(cli_runner, pki_arch, tl_cache):
             '--eutl-all',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'QUALIFIED' in result.output
@@ -639,7 +669,7 @@ def test_validate_eutl_ades_qualified_summary(cli_runner, pki_arch, tl_cache):
 
 @pytest.mark.nosmoke
 def test_validate_eutl_ades_not_qualified_required(
-    cli_runner, pki_arch, tl_cache
+    cli_runner, pki_arch, tl_cache, cli_context
 ):
     fname = write_ltv_input_to_validate(
         pki_arch,
@@ -666,6 +696,7 @@ def test_validate_eutl_ades_not_qualified_required(
             '--require-qualified',
             fname,
         ],
+        obj=cli_context,
     )
     assert result.exit_code == 1
     assert 'UNTRUSTED' in result.output
@@ -673,7 +704,9 @@ def test_validate_eutl_ades_not_qualified_required(
 
 
 @pytest.mark.nosmoke
-def test_validate_eutl_ades_tsa_not_qualified(cli_runner, pki_arch, tl_cache):
+def test_validate_eutl_ades_tsa_not_qualified(
+    cli_runner, pki_arch, tl_cache, cli_context
+):
     fname = write_ltv_input_to_validate(
         pki_arch,
         signer_cert_label=CertLabel('esig-qualified'),
@@ -699,6 +732,7 @@ def test_validate_eutl_ades_tsa_not_qualified(cli_runner, pki_arch, tl_cache):
             '--eutl-all',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'The signer\'s certificate is qualified' in result.output
@@ -708,7 +742,7 @@ def test_validate_eutl_ades_tsa_not_qualified(cli_runner, pki_arch, tl_cache):
 
 @pytest.mark.nosmoke
 def test_validate_eutl_ades_point_in_time_no_revinfo(
-    cli_runner, pki_arch, tl_cache, root_cert
+    cli_runner, pki_arch, tl_cache, root_cert, cli_context
 ):
     fname = write_ltv_input_to_validate(
         pki_arch,
@@ -737,6 +771,7 @@ def test_validate_eutl_ades_point_in_time_no_revinfo(
             '--eutl-all',
             fname,
         ],
+        obj=cli_context,
     )
     assert not result.exception, result.output
     assert 'The signer\'s certificate is qualified' in result.output

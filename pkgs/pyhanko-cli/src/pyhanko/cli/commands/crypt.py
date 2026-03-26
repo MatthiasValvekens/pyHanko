@@ -1,7 +1,6 @@
-import getpass
-
 import click
 from pyhanko.cli._root import cli_root
+from pyhanko.cli.plugin_api import prompt_for_password
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import _warn_empty_passphrase, readable_file
 from pyhanko.keys import load_certs_from_pemder
@@ -37,7 +36,7 @@ def encrypt_file(infile, outfile, password, recipient):
             "Specify either a password or a list of recipients."
         )
     elif not password and not recipient:
-        password = getpass.getpass(prompt='Output file password: ')
+        password = prompt_for_password(prompt='Output file password: ')
 
     recipient_certs = None
     if recipient:
@@ -96,7 +95,7 @@ def decrypt_with_password(infile, outfile, password, force):
                     "File is not encrypted with the standard (password-based) security handler"
                 )
             if not password:
-                password = getpass.getpass(prompt='File password: ')
+                password = prompt_for_password(prompt='File password: ')
             auth_result = r.decrypt(password)
             if auth_result.status == crypt.AuthStatus.USER and not force:
                 raise click.ClickException(
@@ -147,7 +146,9 @@ def decrypt_with_pemder(infile, outfile, key, cert, passfile, force, no_pass):
         passphrase = passfile.read()
         passfile.close()
     elif not no_pass:
-        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+        passphrase = prompt_for_password(prompt='Key passphrase: ').encode(
+            'utf-8'
+        )
         if not passphrase:
             _warn_empty_passphrase()
             passphrase = None
@@ -206,7 +207,9 @@ def _decrypt_pubkey(
 @decrypt_force_flag
 def decrypt_with_pkcs12(infile, outfile, pfx, passfile, force):
     if passfile is None:
-        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+        passphrase = prompt_for_password(prompt='Key passphrase: ').encode(
+            'utf-8'
+        )
     else:
         passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()

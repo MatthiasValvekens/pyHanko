@@ -1,4 +1,3 @@
-import getpass
 from io import BytesIO
 
 import pytest
@@ -6,6 +5,7 @@ from cryptography import x509 as pyca_x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko.cli import cli_root
+from pyhanko.cli._ctx import CLIContext, UXContext
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.crypt import (
     AuthStatus,
@@ -23,7 +23,7 @@ from pyhanko_testing_commons.test_data.samples import (
     PUBKEY_TEST_DECRYPTER,
 )
 
-from .conftest import INPUT_PATH, _const
+from .conftest import INPUT_PATH, DummyPrompter
 
 
 def _test_password(fname, password, expected_status=AuthStatus.OWNER):
@@ -43,11 +43,11 @@ def test_encrypt_file(cli_runner):
     _test_password('out.pdf', 'secret')
 
 
-def test_encrypt_file_with_stdin_pass(cli_runner, monkeypatch):
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
+def test_encrypt_file_with_stdin_pass(cli_runner):
     result = cli_runner.invoke(
         cli_root,
         ['encrypt', INPUT_PATH, 'out.pdf'],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("secret"))),
     )
     assert not result.exception, result.output
 
@@ -122,10 +122,9 @@ def test_decrypt_with_owner_password(cli_runner):
     _check_first_page(output_path)
 
 
-def test_decrypt_with_owner_password_on_stdin(cli_runner, monkeypatch):
+def test_decrypt_with_owner_password_on_stdin(cli_runner):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_AES256)
-    monkeypatch.setattr(getpass, 'getpass', _const('ownersecret'))
     output_path = 'out.pdf'
     result = cli_runner.invoke(
         cli_root,
@@ -135,6 +134,7 @@ def test_decrypt_with_owner_password_on_stdin(cli_runner, monkeypatch):
             INPUT_PATH,
             output_path,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("ownersecret"))),
     )
     assert not result.exception, result.output
     _check_first_page(output_path)
@@ -314,12 +314,9 @@ def _sample_with_forbidden_encryption_change(h):
 
 
 @pytest.mark.parametrize('force', [True, False])
-def test_decrypt_with_private_key(
-    cli_runner, pubkey_decryption, monkeypatch, force
-):
+def test_decrypt_with_private_key(cli_runner, pubkey_decryption, force):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_PUBKEY_AES256)
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
 
     output_path = 'out.pdf'
     result = cli_runner.invoke(
@@ -332,16 +329,16 @@ def test_decrypt_with_private_key(
             output_path,
             *pubkey_decryption[1],
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("secret"))),
     )
     assert not result.exception, result.output
     _check_first_page(output_path)
 
 
-def test_decrypt_with_wrong_key(cli_runner, monkeypatch):
+def test_decrypt_with_wrong_key(cli_runner):
     key_file, cert_file = _pubkey_decryption_pemder(PUBKEY_TEST_DECRYPTER)
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_PUBKEY_AES256)
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
 
     output_path = 'out.pdf'
     result = cli_runner.invoke(
@@ -356,17 +353,17 @@ def test_decrypt_with_wrong_key(cli_runner, monkeypatch):
             '--cert',
             cert_file,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("secret"))),
     )
     assert result.exit_code == 1
     assert 'Failed to decrypt the file' in result.output
 
 
 def test_decrypt_with_private_key_no_force_change_of_encryption_forbidden(
-    cli_runner, pubkey_decryption, monkeypatch
+    cli_runner, pubkey_decryption
 ):
     with open(INPUT_PATH, 'wb') as inf:
         _sample_with_forbidden_encryption_change(inf)
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
 
     output_path = 'out.pdf'
     result = cli_runner.invoke(
@@ -378,17 +375,17 @@ def test_decrypt_with_private_key_no_force_change_of_encryption_forbidden(
             output_path,
             *pubkey_decryption[1],
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("secret"))),
     )
     assert result.exit_code == 1
     assert "Pass --force" in result.output
 
 
 def test_decrypt_with_private_key_force_change_of_encryption_forbidden(
-    cli_runner, pubkey_decryption, monkeypatch
+    cli_runner, pubkey_decryption
 ):
     with open(INPUT_PATH, 'wb') as inf:
         _sample_with_forbidden_encryption_change(inf)
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
 
     output_path = 'out.pdf'
     result = cli_runner.invoke(
@@ -401,6 +398,7 @@ def test_decrypt_with_private_key_force_change_of_encryption_forbidden(
             output_path,
             *pubkey_decryption[1],
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("secret"))),
     )
     assert not result.exception, result.output
     _check_first_page(output_path)
@@ -432,11 +430,10 @@ def test_decrypt_with_private_key_and_passfile(cli_runner, pubkey_decryption):
 
 
 def test_attempt_decrypt_with_private_key_unencrypted_file(
-    cli_runner, pubkey_decryption, monkeypatch
+    cli_runner, pubkey_decryption
 ):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL)
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
 
     output_path = 'out.pdf'
     result = cli_runner.invoke(
@@ -449,17 +446,17 @@ def test_attempt_decrypt_with_private_key_unencrypted_file(
             output_path,
             *pubkey_decryption[1],
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("secret"))),
     )
     assert result.exit_code == 1
     assert "File is not encrypted" in result.output
 
 
 def test_attempt_decrypt_with_private_key_sh_type_mismatch(
-    cli_runner, pubkey_decryption, monkeypatch
+    cli_runner, pubkey_decryption
 ):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_AES256)
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
 
     output_path = 'out.pdf'
     result = cli_runner.invoke(
@@ -472,16 +469,16 @@ def test_attempt_decrypt_with_private_key_sh_type_mismatch(
             output_path,
             *pubkey_decryption[1],
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("secret"))),
     )
     assert result.exit_code == 1
     assert "File was not encrypted with" in result.output
 
 
-def test_attempt_decrypt_with_non_matching_key(cli_runner, monkeypatch):
+def test_attempt_decrypt_with_non_matching_key(cli_runner):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_PUBKEY_AES256)
     p12_file = _pubkey_decryption_pkcs12(PUBKEY_TEST_DECRYPTER)
-    monkeypatch.setattr(getpass, 'getpass', _const('secret'))
 
     output_path = 'out.pdf'
     result = cli_runner.invoke(
@@ -494,6 +491,7 @@ def test_attempt_decrypt_with_non_matching_key(cli_runner, monkeypatch):
             output_path,
             p12_file,
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter("secret"))),
     )
     assert result.exit_code == 1
     assert "Failed to decrypt" in result.output
@@ -527,11 +525,10 @@ def test_decrypt_with_private_key_no_pass(cli_runner):
 
 
 def test_decrypt_with_private_key_empty_pass_on_stdin(
-    cli_runner, pubkey_decryption, monkeypatch
+    cli_runner, pubkey_decryption
 ):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_PUBKEY_AES256)
-    monkeypatch.setattr(getpass, 'getpass', _const(''))
 
     output_path = 'out.pdf'
     result = cli_runner.invoke(
@@ -544,5 +541,6 @@ def test_decrypt_with_private_key_empty_pass_on_stdin(
             output_path,
             *pubkey_decryption[1],
         ],
+        obj=CLIContext(ux=UXContext(prompter=DummyPrompter(""))),
     )
     assert result.exit_code == 1
