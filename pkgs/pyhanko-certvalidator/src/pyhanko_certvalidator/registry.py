@@ -21,6 +21,13 @@ from .path import ValidationPath
 from .util import CancelableAsyncIterator, ConsList
 
 
+def _first_or_none(iterable):
+    try:
+        return next(iter(iterable))
+    except StopIteration:
+        return None
+
+
 class CertificateCollection(abc.ABC):
     """
     Abstract base class for read-only access to a collection of certificates.
@@ -36,17 +43,40 @@ class CertificateCollection(abc.ABC):
         :return:
             None or an asn1crypto.x509.Certificate object
         """
-        candidates = self.retrieve_many_by_key_identifier(key_identifier)
-        if not candidates:
-            return None
-        else:
-            return candidates[0]
+        return _first_or_none(
+            self.retrieve_many_by_key_identifier(key_identifier)
+        )
 
     def retrieve_many_by_key_identifier(self, key_identifier: bytes):
         """
         Retrieves possibly multiple certs via the corresponding key identifiers
 
         :param key_identifier:
+            A byte string of the key identifier
+
+        :return:
+            A list of asn1crypto.x509.Certificate objects
+        """
+        raise NotImplementedError
+
+    def retrieve_by_key_hash(self, key_hash: bytes):
+        """
+        Retrieves a cert via the SHA-1 hash of its public key
+        (the standard way to compute the SubjectKeyIdentifier extension)
+
+        :param key_hash:
+            A byte string of the key identifier
+
+        :return:
+            None or an asn1crypto.x509.Certificate object
+        """
+        return _first_or_none(self.retrieve_many_by_key_hash(key_hash))
+
+    def retrieve_many_by_key_hash(self, key_hash: bytes):
+        """
+        Retrieves possibly multiple certs via the corresponding key identifiers
+
+        :param key_hash:
             A byte string of the key identifier
 
         :return:
@@ -130,6 +160,7 @@ class SimpleCertificateStore(CertificateStore):
         self.certs = {}
         self._subject_map = defaultdict(list)
         self._key_identifier_map = defaultdict(list)
+        self._key_hash_map = defaultdict(list)
 
     def register(self, cert: x509.Certificate) -> bool:
         """
@@ -144,11 +175,13 @@ class SimpleCertificateStore(CertificateStore):
         if cert.issuer_serial in self.certs:
             return False
         self.certs[cert.issuer_serial] = cert
+        key_hash = cert.public_key.sha1
         self._subject_map[cert.subject.hashable].append(cert)
+        self._key_hash_map[key_hash].append(cert)
         if cert.key_identifier:
             self._key_identifier_map[cert.key_identifier].append(cert)
         else:
-            self._key_identifier_map[cert.public_key.sha1].append(cert)
+            self._key_identifier_map[key_hash].append(cert)
         return True
 
     def __getitem__(self, item):
@@ -159,6 +192,9 @@ class SimpleCertificateStore(CertificateStore):
 
     def retrieve_many_by_key_identifier(self, key_identifier: bytes):
         return self._key_identifier_map[key_identifier]
+
+    def retrieve_many_by_key_hash(self, key_hash: bytes):
+        return self._key_hash_map[key_hash]
 
     def retrieve_by_name(self, name: x509.Name):
         return self._subject_map[name.hashable]
@@ -703,23 +739,24 @@ class LayeredCertificateStore(CertificateCollection):
     def __init__(self, stores: List[CertificateCollection]):
         self._stores = stores
 
-    def retrieve_many_by_key_identifier(self, key_identifier: bytes):
-        def _gen():
-            for store in self._stores:
-                yield from store.retrieve_many_by_key_identifier(key_identifier)
+    def _forall(self, method_name, search_term):
+        for store in self._stores:
+            yield from getattr(store, method_name)(search_term)
 
-        return list(_gen())
+    def retrieve_many_by_key_identifier(self, key_identifier: bytes):
+        return list(
+            self._forall("retrieve_many_by_key_identifier", key_identifier)
+        )
+
+    def retrieve_many_by_key_hash(self, key_hash: bytes):
+        return list(self._forall("retrieve_many_by_key_hash", key_hash))
 
     def retrieve_by_name(self, name: x509.Name):
-        def _gen():
-            for store in self._stores:
-                yield from store.retrieve_by_name(name)
-
-        return list(_gen())
+        return list(self._forall("retrieve_by_name", name))
 
     def retrieve_by_issuer_serial(self, issuer_serial):
-        for store in self._stores:
-            result = store.retrieve_by_issuer_serial(issuer_serial)
-            if result is not None:
-                return result
-        return None
+        candidates = (
+            store.retrieve_by_issuer_serial(issuer_serial)
+            for store in self._stores
+        )
+        return _first_or_none(c for c in candidates if c is not None)

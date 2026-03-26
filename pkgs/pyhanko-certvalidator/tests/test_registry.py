@@ -12,6 +12,7 @@ from pyhanko_certvalidator.authority import (
 )
 from pyhanko_certvalidator.registry import (
     CertificateRegistry,
+    LayeredCertificateStore,
     PathBuilder,
     SimpleTrustManager,
     TrustManager,
@@ -63,7 +64,7 @@ def test_build_paths_qualified_root_with_wrong_type():
 
 def _gen_issuer_candidate_cert(key_identifier, common_name, coords):
     dt = datetime(2019, 9, 10, tzinfo=timezone.utc)
-    cert_in = load_cert_object('testing-ca-ed25519', 'signer.cert.pem')
+    cert_in = load_cert_object('testing-ca-ed25519', 'interm.cert.pem')
     pubkey = cert_in.public_key
     extensions = [
         x509.Extension(
@@ -112,7 +113,7 @@ def _gen_issuer_candidate_cert(key_identifier, common_name, coords):
     return cert
 
 
-def _gen_subject_candidate_cert(aki, iss_common_name, iss_coords):
+def _gen_subject_candidate_cert(aki, iss_common_name, iss_coords, ski=None):
     iss_name = x509.Name.build({'common_name': iss_common_name})
     dt = datetime(2019, 9, 10, tzinfo=timezone.utc)
     cert_in = load_cert_object('testing-ca-ed25519', 'signer.cert.pem')
@@ -124,7 +125,14 @@ def _gen_subject_candidate_cert(aki, iss_common_name, iss_coords):
                 'critical': False,
                 'extn_value': x509.KeyUsage({'digital_signature'}),
             }
-        )
+        ),
+        x509.Extension(
+            {
+                'extn_id': 'key_identifier',
+                'critical': False,
+                'extn_value': x509.OctetString(ski or pubkey.sha1),
+            }
+        ),
     ]
     if aki or iss_coords:
         vals = {}
@@ -221,3 +229,66 @@ def test_partial_match_handling_aki_filter():
     found = list(registry.find_potential_issuers(subject, DummyTrustManager()))
     assert len(found) == 1
     assert found[0].dump() == issuer1.dump()
+
+
+def test_distinguish_ski_and_key_hash():
+    subject = _gen_subject_candidate_cert(b"foo", "issuer", ("root", 0), b"bar")
+    issuer = _gen_issuer_candidate_cert(b"foo", "issuer", ("root", 0))
+    data1 = subject.dump()
+    data2 = issuer.dump()
+
+    registry = CertificateRegistry.build([subject, issuer])
+    assert (
+        registry.retrieve_by_key_hash(subject.public_key.sha1).dump() == data1
+    )
+    assert registry.retrieve_by_key_hash(issuer.public_key.sha1).dump() == data2
+    assert registry.retrieve_by_key_identifier(b"bar").dump() == data1
+    assert registry.retrieve_by_key_identifier(subject.public_key.sha1) is None
+
+
+def test_layered_prefer_first():
+    subject1 = _gen_subject_candidate_cert(b"foo", "issuer", ("root", 0))
+    subject2 = _gen_subject_candidate_cert(b"quux", "issuer", ("root", 0))
+
+    store1 = CertificateRegistry.build([subject1])
+    store2 = CertificateRegistry.build([subject2])
+    layered = LayeredCertificateStore([store1, store2])
+
+    expected = subject1.dump()
+
+    assert subject1.issuer_serial == subject2.issuer_serial
+    assert (
+        layered.retrieve_by_key_hash(subject1.public_key.sha1).dump()
+        == expected
+    )
+    assert (
+        layered.retrieve_by_key_identifier(subject1.public_key.sha1).dump()
+        == expected
+    )
+    assert (
+        layered.retrieve_by_issuer_serial(subject1.issuer_serial).dump()
+        == expected
+    )
+
+
+def test_layered_fallthrough():
+    subject1 = _gen_subject_candidate_cert(b"foo", "issuer", ("root", 0))
+
+    store1 = CertificateRegistry.build([])
+    store2 = CertificateRegistry.build([subject1])
+    layered = LayeredCertificateStore([store1, store2])
+
+    expected = subject1.dump()
+
+    assert (
+        layered.retrieve_by_key_hash(subject1.public_key.sha1).dump()
+        == expected
+    )
+    assert (
+        layered.retrieve_by_key_identifier(subject1.public_key.sha1).dump()
+        == expected
+    )
+    assert (
+        layered.retrieve_by_issuer_serial(subject1.issuer_serial).dump()
+        == expected
+    )

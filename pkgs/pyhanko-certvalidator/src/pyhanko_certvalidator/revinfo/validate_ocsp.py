@@ -248,7 +248,16 @@ def _identify_responder_cert(
     tbs_response = response['tbs_response_data']
     if tbs_response['responder_id'].name == 'by_key':
         key_identifier = tbs_response['responder_id'].native
-        responder_cert = cert_store.retrieve_by_key_identifier(key_identifier)
+        responder_cert = cert_store.retrieve_by_key_hash(key_identifier)
+        if responder_cert is None:
+            # The OCSP spec says that we have to look up the cert by comparing
+            # the KeyHash value to the SHA-1 of the public key, which happens
+            # to be the standard way to populate the subject key identifier
+            # extension, so this lookup is usually equivalent to the above.
+            # We do another lookup by SKI just in case.
+            responder_cert = cert_store.retrieve_by_key_identifier(
+                key_identifier
+            )
     else:
         candidate_responder_certs = cert_store.retrieve_by_name(
             tbs_response['responder_id'].chosen
