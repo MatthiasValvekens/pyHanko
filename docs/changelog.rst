@@ -2499,6 +2499,18 @@ pyhanko-certvalidator
 ---------------------
 
 
+.. _release-0.30.2:
+
+0.30.2
+======
+
+*Release date:* 2026-03-27
+
+Fix `issue #648 <https://github.com/MatthiasValvekens/pyHanko/issues/648>`_,
+causing OCSP responses to fail to be processed if the responder certificate's
+subject key identifier is not generated in the standard way.
+
+
 .. _release-0.30.1:
 
 0.30.1
