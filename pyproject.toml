@@ -48,6 +48,7 @@ ignore_missing_imports = true
 
 [tool.uv]
 package = false
+exclude-newer = "P4D"
 
 [dependency-groups]
 mypy = [
