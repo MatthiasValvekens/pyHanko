@@ -60,7 +60,7 @@ class AIOHttpTimeStamper(TimeStamper):
     async def get_session(self) -> aiohttp.ClientSession:
         session = self._session
         if isinstance(session, LazySession):
-            return await session.get_session()
+            return session.get_session()
         else:
             return session
 
