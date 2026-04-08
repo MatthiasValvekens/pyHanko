@@ -1,12 +1,21 @@
 import asyncio
+import ssl
 from typing import Any, Dict, Union
 
 import aiohttp
+import certifi
 
 from ..api import DEFAULT_USER_AGENT
 from ..common_utils import queue_fetch_task
 
 __all__ = ['AIOHttpMixin', 'LazySession']
+
+
+def _default_session():
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    return aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(ssl=ssl_context)
+    )
 
 
 class LazySession:
@@ -16,7 +25,7 @@ class LazySession:
     async def get_session(self):
         session = self._session
         if session is None:
-            self._session = session = aiohttp.ClientSession()
+            self._session = session = _default_session()
         return session
 
     async def close(self):

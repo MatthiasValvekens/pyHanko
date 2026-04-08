@@ -1,8 +1,10 @@
 import asyncio
+import ssl
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Dict, Iterable, Optional, TypeVar, Union
 
+import certifi
 import click
 from asn1crypto import x509
 from pyhanko.cli.cache import get_eutl_cache_dir
@@ -114,7 +116,10 @@ async def init_trust_manager(
         if settings.eutl_force_redownload:
             tl_cache.reset()
 
-        async with aiohttp.ClientSession() as client:
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=ssl_context)
+        ) as client:
             if isinstance(settings.territories, str) and settings.territories:
                 territories = {
                     t.strip() for t in settings.territories.split(',')
