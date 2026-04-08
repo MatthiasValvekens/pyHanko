@@ -22,7 +22,7 @@ class LazySession:
     def __init__(self):
         self._session = None
 
-    async def get_session(self):
+    def get_session(self):
         session = self._session
         if session is None:
             self._session = session = _default_session()
@@ -48,10 +48,10 @@ class AIOHttpMixin:
         self.__result_events: Dict[Any, asyncio.Event] = {}
         super().__init__()
 
-    async def get_session(self) -> aiohttp.ClientSession:
+    def get_session(self) -> aiohttp.ClientSession:
         session = self._session
         if isinstance(session, LazySession):
-            return await session.get_session()
+            return session.get_session()
         else:
             return session
 

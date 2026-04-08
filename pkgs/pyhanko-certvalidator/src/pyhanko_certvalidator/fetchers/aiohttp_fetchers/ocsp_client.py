@@ -80,7 +80,7 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
             f"Fetching OCSP status for {target} from url(s) "
             f"{';'.join(ocsp_urls)}..."
         )
-        session = await self.get_session()
+        session = self.get_session()
         fetch_jobs = (
             _grab_ocsp(
                 ocsp_request,

@@ -72,7 +72,7 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
             return await _grab_crl(
                 url,
                 user_agent=self.user_agent,
-                session=await self.get_session(),
+                session=self.get_session(),
                 timeout=self.per_request_timeout,
             )
 

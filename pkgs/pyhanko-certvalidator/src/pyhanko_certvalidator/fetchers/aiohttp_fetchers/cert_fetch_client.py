@@ -54,7 +54,7 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
                     permit_pem=self.permit_pem,
                     timeout=self.per_request_timeout,
                     user_agent=self.user_agent,
-                    session=await self.get_session(),
+                    session=self.get_session(),
                     url_origin_type=url_origin_type,
                 )
             except (ValueError, aiohttp.ClientError) as e:
