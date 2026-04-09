@@ -30,14 +30,14 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
@@ -80,7 +80,7 @@ jobs:
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage-${{ strategy.job-index }}
           path: "pkgs/*/*-coverage.xml"
@@ -91,14 +91,14 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
           # TODO on the current version of setup-uv,
@@ -130,7 +130,7 @@ jobs:
           LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
           LIVE_CSC_SCAL2_HOST_URL: http://localhost:8999
       - name: Stash coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage-live-${{ strategy.job-index }}
           path: "internal/integration-tests/*-coverage.xml"
@@ -140,9 +140,9 @@ jobs:
     if: ${{ github.actor != 'dependabot[bot]' }}
     environment: testbench
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
       - name: Test library against HSM testbench
         run: |
           uv run --directory pkgs/pyhanko --no-dev --exact --group testing-base --extra pkcs11 \
@@ -160,18 +160,18 @@ jobs:
         env:
           PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet,nitrokey
       - name: Stash coverage reports
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage-hsm
           path: "pkgs/*/*-coverage.xml"
   smoke-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
       - name: Disable Python problem matchers
@@ -197,7 +197,7 @@ jobs:
             -m "not nosmoke" --cov-report=xml:python-smoke-test-cli-coverage.xml \
             tests
       - name: Stash coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage-smoke-tests
           path: "pkgs/pyhanko/*-coverage.xml"
@@ -209,14 +209,14 @@ jobs:
     needs: [pytest-coverage,live-integration-tests,smoke-tests,hsm-pkcs11-tests]
     steps:
       # checkout necessary to ensure the uploaded report contains the correct paths
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Retrieve coverage reports
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: coverage-*
           path: ./reports/
       - name: Upload all coverage reports to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./reports/
@@ -225,6 +225,6 @@ jobs:
           name: codecov-umbrella
       - name: Clean up coverage reports
         continue-on-error: true
-        uses: GeekyEggo/delete-artifact@v6
+        uses: GeekyEggo/delete-artifact@176a747ab7e287e3ff4787bf8a148716375ca118 # v6.0.0
         with:
           name: coverage-*

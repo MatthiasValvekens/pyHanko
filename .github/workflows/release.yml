@@ -29,7 +29,7 @@ jobs:
               exit 1
           fi
           cat "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Get package and version information
         id: getrelease
         run: |
@@ -77,7 +77,7 @@ jobs:
           VERSION: ${{ steps.getrelease.outputs.version }}
           PACKAGE: ${{ steps.getrelease.outputs.package }}
       - name: Upload release body
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: release-body
           path: release.md
@@ -117,33 +117,33 @@ jobs:
       discussions: write
     steps:
     - name: Download dist artifacts
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: pyhanko-release-dist
         path: dist/
     - name: Download provenance data
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: multiple.intoto.jsonl
         path: provenance/
     - name: Download release body
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: release-body
         path: release-body
     - name: Upload to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+      uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
       with:
         repository-url: ${{ vars.REPOSITORY_URL }}
     - name: Sign with sigstore
-      uses: sigstore/gh-action-sigstore-python@v3.3.0
+      uses: sigstore/gh-action-sigstore-python@04cffa1d795717b140764e8b640de88853c92acc # v3.3.0
       with:
         inputs: ./dist/*
         # useful to inspect workflow artifacts in test runs
         upload-signing-artifacts: true
     - name: Create GitHub release
       if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
       with:
         files: |
           dist/*.whl
