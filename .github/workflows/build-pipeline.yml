@@ -80,7 +80,7 @@ jobs:
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-${{ strategy.job-index }}
           path: "pkgs/*/*-coverage.xml"
@@ -130,7 +130,7 @@ jobs:
           LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
           LIVE_CSC_SCAL2_HOST_URL: http://localhost:8999
       - name: Stash coverage report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-live-${{ strategy.job-index }}
           path: "internal/integration-tests/*-coverage.xml"
@@ -160,7 +160,7 @@ jobs:
         env:
           PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet,nitrokey
       - name: Stash coverage reports
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-hsm
           path: "pkgs/*/*-coverage.xml"
@@ -197,7 +197,7 @@ jobs:
             -m "not nosmoke" --cov-report=xml:python-smoke-test-cli-coverage.xml \
             tests
       - name: Stash coverage report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-smoke-tests
           path: "pkgs/pyhanko/*-coverage.xml"

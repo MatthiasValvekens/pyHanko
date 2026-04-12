@@ -52,7 +52,7 @@ jobs:
       - name: Build release sdists
         run: uv build --all-packages --sdist
       - name: Upload dist artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pyhanko-dist
           path: dist/
@@ -64,7 +64,7 @@ jobs:
           PATTERN: ${{ inputs.wheel }}-${{ inputs.version }}*
       - name: Upload dist artifacts for release
         if: inputs.package != ''
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pyhanko-release-dist
           path: dist/${{ inputs.wheel }}-${{ inputs.version }}*
