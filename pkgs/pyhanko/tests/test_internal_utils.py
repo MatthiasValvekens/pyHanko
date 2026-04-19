@@ -682,6 +682,9 @@ DATE_PAIRS = [
     ('D:20080203010559-05', TESTDATE_EST),
     ('D:20080203010559-05\'', TESTDATE_EST),
     ('D:20080203010559-05\'00\'', TESTDATE_EST),
+    ('D:20080203010559-05\'00\'\n', TESTDATE_EST),
+    ('D:20080203010559-05\'00\'\r', TESTDATE_EST),
+    ('D:20080203010559-05\'00\'\r\n', TESTDATE_EST),
 ]
 
 
@@ -718,6 +721,21 @@ def test_date_parsing_without_prefix(date_str, expected_dt):
 )
 def test_date_parsing_errors(date_str):
     with pytest.raises(misc.PdfReadError):
+        generic.parse_pdf_date(date_str)
+
+
+@pytest.mark.parametrize(
+    'date_str',
+    [
+        generic.ByteStringObject(b'D:20080203010559Z'),
+        generic.ByteStringObject(b'D:20080203'),
+        generic.NumberObject(123),
+        None,
+    ],
+)
+def test_date_parsing_non_string_type_error(date_str):
+    with pytest.raises(misc.PdfReadError, match='text string'):
+        # noinspection PyTypeChecker
         generic.parse_pdf_date(date_str)
 
 

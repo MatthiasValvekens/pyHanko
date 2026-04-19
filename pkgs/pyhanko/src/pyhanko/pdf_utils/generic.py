@@ -2249,6 +2249,14 @@ UTC_OFFSET = re.compile(r"(\d\d)(?:'(\d\d))?'?")
 
 
 def parse_pdf_date(date_str: str, strict: bool = True) -> datetime:
+    if not isinstance(date_str, str):
+        raise PdfReadError(
+            f"Date string must be a text string, got {type(date_str).__name__}: "
+            f"{date_str!r}"
+        )
+    # Whitespace isn't allowed altogether in date strings, but some
+    # implementations include trailing whitespace anyway...
+    date_str = date_str.rstrip()
     m = (MIN_DATE_REGEX if strict else MIN_DATE_REGEX_LENIENT).match(date_str)
     if not m:
         raise PdfReadError(f"{date_str} does not appear to be a date string.")
