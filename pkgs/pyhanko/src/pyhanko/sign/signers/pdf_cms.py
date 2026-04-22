@@ -7,6 +7,7 @@ import asyncio
 import logging
 import warnings
 from asyncio import to_thread
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import IO, Callable, Iterable, List, Optional, Union
@@ -187,7 +188,7 @@ def _prepare_encap_content(
 
 async def format_attributes(
     attr_provs: List[CMSAttributeProvider],
-    other_attrs: Iterable[cms.CMSAttributes] = (),
+    other_attrs: Iterable[cms.CMSAttribute] = (),
     dry_run: bool = False,
 ) -> cms.CMSAttributes:
     """
@@ -203,13 +204,19 @@ async def format_attributes(
         A :class:`cms.CMSAttributes` value.
     """
 
-    attrs = list(other_attrs)
+    attrs_by_type = defaultdict(list)
+    for attr in other_attrs:
+        attrs_by_type[attr['type'].dotted].extend(attr['values'])
     jobs = [prov.get_attribute(dry_run=dry_run) for prov in attr_provs]
     for attr_coro in asyncio.as_completed(jobs):
         attr = await attr_coro
         if attr is not None:
-            attrs.append(attr)
+            attrs_by_type[attr['type'].dotted].extend(attr['values'])
 
+    attrs = [
+        cms.CMSAttribute({'type': cms.CMSAttributeType(k), 'values': vs})
+        for k, vs in attrs_by_type.items()
+    ]
     return cms.CMSAttributes(attrs)
 
 

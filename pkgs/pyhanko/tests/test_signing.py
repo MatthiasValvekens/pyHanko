@@ -1653,7 +1653,7 @@ def test_ed448():
     status = val_untrusted(s)
     assert status.md_algorithm == 'shake256_len'
 
-    assert len(s.external_digest) == 64
+    assert len(s.compute_digest()) == 64
 
     extn1, extn2 = r.root['/Extensions']['/ISO_']
     assert {extn1['/ExtensionLevel'], extn2['/ExtensionLevel']} == {

@@ -1,12 +1,15 @@
 import asyncio
 import logging
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from typing import (
     IO,
     Any,
     Awaitable,
+    Callable,
     Dict,
+    Generator,
     Generic,
     Iterable,
     List,
@@ -30,6 +33,7 @@ from pyhanko.sign.general import (
     check_ess_certid,
     extract_certificate_info,
     extract_signer_info,
+    find_cms_attribute_iter,
     find_unique_cms_attribute,
 )
 from pyhanko_certvalidator import (
@@ -85,10 +89,9 @@ __all__ = [
     'cms_basic_validation',
     'collect_signer_attr_status',
     'collect_timing_info',
-    'compute_signature_tst_digest',
     'extract_certs_for_validation',
     'extract_self_reported_ts',
-    'extract_tst_data',
+    'extract_single_tst_datum',
     'get_signing_cert_attr',
     'validate_algorithm_protection',
     'validate_sig_integrity',
@@ -757,7 +760,35 @@ def extract_self_reported_ts(signer_info: cms.SignerInfo) -> Optional[datetime]:
         return None
 
 
-def extract_tst_data(
+def extract_tst_data_iter(
+    signer_info: cms.SignerInfo, *, signed: bool
+) -> Generator[cms.SignedData, None, None]:
+    """
+    Extract signed data associated with one or more timestamp tokens.
+
+    Internal API.
+
+    :param signer_info:
+        A ``SignerInfo`` value.
+    :param signed:
+        If ``True``, look for content timestamps (among the signed
+        attributes), else look for signature timestamps (among the unsigned
+        attributes).
+    :return:
+        The ``SignedData`` values found.
+    """
+    if signed:
+        sa = signer_info['signed_attrs']
+        gen = find_cms_attribute_iter(sa, 'content_time_stamp')
+    else:
+        ua = signer_info['unsigned_attrs']
+        gen = find_cms_attribute_iter(ua, 'signature_time_stamp_token')
+
+    for tst in gen:
+        yield tst['content']
+
+
+def extract_single_tst_datum(
     signer_info: cms.SignerInfo, signed: bool = False
 ) -> Optional[cms.SignedData]:
     """
@@ -774,56 +805,46 @@ def extract_tst_data(
     :return:
         The ``SignedData`` value found, or ``None``.
     """
+
     try:
-        if signed:
-            sa = signer_info['signed_attrs']
-            tst = find_unique_cms_attribute(sa, 'content_time_stamp')
-        else:
-            ua = signer_info['unsigned_attrs']
-            tst = find_unique_cms_attribute(ua, 'signature_time_stamp_token')
-        tst_signed_data = tst['content']
-        return tst_signed_data
-    except (NonexistentAttributeError, MultivaluedAttributeError):
+        return next(extract_tst_data_iter(signer_info, signed=signed))
+    except StopIteration:
         return None
 
 
-def compute_signature_tst_digest(
-    signer_info: cms.SignerInfo,
-) -> Optional[bytes]:
+def compute_tst_digest(
+    tst_signed_data: cms.SignedData,
+    payload: bytes,
+) -> bytes:
     """
-    Compute the digest of the signature according to the message imprint
-    algorithm information in a signature timestamp token.
+    Compute the digest of a payload (typically another signature)
+    according to the message imprint algorithm information in a timestamp token.
 
     Internal API.
 
-    :param signer_info:
-        A ``SignerInfo`` value.
+    :param tst_signed_data:
+        A :class:`cms.SignedData` object containing encapsulated timestamp
+        information.
+    :param payload:
+        Bytes over which to compute the digest.
     :return:
-        The computed digest, or ``None`` if there is no signature timestamp.
+        The computed digest.
     """
 
-    tst_data = extract_tst_data(signer_info)
-    if tst_data is None:
-        return None
-
-    eci = tst_data['encap_content_info']
+    eci = tst_signed_data['encap_content_info']
     mi = eci['content'].parsed['message_imprint']
     tst_md_algorithm = mi['hash_algorithm']['algorithm'].native
 
-    signature_bytes = signer_info['signature'].native
     tst_md_spec = get_pyca_cryptography_hash(tst_md_algorithm)
     md = hashes.Hash(tst_md_spec)
-    md.update(signature_bytes)
+    md.update(payload)
     return md.finalize()
-
-
-# TODO support signerInfo with multivalued timestamp attributes
 
 
 async def collect_timing_info(
     signer_info: cms.SignerInfo,
     ts_validation_context: Optional[ValidationContext],
-    raw_digest: bytes,
+    raw_digest: Union[bytes, Callable[[str], bytes]],
     algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
 ):
     """
@@ -857,9 +878,11 @@ async def collect_timing_info(
     if signer_reported_dt is not None:
         status_kwargs['signer_reported_dt'] = signer_reported_dt
 
-    tst_signed_data = extract_tst_data(signer_info, signed=False)
+    tst_signed_data = extract_single_tst_datum(signer_info, signed=False)
     if tst_signed_data is not None:
-        tst_signature_digest = compute_signature_tst_digest(signer_info)
+        tst_signature_digest = compute_tst_digest(
+            tst_signed_data, payload=signer_info['signature'].native
+        )
         assert tst_signature_digest is not None
         tst_validity_kwargs = await validate_tst_signed_data(
             tst_signed_data,
@@ -870,7 +893,7 @@ async def collect_timing_info(
         tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
         status_kwargs['timestamp_validity'] = tst_validity
 
-    content_tst_signed_data = extract_tst_data(signer_info, signed=True)
+    content_tst_signed_data = extract_single_tst_datum(signer_info, signed=True)
     if content_tst_signed_data is not None:
         content_tst_validity_kwargs = await validate_tst_signed_data(
             content_tst_signed_data,
@@ -888,7 +911,7 @@ async def collect_timing_info(
 async def validate_tst_signed_data(
     tst_signed_data: cms.SignedData,
     validation_context: Optional[ValidationContext],
-    expected_tst_imprint: bytes,
+    expected_tst_imprint: Union[bytes, Callable[[str], bytes]],
     algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
 ):
     """
@@ -900,8 +923,14 @@ async def validate_tst_signed_data(
     :param validation_context:
         The validation context to validate against.
     :param expected_tst_imprint:
-        The expected message imprint value that should be contained in
+        A callable that takes a hash algorithm names and returns a digest value.
+        detailing the expected message imprint value that should be contained in
         the encapsulated ``TSTInfo``.
+
+        If this parameter is specified as a ``bytes`` value directly,
+        the digest algorithm will not be checked.
+        This usage is deprecated, but still present in some code paths that
+        enforce the digest algorithm consistency through another mechanism.
     :param algorithm_policy:
         The algorithm usage policy for the signature validation.
 
@@ -938,10 +967,24 @@ async def validate_tst_signed_data(
     # compare the expected TST digest against the message imprint
     # inside the signed data
     tst_imprint = tst_info['message_imprint']['hashed_message'].native
-    if expected_tst_imprint != tst_imprint:
+    if isinstance(expected_tst_imprint, bytes):
+        warnings.warn(
+            "Passing a 'bytes' object as the expected TST imprint is "
+            "deprecated, since it obscures the check that the digest "
+            "algorithm is in fact the expected one. ",
+            DeprecationWarning,
+        )
+        expected_tst_imprint_value = expected_tst_imprint
+    else:
+        tst_algo = tst_info['message_imprint']['hash_algorithm'][
+            'algorithm'
+        ].native
+        expected_tst_imprint_value = expected_tst_imprint(tst_algo)
+
+    if expected_tst_imprint_value != tst_imprint:
         logger.warning(
             f"Timestamp token imprint is {tst_imprint.hex()}, but expected "
-            f"{expected_tst_imprint.hex()}."
+            f"{expected_tst_imprint_value.hex()}."
         )
         status_kwargs['intact'] = False
     return status_kwargs
@@ -1140,21 +1183,34 @@ async def async_validate_detached_cms(
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
     signer_info = extract_signer_info(signed_data)
-    digest_algorithm = signer_info['digest_algorithm']['algorithm'].native
-    h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
-    if isinstance(input_data, bytes):
-        h.update(input_data)
-    elif isinstance(input_data, (cms.ContentInfo, cms.EncapsulatedContentInfo)):
-        h.update(bytes(input_data['content']))
-    else:
-        temp_buf = bytearray(chunk_size)
-        misc.chunked_digest(temp_buf, input_data, h, max_read=max_read)
-    digest_bytes = h.finalize()
+    digest_by_algo: Dict[str, bytes] = {}
+
+    def _content_digest(digest_algorithm: str) -> bytes:
+        try:
+            return digest_by_algo[digest_algorithm]
+        except KeyError:
+            pass
+        h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
+        if isinstance(input_data, bytes):
+            h.update(input_data)
+        elif isinstance(
+            input_data, (cms.ContentInfo, cms.EncapsulatedContentInfo)
+        ):
+            h.update(bytes(input_data['content']))
+        else:
+            temp_buf = bytearray(chunk_size)
+            misc.chunked_digest(temp_buf, input_data, h, max_read=max_read)
+        result = h.finalize()
+        digest_by_algo[digest_algorithm] = result
+        return result
+
+    signature_digest_algo = signer_info['digest_algorithm']['algorithm'].native
+    digest_bytes = _content_digest(signature_digest_algo)
 
     status_kwargs = await collect_timing_info(
         signer_info,
         ts_validation_context=ts_validation_context,
-        raw_digest=digest_bytes,
+        raw_digest=_content_digest,
         algorithm_policy=algorithm_policy,
     )
     key_usage_settings = StandardCMSSignatureStatus.default_usage_constraints(

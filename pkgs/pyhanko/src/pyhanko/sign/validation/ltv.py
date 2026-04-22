@@ -554,7 +554,7 @@ async def async_validate_pdf_ltv_signature(
     )
     status_kwargs = await cms_basic_validation(
         embedded_sig.signed_data,
-        raw_digest=embedded_sig.external_digest,
+        raw_digest=embedded_sig.compute_digest(),
         validation_context=stored_vc,
         status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings,

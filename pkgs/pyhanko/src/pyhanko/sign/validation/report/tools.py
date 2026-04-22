@@ -5,9 +5,9 @@ ETSI TS 119 102-2 reporting functionality.
     This feature is incubating and subject to API changes.
 """
 
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Iterable, Optional, cast
 
-from asn1crypto import tsp
+from asn1crypto import cms, tsp
 from cryptography.hazmat.primitives import hashes
 from pyhanko.generated.etsi import ts_11910202, xades
 from pyhanko.generated.w3c import xmldsig_core
@@ -15,7 +15,7 @@ from pyhanko.sign.ades import cades_asn1
 from pyhanko.sign.ades.report import AdESStatus
 from pyhanko.sign.general import (
     NonexistentAttributeError,
-    find_cms_attribute,
+    find_cms_attribute_iter,
     find_unique_cms_attribute,
 )
 from pyhanko.sign.validation.ades import (
@@ -57,6 +57,21 @@ def _digest_algo_uri(algo: str):
         raise NotImplementedError(
             f"No XML signature syntax available for digest algo '{algo}'"
         )
+
+
+def _sig_policy_oids(signed_attrs: Iterable[cms.CMSAttribute]):
+
+    policy_identifiers = find_cms_attribute_iter(
+        signed_attrs, 'signature_policy_identifier'
+    )
+
+    sig_policy_ident: cades_asn1.SignaturePolicyIdentifier
+    for sig_policy_ident in policy_identifiers:
+        actual_policy_ident = sig_policy_ident.chosen
+        # we don't support implicit policies (or at least not now)
+        if isinstance(actual_policy_ident, cades_asn1.SignaturePolicyId):
+            oid = actual_policy_ident['sig_policy_id']
+            yield oid
 
 
 def _summarise_attrs(
@@ -130,20 +145,12 @@ def _summarise_attrs(
         )
     # individual_data_objects_time_stamp (SATimestampType) -> not applicable
     # sig_policy_identifier (SASigPolicyIdentifierType)
-    try:
-        sig_policy_ident: cades_asn1.SignaturePolicyIdentifier = (
-            find_cms_attribute(signed_attrs, 'signature_policy_identifier')[0]
+    kwargs['sig_policy_identifier'] = tuple(
+        ts_11910202.SASigPolicyIdentifierType(
+            signed=True, sig_policy_id=f'urn:oid:{oid.dotted}'
         )
-        actual_policy_ident = sig_policy_ident.chosen
-        # we don't support implicit policies (or at least not now)
-        if isinstance(actual_policy_ident, cades_asn1.SignaturePolicyId):
-            oid = actual_policy_ident['sig_policy_id']
-            ident_xml = ts_11910202.SASigPolicyIdentifierType(
-                signed=True, sig_policy_id=f'urn:oid:{oid.dotted}'
-            )
-            kwargs['sig_policy_identifier'] = ident_xml
-    except NonexistentAttributeError:
-        pass
+        for oid in _sig_policy_oids(signed_attrs)
+    )
 
     # signature_production_place (SASignatureProductionPlaceType)
     if '/Location' in embedded_sig.sig_object:
@@ -151,7 +158,7 @@ def _summarise_attrs(
             ts_11910202.SASignatureProductionPlaceType(
                 signed=True,
                 address_string=(str(embedded_sig.sig_object['/Location']),),
-            )
+            ),
         )
     # signer_role (SASignerRoleType)
     if api_status.cades_signer_attrs:
@@ -180,19 +187,24 @@ def _summarise_attrs(
                     endorsement_type=role_type, role=stringified
                 )
             )
-        kwargs['signer_role'] = ts_11910202.SASignerRoleType(
-            signed=True, role_details=tuple(roles)
+        kwargs['signer_role'] = (
+            ts_11910202.SASignerRoleType(
+                signed=True, role_details=tuple(roles)
+            ),
         )
 
     # counter_signature (SACounterSignatureType)
     #  -> not reasonably implementable in PDF signatures
     #     and banned in PAdES, skip
     # signature_time_stamp (SATimestampType)
+    # TODO: we could report on multiple timestamps here?
     if api_status.timestamp_validity:
-        kwargs['signature_time_stamp'] = ts_11910202.SATimestampType(
-            signed=False,
-            time_stamp_value=XmlDateTime.from_datetime(
-                api_status.timestamp_validity.timestamp
+        kwargs['signature_time_stamp'] = (
+            ts_11910202.SATimestampType(
+                signed=False,
+                time_stamp_value=XmlDateTime.from_datetime(
+                    api_status.timestamp_validity.timestamp
+                ),
             ),
         )
     # complete_certificate_refs (SACertIDListType) -> not in PAdES
@@ -212,8 +224,10 @@ def _summarise_attrs(
     # message_digest (SAMessageDigestType)
     # for invalid sigs, this is worth reporting as specified
     message_digest = find_unique_cms_attribute(signed_attrs, 'message_digest')
-    kwargs['message_digest'] = ts_11910202.SAMessageDigestType(
-        signed=True, digest=message_digest.native
+    kwargs['message_digest'] = (
+        ts_11910202.SAMessageDigestType(
+            signed=True, digest=message_digest.native
+        ),
     )
     # dss (SADSSType)
     # TODO (emitting validation objects)
@@ -223,33 +237,48 @@ def _summarise_attrs(
     # TODO (emitting validation objects)
     # reason (SAReasonType)
     if '/Reason' in embedded_sig.sig_object:
-        kwargs['reason'] = ts_11910202.SAReasonType(
-            signed=True, reason_element=str(embedded_sig.sig_object['/Reason'])
+        kwargs['reason'] = (
+            ts_11910202.SAReasonType(
+                signed=True,
+                reason_element=str(embedded_sig.sig_object['/Reason']),
+            ),
         )
     # name (SANameType)
     if '/Name' in embedded_sig.sig_object:
-        kwargs['name'] = ts_11910202.SANameType(
-            signed=True,
-            name_element=str(embedded_sig.sig_object['/Name']),
+        kwargs['name'] = (
+            ts_11910202.SANameType(
+                signed=True,
+                name_element=str(embedded_sig.sig_object['/Name']),
+            ),
         )
     # contact_info (SAContactInfoType)
     if '/ContactInfo' in embedded_sig.sig_object:
-        kwargs['contact_info'] = ts_11910202.SAContactInfoType(
-            signed=True,
-            contact_info_element=str(embedded_sig.sig_object['/ContactInfo']),
+        kwargs['contact_info'] = (
+            ts_11910202.SAContactInfoType(
+                signed=True,
+                contact_info_element=str(
+                    embedded_sig.sig_object['/ContactInfo']
+                ),
+            ),
         )
     # sub_filter (SASubFilterType)
-    kwargs['sub_filter'] = ts_11910202.SASubFilterType(
-        signed=True,
-        sub_filter_element=str(embedded_sig.sig_object['/SubFilter'])[1:],
+    kwargs['sub_filter'] = (
+        ts_11910202.SASubFilterType(
+            signed=True,
+            sub_filter_element=str(embedded_sig.sig_object['/SubFilter'])[1:],
+        ),
     )
     # byte_range: (int, int, int, int)
-    kwargs['byte_range'] = tuple(
-        int(x) for x in embedded_sig.sig_object['/ByteRange']
+    kwargs['byte_range'] = (
+        tuple(int(x) for x in embedded_sig.sig_object['/ByteRange']),
     )
     # filter (SAFilterType)
-    kwargs['filter'] = ts_11910202.SAFilterType(
-        filter=str(embedded_sig.sig_object['/Filter'])[1:],
+    kwargs['filter'] = (
+        (
+            ts_11910202.SAFilterType(
+                filter=str(embedded_sig.sig_object['/Filter'])[1:],
+            ),
+        ),
     )
     return ts_11910202.SignatureAttributesType(**kwargs)
 

@@ -12,6 +12,7 @@ __all__ = [
     'NoDSSFoundError',
     'SigSeedValueValidationError',
     'SignatureValidationError',
+    'TSTDigestNotAvailableError',
     'ValidationInfoReadingError',
 ]
 
@@ -78,4 +79,13 @@ class SigSeedValueValidationError(SignatureValidationError):
 
     # TODO perhaps we can encode some more metadata here, such as the
     #  seed value that tripped the failure.
+    pass
+
+
+class TSTDigestNotAvailableError(SignatureValidationError):
+    """
+    Error when a TST message imprint uses a digest algorithm for which
+    a digest of the subject data is not available.
+    """
+
     pass

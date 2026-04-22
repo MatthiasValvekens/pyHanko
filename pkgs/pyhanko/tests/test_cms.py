@@ -31,11 +31,14 @@ from pyhanko.sign.attributes import (
 )
 from pyhanko.sign.general import (
     CMSExtractionError,
-    CMSStructuralError,
+    MultivaluedAttributeError,
+    NonexistentAttributeError,
     SigningError,
     as_signing_certificate,
     as_signing_certificate_v2,
     find_cms_attribute,
+    find_cms_attribute_iter,
+    find_unique_cms_attribute,
     simple_cms_attribute,
 )
 from pyhanko.sign.signers import cms_embedder
@@ -446,7 +449,9 @@ async def test_detached_cms_with_duplicated_attr():
         timestamper=DUMMY_TS,
     )
     signature = cms.ContentInfo.load(signature.dump())
-    with pytest.raises(SignatureValidationError, match='structural.*duplicate'):
+    with pytest.raises(
+        SignatureValidationError, match='multiple message digest attributes'
+    ):
         await async_validate_cms_signature(
             signature['content'],
         )
@@ -720,7 +725,7 @@ def test_duplicate_content_type_oid():
     emb = r.embedded_signatures[0]
     digest = emb.compute_digest()
 
-    with pytest.raises(CMSStructuralError):
+    with pytest.raises(SignatureValidationError):
         validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
 
 
@@ -846,7 +851,7 @@ async def _generate_sig_with_mismatching_digest_algos():
     bad_algo = SignedDigestAlgorithm({'algorithm': 'md5_rsa'})
     si_obj['signature_algorithm'] = signer._signature_mechanism = bad_algo
     attrs = si_obj['signed_attrs']
-    cms_prot = find_cms_attribute(attrs, 'cms_algorithm_protection')[0]
+    cms_prot = find_unique_cms_attribute(attrs, 'cms_algorithm_protection')
     cms_prot['signature_algorithm'] = bad_algo
     # recompute the signature
     si_obj['signature'] = signer.sign_raw(attrs.untag().dump(), 'md5')
@@ -2214,7 +2219,7 @@ def test_ed448_no_length():
         status = val_untrusted(s)
     assert status.md_algorithm == 'shake256'
 
-    assert len(s.external_digest) == 64
+    assert len(s.compute_digest()) == 64
 
 
 @freeze_time('2020-11-01')
@@ -2229,3 +2234,241 @@ def test_ed448_invalid_hash_algo_validation():
         result.trust_problem_indic
         == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
     )
+
+
+def _create_test_attrs():
+
+    return cms.CMSAttributes(
+        [
+            simple_cms_attribute('content_type', cms.ContentType('data')),
+            simple_cms_attribute(
+                'message_digest', core.OctetString(b'test_digest')
+            ),
+            simple_cms_attribute(
+                'signing_certificate_v2',
+                as_signing_certificate_v2(FROM_CA.signing_cert),
+            ),
+        ]
+    )
+
+
+def test_find_cms_attribute_iter_single_value():
+    """Test find_cms_attribute_iter returns values for existing attribute."""
+    attrs = _create_test_attrs()
+    values = list(find_cms_attribute_iter(attrs, 'content_type'))
+
+    assert len(values) == 1
+    assert isinstance(values[0], cms.ContentType)
+    assert values[0].native == 'data'
+
+
+def test_find_cms_attribute_iter_multiple_values():
+    attr_val1 = core.OctetString(b'test1')
+    attr_val2 = core.OctetString(b'test2')
+    attrs = cms.CMSAttributes(
+        [
+            cms.CMSAttribute(
+                {
+                    'type': cms.CMSAttributeType('message_digest'),
+                    'values': (attr_val1, attr_val2),
+                }
+            )
+        ]
+    )
+
+    values = list(find_cms_attribute_iter(attrs, 'message_digest'))
+    assert len(values) == 2
+    assert values[0].native == b'test1'
+    assert values[1].native == b'test2'
+
+
+def test_find_cms_attribute_iter_nonexistent_attribute():
+    attrs = _create_test_attrs()
+    values = list(find_cms_attribute_iter(attrs, 'nonexistent_attribute'))
+
+    assert values == []
+
+
+def test_find_cms_attribute_iter_none_attrs():
+    values = list(find_cms_attribute_iter(None, 'content_type'))
+    assert values == []
+
+
+def test_find_cms_attribute_iter_empty_attrs():
+    attrs = cms.CMSAttributes([])
+    values = list(find_cms_attribute_iter(attrs, 'content_type'))
+    assert values == []
+
+
+def test_find_cms_attribute_deprecated_success():
+    attrs = _create_test_attrs()
+
+    with pytest.deprecated_call():
+        values = find_cms_attribute(attrs, 'content_type')
+
+    assert len(values) == 1
+    assert isinstance(values[0], cms.ContentType)
+    assert values[0].native == 'data'
+
+
+def test_find_cms_attribute_deprecated_raises_on_missing():
+    attrs = _create_test_attrs()
+
+    with pytest.deprecated_call():
+        with pytest.raises(
+            NonexistentAttributeError, match='nonexistent_attribute'
+        ):
+            find_cms_attribute(attrs, 'nonexistent_attribute')
+
+
+def test_find_cms_attribute_deprecated_none_attrs():
+    with pytest.deprecated_call():
+        with pytest.raises(NonexistentAttributeError):
+            find_cms_attribute(None, 'content_type')
+
+
+def test_find_cms_attribute_deprecated_with_multiple_values():
+    attr_val1 = core.OctetString(b'test1')
+    attr_val2 = core.OctetString(b'test2')
+    attrs = cms.CMSAttributes(
+        [
+            cms.CMSAttribute(
+                {
+                    'type': cms.CMSAttributeType('message_digest'),
+                    'values': (attr_val1, attr_val2),
+                }
+            )
+        ]
+    )
+
+    with pytest.deprecated_call():
+        values = find_cms_attribute(attrs, 'message_digest')
+
+    assert len(values) == 2
+    assert values[0].native == b'test1'
+    assert values[1].native == b'test2'
+
+
+def test_find_unique_cms_attribute_success():
+    attrs = _create_test_attrs()
+    value = find_unique_cms_attribute(attrs, 'content_type')
+
+    assert isinstance(value, cms.ContentType)
+    assert value.native == 'data'
+
+
+def test_find_unique_cms_attribute_raises_on_missing():
+    attrs = _create_test_attrs()
+
+    with pytest.raises(
+        NonexistentAttributeError, match='nonexistent_attribute'
+    ):
+        find_unique_cms_attribute(attrs, 'nonexistent_attribute')
+
+
+def test_find_unique_cms_attribute_raises_on_multiple():
+    attr_val1 = core.OctetString(b'test1')
+    attr_val2 = core.OctetString(b'test2')
+    attrs = cms.CMSAttributes(
+        [
+            cms.CMSAttribute(
+                {
+                    'type': cms.CMSAttributeType('message_digest'),
+                    'values': (attr_val1, attr_val2),
+                }
+            )
+        ]
+    )
+
+    with pytest.raises(
+        MultivaluedAttributeError,
+        match='Expected single-valued message_digest attribute, but found multiple',
+    ):
+        find_unique_cms_attribute(attrs, 'message_digest')
+
+
+def test_find_unique_cms_attribute_none_attrs():
+    with pytest.raises(NonexistentAttributeError):
+        find_unique_cms_attribute(None, 'content_type')
+
+
+def test_find_unique_cms_attribute_empty_attrs():
+    attrs = cms.CMSAttributes([])
+
+    with pytest.raises(NonexistentAttributeError):
+        find_unique_cms_attribute(attrs, 'content_type')
+
+
+def test_find_unique_cms_attribute_with_multiple_attributes_single_value():
+    from pyhanko.sign.general import simple_cms_attribute
+
+    attrs = cms.CMSAttributes(
+        [
+            simple_cms_attribute('content_type', cms.ContentType('data')),
+            simple_cms_attribute(
+                'message_digest', core.OctetString(b'test_digest')
+            ),
+            simple_cms_attribute(
+                'signing_certificate_v2',
+                as_signing_certificate_v2(FROM_CA.signing_cert),
+            ),
+        ]
+    )
+
+    # Should find the unique message_digest value
+    value = find_unique_cms_attribute(attrs, 'message_digest')
+    assert isinstance(value, core.OctetString)
+    assert value.native == b'test_digest'
+
+
+def test_find_cms_attribute_iter_preserves_order():
+    """Test find_cms_attribute_iter returns values in the order they appear."""
+    values_list = [
+        core.OctetString(b'first'),
+        core.OctetString(b'second'),
+        core.OctetString(b'third'),
+    ]
+    attrs = cms.CMSAttributes(
+        [
+            cms.CMSAttribute(
+                {
+                    'type': cms.CMSAttributeType('message_digest'),
+                    'values': tuple(values_list),
+                }
+            )
+        ]
+    )
+
+    values = list(find_cms_attribute_iter(attrs, 'message_digest'))
+    assert len(values) == 3
+    assert values[0].native == b'first'
+    assert values[1].native == b'second'
+    assert values[2].native == b'third'
+
+
+def test_find_cms_attribute_iter_multiple_attributes_same_type():
+    """Test find_cms_attribute_iter when multiple attributes have the same type."""
+
+    # Create two separate attributes with the same type (each with one value)
+    attrs = cms.CMSAttributes(
+        [
+            cms.CMSAttribute(
+                {
+                    'type': cms.CMSAttributeType('message_digest'),
+                    'values': (core.OctetString(b'digest1'),),
+                }
+            ),
+            cms.CMSAttribute(
+                {
+                    'type': cms.CMSAttributeType('message_digest'),
+                    'values': (core.OctetString(b'digest2'),),
+                }
+            ),
+        ]
+    )
+
+    # Should return both values from both attributes
+    values = list(find_cms_attribute_iter(attrs, 'message_digest'))
+    assert len(values) == 2
+    assert values[0].native == b'digest1'
+    assert values[1].native == b'digest2'

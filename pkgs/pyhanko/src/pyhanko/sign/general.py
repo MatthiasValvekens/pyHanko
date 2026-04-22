@@ -8,8 +8,9 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 
 import hashlib
 import logging
+import warnings
 from dataclasses import dataclass
-from typing import IO, Iterable, List, Tuple, Union
+from typing import IO, Iterable, List, Optional, Tuple, Union
 
 from asn1crypto import algos, cms, tsp, x509
 from asn1crypto.algos import SignedDigestAlgorithm
@@ -43,6 +44,7 @@ __all__ = [
     'extract_certificate_info',
     'extract_signer_info',
     'find_cms_attribute',
+    'find_cms_attribute_iter',
     'find_unique_cms_attribute',
     'get_cms_hash_algo_for_mechanism',
     # reexported for compatibility
@@ -104,14 +106,11 @@ class MultivaluedAttributeError(ValueError):
     pass
 
 
-def find_cms_attribute(attrs, name):
+def find_cms_attribute(attrs: Optional[Iterable[cms.CMSAttribute]], name: str):
     """
-    Find and return CMS attribute values of a given type.
+    .. deprecated:: 0.35.0
 
-    .. note::
-        This function will also check for duplicates, but not in the sense
-        of multivalued attributes. In other words: multivalued attributes
-        are allowed; listing the same attribute OID more than once is not.
+    Find and return CMS attribute values of a given type.
 
     :param attrs:
         The :class:`.cms.CMSAttributes` object.
@@ -122,27 +121,48 @@ def find_cms_attribute(attrs, name):
     :raise NonexistentAttributeError:
         Raised when no such type entry could be found in the
         :class:`.cms.CMSAttributes` object.
-    :raise CMSStructuralError:
-        Raised if the given OID occurs more than once.
     """
 
-    found_values = None
-    if attrs:
-        for attr in attrs:
-            if attr['type'].native == name:
-                if found_values is not None:
-                    raise CMSStructuralError(
-                        f"Attribute {name!r} was duplicated"
-                    )
-                found_values = attr['values']
+    warnings.warn(
+        "Deprecated in favour of find_cms_attribute_iter",
+        DeprecationWarning,
+    )
 
-    if found_values is not None:
+    found_values = list(find_cms_attribute_iter(attrs, name))
+    if found_values:
         return found_values
     else:
         raise NonexistentAttributeError(f'Unable to locate attribute {name}.')
 
 
-def find_unique_cms_attribute(attrs, name):
+def find_cms_attribute_iter(
+    attrs: Optional[Iterable[cms.CMSAttribute]], name: str
+):
+    """
+    .. versionadded:: 0.35.0
+
+    Find and return CMS attribute values of a given type in a generator.
+
+    .. note::
+        This function will return an empty generator rather than throwing
+        :class:`.NonexistentAttributeError`.
+
+    :param attrs:
+        The :class:`.cms.CMSAttributes` object.
+    :param name:
+        The attribute type as a string (as defined in ``asn1crypto``).
+    :return:
+        The values associated with the requested type, if present.
+    """
+    if attrs:
+        for attr in attrs:
+            if attr['type'].native == name:
+                yield from attr['values']
+
+
+def find_unique_cms_attribute(
+    attrs: Optional[Iterable[cms.CMSAttribute]], name: str
+):
     """
     Find and return a unique CMS attribute value of a given type.
 
@@ -158,13 +178,20 @@ def find_unique_cms_attribute(attrs, name):
     :raise MultivaluedAttributeError:
         Raised when the attribute's cardinality is not 1.
     """
-    values = find_cms_attribute(attrs, name)
-    if len(values) != 1:
+
+    gen = find_cms_attribute_iter(attrs, name)
+    try:
+        result = next(gen)
+    except StopIteration:
+        raise NonexistentAttributeError(f'Unable to locate attribute {name}.')
+
+    try:
+        next(gen)
         raise MultivaluedAttributeError(
-            f"Expected single-valued {name} attribute, but found "
-            f"{len(values)} values"
+            f"Expected single-valued {name} attribute, but found multiple"
         )
-    return values[0]
+    except StopIteration:
+        return result
 
 
 def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:

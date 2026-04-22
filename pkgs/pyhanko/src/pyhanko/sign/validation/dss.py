@@ -14,6 +14,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import get_and_apply
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
+from pyhanko.sign.validation.generic_cms import extract_tst_data_iter
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
 
@@ -609,9 +610,12 @@ async def collect_validation_info(
         paths.append(path)
 
     await _validate_signed_data(embedded_sig.signed_data)
-    if not skip_timestamp and embedded_sig.attached_timestamp_data is not None:
-        await _validate_signed_data(embedded_sig.attached_timestamp_data)
-
+    if not skip_timestamp:
+        for signed in (False, True):
+            for tst_signed_data in extract_tst_data_iter(
+                embedded_sig.signer_info, signed=signed
+            ):
+                await _validate_signed_data(tst_signed_data)
     return paths
 
 

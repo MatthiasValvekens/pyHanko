@@ -530,7 +530,7 @@ def test_cms_algorithm_protection_attr_multival():
     return Handler
 
 
-@pdfmac_with_handler("duplicated")
+@pdfmac_with_handler("Multiple CMS algorithm protection attributes")
 def test_cms_algorithm_protection_attr_duplicated():
     class Handler(pdfmac.PdfMacTokenHandler):
         def _format_auth_attrs(

@@ -32,7 +32,7 @@ from pyhanko.sign.attributes import (
     TSTProvider,
 )
 from pyhanko.sign.diff_analysis import ModificationLevel
-from pyhanko.sign.general import SigningError, find_cms_attribute
+from pyhanko.sign.general import SigningError, find_unique_cms_attribute
 from pyhanko.sign.signers.pdf_signer import (
     DSSContentSettings,
     PdfTBSDocument,
@@ -1094,9 +1094,9 @@ def test_sign_with_commitment():
     assert emb.field_name == 'Sig1'
     val_trusted(emb)
 
-    indic = find_cms_attribute(
+    indic = find_unique_cms_attribute(
         emb.signer_info['signed_attrs'], 'commitment_type'
-    )[0]
+    )
     assert indic['commitment_type_id'].native == 'proof_of_origin'
 
 
@@ -1119,9 +1119,9 @@ def test_sign_with_content_sig():
     assert status.content_timestamp_validity.valid
     assert status.content_timestamp_validity.trusted
 
-    content_ts = find_cms_attribute(
+    content_ts = find_unique_cms_attribute(
         emb.signer_info['signed_attrs'], 'content_time_stamp'
-    )[0]
+    )
     eci = content_ts['content']['encap_content_info']
     assert eci['content_type'].native == 'tst_info'
 
@@ -1761,9 +1761,9 @@ def test_sign_with_policy():
     assert emb.field_name == 'Sig1'
     val_trusted(emb)
 
-    sp_id = find_cms_attribute(
+    sp_id = find_unique_cms_attribute(
         emb.signer_info['signed_attrs'], 'signature_policy_identifier'
-    )[0]
+    )
     assert sp_id.chosen['sig_policy_id'].native == '2.999'
 
 

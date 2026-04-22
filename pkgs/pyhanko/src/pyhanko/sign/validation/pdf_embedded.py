@@ -2,7 +2,7 @@ import logging
 import os
 from collections import namedtuple
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from asn1crypto import cms, x509
 from pyhanko.pdf_utils import generic, misc
@@ -41,10 +41,10 @@ from .generic_cms import (
     cms_basic_validation,
     collect_signer_attr_status,
     collect_timing_info,
-    compute_signature_tst_digest,
+    compute_tst_digest,
     extract_certs_for_validation,
     extract_self_reported_ts,
-    extract_tst_data,
+    extract_single_tst_datum,
     validate_tst_signed_data,
 )
 from .settings import KeyUsageConstraints
@@ -209,8 +209,7 @@ class EmbeddedPdfSignature:
             sig_object_ref.reference
         )
         self.coverage = None
-        self.external_digest: Optional[bytes] = None
-        self.total_len: Optional[int] = None
+        self.external_digests: Dict[str, bytes] = {}
         self._docmdp: Optional[MDPPerm] = None
         self._fieldmdp: Optional[FieldMDPSpec] = None
         self._docmdp_queried = self._fieldmdp_queried = False
@@ -293,7 +292,7 @@ class EmbeddedPdfSignature:
             The signed data component of the timestamp token embedded in this
             signature, if present.
         """
-        return extract_tst_data(self.signer_info)
+        return extract_single_tst_datum(self.signer_info)
 
     def compute_integrity_info(self, diff_policy=None, skip_diff=False):
         """
@@ -428,7 +427,7 @@ class EmbeddedPdfSignature:
         self._fieldmdp = sp
         return sp
 
-    def compute_digest(self) -> bytes:
+    def compute_digest(self, hash_algo: Optional[str] = None) -> bytes:
         """
         Compute the ``/ByteRange`` digest of this signature.
         The result will be cached.
@@ -436,15 +435,19 @@ class EmbeddedPdfSignature:
         :return:
             The digest value.
         """
-        if self.external_digest is not None:
-            return self.external_digest
 
-        self.total_len, digest = byte_range_digest(
+        digest_algorithm = hash_algo or self.external_md_algorithm
+        try:
+            return self.external_digests[digest_algorithm]
+        except KeyError:
+            pass
+
+        _, digest = byte_range_digest(
             self.reader.stream,
             byte_range=self.byte_range,
-            md_algorithm=self.external_md_algorithm,
+            md_algorithm=digest_algorithm,
         )
-        self.external_digest = digest
+        self.external_digests[digest_algorithm] = digest
         return digest
 
     def compute_tst_digest(self) -> Optional[bytes]:
@@ -465,9 +468,15 @@ class EmbeddedPdfSignature:
 
         if self.tst_signature_digest is not None:
             return self.tst_signature_digest
-        self.tst_signature_digest = digest = compute_signature_tst_digest(
-            self.signer_info
-        )
+
+        tst_data = extract_single_tst_datum(self.signer_info, signed=False)
+
+        if tst_data is None:
+            self.tst_signature_digest = digest = None
+        else:
+            self.tst_signature_digest = digest = compute_tst_digest(
+                tst_data, payload=self.signer_info['signature'].native
+            )
         return digest
 
     def evaluate_signature_coverage(self) -> SignatureCoverageLevel:
@@ -892,7 +901,7 @@ async def async_validate_pdf_signature(
     ts_status_kwargs = await collect_timing_info(
         embedded_sig.signer_info,
         ts_validation_context,
-        raw_digest=embedded_sig.compute_digest(),
+        raw_digest=embedded_sig.compute_digest,
         algorithm_policy=algorithm_policy,
     )
     status_kwargs.update(ts_status_kwargs)
@@ -907,7 +916,7 @@ async def async_validate_pdf_signature(
     )
     status_kwargs = await cms_basic_validation(
         embedded_sig.signed_data,
-        raw_digest=embedded_sig.external_digest,
+        raw_digest=embedded_sig.compute_digest(),
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings,
@@ -982,7 +991,7 @@ async def async_validate_pdf_timestamp(
     status_kwargs = await validate_tst_signed_data(
         embedded_sig.signed_data,
         validation_context,
-        embedded_sig.compute_digest(),
+        embedded_sig.compute_digest,
     )
 
     status_kwargs['coverage'] = embedded_sig.coverage
