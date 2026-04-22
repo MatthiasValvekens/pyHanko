@@ -410,9 +410,7 @@ def test_double_newline():
     ts = TextStamp(w, style, box=layout.BoxConstraints(200, 50))
     ts.apply(dest_page=0, x=70, y=50)
 
-    with open(f'{EXPECTED_OUTPUT_DIR}/double-newline.pdf', 'wb') as outf:
-        w.write(outf)
-    # compare_output(w, f'{EXPECTED_OUTPUT_DIR}/double-newline.pdf')
+    compare_output(w, f'{EXPECTED_OUTPUT_DIR}/double-newline.pdf')
 
 
 def test_zero_width_error():
