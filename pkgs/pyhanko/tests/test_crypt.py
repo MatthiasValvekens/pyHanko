@@ -1,11 +1,13 @@
 import binascii
 import os
+import warnings
 from io import BytesIO
 from typing import Optional
 
 import pytest
 from asn1crypto import cms, x509
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
+from cryptography.utils import CryptographyDeprecationWarning
 from pyhanko.keys import load_cert_from_pemder
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.crypt import (
@@ -1834,10 +1836,12 @@ def test_pubkey_permission_transformations(perm, expected_bytes):
 
 
 def test_pubkey_3des_decryption():
-    with open(f"{PDF_DATA_DIR}/pubkey-3des-test.pdf", "rb") as inf:
-        r = PdfFileReader(inf)
-        result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
-        _validate_pubkey_decryption(r, result)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=CryptographyDeprecationWarning)
+        with open(f"{PDF_DATA_DIR}/pubkey-3des-test.pdf", "rb") as inf:
+            r = PdfFileReader(inf)
+            result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+            _validate_pubkey_decryption(r, result)
 
 
 def test_pubkey_rc2_decryption():

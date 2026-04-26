@@ -96,7 +96,7 @@ class DefaultSignatureValidator(SignatureValidator):
         signature_algorithm: algos.SignedDigestAlgorithm,
         context: SignatureValidationContext = SignatureValidationContext(),
     ):
-        return _validate_raw(
+        _validate_raw(
             signature,
             signed_data,
             public_key_info,

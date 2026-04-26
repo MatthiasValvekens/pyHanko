@@ -737,7 +737,7 @@ def _kdf_for_exchange(
             f"{key_wrap_algo_id} is not a supported key wrapping algorithm"
         )
     kek_bit_len = int(wrap_match.group(1))
-    return X963KDF(
+    kdf = X963KDF(
         algorithm=kdf_digest,
         length=kek_bit_len // 8,
         sharedinfo=ECCCMSSharedInfo(
@@ -748,6 +748,7 @@ def _kdf_for_exchange(
             }
         ).dump(),
     )
+    return kdf  # type: ignore
 
 
 class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
