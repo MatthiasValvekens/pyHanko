@@ -52,9 +52,9 @@ from pyhanko.sign.validation import (
     async_validate_pdf_signature,
     collect_validation_info,
     validate_cms_signature,
+    validate_pdf_signature,
 )
 from pyhanko.sign.validation.errors import (
-    DisallowedAlgorithmError,
     SignatureValidationError,
 )
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
@@ -760,8 +760,11 @@ def test_sign_weak_digest():
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    with pytest.raises(DisallowedAlgorithmError):
-        val_trusted(emb)
+    result = validate_pdf_signature(emb, simple_v_context(), skip_diff=True)
+    assert (
+        result.trust_problem_indic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+    )
 
     lenient_vc = ValidationContext(
         trust_roots=[ROOT_CERT], weak_hash_algos=set()
@@ -794,8 +797,13 @@ def test_forbidden_signature_algorithm():
             weak_signature_algos={'rsassa_pkcs1v15'}
         ),
     )
-    with pytest.raises(DisallowedAlgorithmError, match="rsa"):
-        val_trusted(r.embedded_signatures[0], vc=rsa_banned_vc)
+    result = validate_pdf_signature(
+        r.embedded_signatures[0], rsa_banned_vc, skip_diff=True
+    )
+    assert (
+        result.trust_problem_indic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+    )
 
 
 async def _generate_sig_with_mismatching_digest_algos():
@@ -851,15 +859,17 @@ async def _generate_sig_with_mismatching_digest_algos():
 async def test_sign_weak_sig_digest_mismatch():
     output = await _generate_sig_with_mismatching_digest_algos()
     r = PdfFileReader(output)
-    emb = r.embedded_signatures[0]
 
     lenient_vc = ValidationContext(
         trust_roots=[ROOT_CERT], weak_hash_algos=set()
     )
-    with pytest.raises(
-        SignatureValidationError, match="sha256 does not match.*md5"
-    ):
-        await async_val_trusted(emb, vc=lenient_vc)
+    result = await async_validate_pdf_signature(
+        r.embedded_signatures[0], lenient_vc, skip_diff=True
+    )
+    assert (
+        result.trust_problem_indic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+    )
 
 
 @freeze_time('2020-11-01')
@@ -935,13 +945,16 @@ async def test_sign_digest_mismatch_allowed_but_inner_banned():
 
     policy = DisallowWeakAlgorithmsPolicy(weak_hash_algos=frozenset(['md5']))
 
-    with pytest.raises(SignatureValidationError, match="md5.*not allowed"):
-        await async_validate_pdf_signature(
-            emb,
-            simple_v_context(),
-            skip_diff=True,
-            algorithm_policy=_AllowMismatches(policy),
-        )
+    result = await async_validate_pdf_signature(
+        emb,
+        simple_v_context(),
+        skip_diff=True,
+        algorithm_policy=_AllowMismatches(policy),
+    )
+    assert (
+        result.trust_problem_indic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+    )
 
 
 @freeze_time('2020-11-01')
@@ -956,13 +969,16 @@ async def test_sign_digest_mismatch_allowed_but_outer_banned():
         weak_hash_algos=frozenset(['sha256'])
     )
 
-    with pytest.raises(SignatureValidationError, match="sha256.*not allowed"):
-        await async_validate_pdf_signature(
-            emb,
-            simple_v_context(),
-            skip_diff=True,
-            algorithm_policy=_AllowMismatches(policy),
-        )
+    result = await async_validate_pdf_signature(
+        emb,
+        simple_v_context(),
+        skip_diff=True,
+        algorithm_policy=_AllowMismatches(policy),
+    )
+    assert (
+        result.trust_problem_indic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+    )
 
 
 @freeze_time('2020-11-01')
@@ -995,8 +1011,15 @@ async def test_sign_weak_sig_digest():
 
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
-    with pytest.raises(DisallowedAlgorithmError):
-        await async_val_trusted(emb)
+    result = await async_validate_pdf_signature(
+        emb,
+        simple_v_context(),
+        skip_diff=True,
+    )
+    assert (
+        result.trust_problem_indic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+    )
 
 
 @freeze_time('2020-11-01')
@@ -1042,11 +1065,17 @@ async def test_sign_weak_sig_digest_disallowed_by_custom_policy():
         ) -> AlgorithmUsageConstraint:
             return AlgorithmUsageConstraint(allowed=True)
 
-    lenient_vc = ValidationContext(
+    special_vc = ValidationContext(
         trust_roots=[ROOT_CERT], algorithm_usage_policy=Policy()
     )
-    with pytest.raises(DisallowedAlgorithmError, match="Test reason"):
-        await async_val_trusted(emb, vc=lenient_vc)
+    result = await async_validate_pdf_signature(
+        emb, signer_validation_context=special_vc, skip_diff=True
+    )
+
+    assert (
+        result.trust_problem_indic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+    )
 
 
 @pytest.mark.parametrize("with_issser", [False, True])
@@ -2190,11 +2219,13 @@ def test_ed448_no_length():
 
 @freeze_time('2020-11-01')
 def test_ed448_invalid_hash_algo_validation():
-    with pytest.raises(
-        DisallowedAlgorithmError, match='algorithm.*does not match'
-    ):
-        fname = os.path.join(PDF_DATA_DIR, 'ed448-disallowed-hash.pdf')
-        with open(fname, 'rb') as inf:
-            r = PdfFileReader(inf)
-            s = r.embedded_signatures[0]
-            val_untrusted(s)
+    fname = os.path.join(PDF_DATA_DIR, 'ed448-disallowed-hash.pdf')
+    with open(fname, 'rb') as inf:
+        r = PdfFileReader(inf)
+        result = validate_pdf_signature(
+            r.embedded_signatures[0], simple_v_context(), skip_diff=True
+        )
+    assert (
+        result.trust_problem_indic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+    )

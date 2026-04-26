@@ -125,7 +125,7 @@ class PdfMacTokenHandler:
                 md_algo,
                 oid_type=algos.DigestAlgorithmId,
                 # TODO extend algo policy to deal with this.
-                permanent=True,
+                time_horizon=None,
             )
         return cls.from_key_mat(
             file_encryption_key=file_encryption_key,

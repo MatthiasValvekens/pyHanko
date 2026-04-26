@@ -893,6 +893,7 @@ async def async_validate_pdf_signature(
         embedded_sig.signer_info,
         ts_validation_context,
         raw_digest=embedded_sig.compute_digest(),
+        algorithm_policy=algorithm_policy,
     )
     status_kwargs.update(ts_status_kwargs)
     if 'signer_reported_dt' not in status_kwargs:

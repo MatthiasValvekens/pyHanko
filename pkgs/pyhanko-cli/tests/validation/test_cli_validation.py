@@ -469,7 +469,6 @@ def test_basic_validate_with_weak_hash(cli_runner, pretty, cli_context):
         obj=cli_context,
     )
     assert result.exit_code == 1
-    assert 'An error occurred while' in result.output
     assert 'sha1_rsa is not allowed' in result.output
 
 

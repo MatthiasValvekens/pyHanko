@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, Type
 
 from asn1crypto.core import ObjectIdentifier
@@ -58,11 +59,12 @@ class DisallowedAlgorithmError(SignatureValidationError):
     def __init__(
         self,
         failure_message,
-        permanent: bool,
+        time_horizon: Optional[datetime],
         oid_type: Optional[Type[ObjectIdentifier]] = None,
     ):
         self.oid_type = oid_type
-        if permanent:
+        self.time_horizon = time_horizon
+        if time_horizon is None:
             subindic = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
         else:
             subindic = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE

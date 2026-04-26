@@ -106,7 +106,7 @@ class SignatureStatus:
     trust_problem_indic: Optional[AdESSubIndic]
     """
     If not ``None``, provides the AdES subindication indication what went
-    wrong when validating the signer's certificate.
+    wrong during the validation process.
     """
 
     signing_cert: x509.Certificate

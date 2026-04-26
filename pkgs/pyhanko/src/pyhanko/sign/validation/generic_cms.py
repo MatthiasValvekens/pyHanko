@@ -235,14 +235,74 @@ def validate_algorithm_protection(
                 )
 
 
+def _enforce_algorithm_usage(
+    signer_info: cms.SignerInfo,
+    cert: x509.Certificate,
+    algorithm_usage_policy: CMSAlgorithmUsagePolicy,
+    time_indic: Optional[datetime] = None,
+):
+    """
+    Enforce the algorithm usage policy.
+
+    :param signer_info:
+        A :class:`cms.SignerInfo` object.
+    :param cert:
+        The signer's certificate.
+    :param algorithm_usage_policy:
+        Algorithm usage policy.
+    :param time_indic:
+        Time indication for the production of the signature.
+    """
+    signature_algorithm: cms.SignedDigestAlgorithm = signer_info[
+        'signature_algorithm'
+    ]
+    digest_algorithm_obj = signer_info['digest_algorithm']
+    md_algorithm = digest_algorithm_obj['algorithm'].native
+    sig_algo_allowed = algorithm_usage_policy.signature_algorithm_allowed(
+        signature_algorithm, moment=time_indic, public_key=cert.public_key
+    )
+    if not sig_algo_allowed:
+        msg = (
+            f"The algorithm {signature_algorithm['algorithm'].native} "
+            f"is not allowed by the current usage policy."
+        )
+        if sig_algo_allowed.failure_reason is not None:
+            msg += f" Reason: {sig_algo_allowed.failure_reason}."
+        raise errors.DisallowedAlgorithmError(
+            msg, time_horizon=sig_algo_allowed.not_allowed_after
+        )
+    digest_algo_allowed = algorithm_usage_policy.digest_algorithm_allowed(
+        digest_algorithm_obj,
+        moment=time_indic,
+    )
+    if not digest_algo_allowed:
+        msg = (
+            f"The algorithm {digest_algorithm_obj['algorithm'].native} "
+            f"is not allowed by the current usage policy."
+        )
+        if digest_algo_allowed.failure_reason is not None:
+            msg += f" Reason: {digest_algo_allowed.failure_reason}."
+        raise errors.DisallowedAlgorithmError(
+            msg, time_horizon=digest_algo_allowed.not_allowed_after
+        )
+    digest_compatible = algorithm_usage_policy.digest_combination_allowed(
+        signature_algo=signature_algorithm,
+        message_digest_algo=algos.DigestAlgorithm({'algorithm': md_algorithm}),
+        moment=None,
+    )
+    if not digest_compatible:
+        raise errors.DisallowedAlgorithmError(
+            failure_message=digest_compatible.failure_reason,
+            time_horizon=digest_compatible.not_allowed_after,
+        )
+
+
 def validate_sig_integrity(
     signer_info: cms.SignerInfo,
     cert: x509.Certificate,
     expected_content_type: str,
     actual_digest: bytes,
     sig_validator: Optional[SignatureValidator] = None,
-    algorithm_usage_policy: Optional[CMSAlgorithmUsagePolicy] = None,
-    time_indic: Optional[datetime] = None,
 ) -> Tuple[bool, bool]:
     """
     Validate the integrity of a signature for a particular signerInfo object
@@ -267,10 +327,6 @@ def validate_sig_integrity(
         The actual digest to be matched to the message digest attribute.
     :param sig_validator:
         Signature validator implementing the cryptographic validation process.
-    :param algorithm_usage_policy:
-        Algorithm usage policy.
-    :param time_indic:
-        Time indication for the production of the signature.
     :return:
         A tuple of two booleans. The first indicates whether the provided
         digest matches the value in the signed attributes.
@@ -282,47 +338,6 @@ def validate_sig_integrity(
     ]
     digest_algorithm_obj = signer_info['digest_algorithm']
     md_algorithm = digest_algorithm_obj['algorithm'].native
-    if algorithm_usage_policy is not None:
-        sig_algo_allowed = algorithm_usage_policy.signature_algorithm_allowed(
-            signature_algorithm, moment=time_indic, public_key=cert.public_key
-        )
-        if not sig_algo_allowed:
-            msg = (
-                f"The algorithm {signature_algorithm['algorithm'].native} "
-                f"is not allowed by the current usage policy."
-            )
-            if sig_algo_allowed.failure_reason is not None:
-                msg += f" Reason: {sig_algo_allowed.failure_reason}."
-            raise errors.DisallowedAlgorithmError(
-                msg, permanent=sig_algo_allowed.not_allowed_after is None
-            )
-        digest_algo_allowed = algorithm_usage_policy.digest_algorithm_allowed(
-            digest_algorithm_obj,
-            moment=time_indic,
-        )
-        if not digest_algo_allowed:
-            msg = (
-                f"The algorithm {digest_algorithm_obj['algorithm'].native} "
-                f"is not allowed by the current usage policy."
-            )
-            if digest_algo_allowed.failure_reason is not None:
-                msg += f" Reason: {digest_algo_allowed.failure_reason}."
-            raise errors.DisallowedAlgorithmError(
-                msg, permanent=digest_algo_allowed.not_allowed_after is None
-            )
-        digest_compatible = algorithm_usage_policy.digest_combination_allowed(
-            signature_algo=signature_algorithm,
-            message_digest_algo=algos.DigestAlgorithm(
-                {'algorithm': md_algorithm}
-            ),
-            moment=None,
-        )
-        if not digest_compatible:
-            raise errors.DisallowedAlgorithmError(
-                failure_message=digest_compatible.failure_reason,
-                permanent=digest_compatible.not_allowed_after is None,
-            )
-
     signature = signer_info['signature'].native
 
     signed_attrs_orig: cms.CMSAttributes = signer_info['signed_attrs']
@@ -482,8 +497,10 @@ async def cms_basic_validation(
         )
         time_indic = validation_context.best_signature_time
     validation_context = validation_context or ValidationContext()
+    assert validation_context is not None
     if algorithm_policy is None:
         algorithm_policy = DEFAULT_ALGORITHM_USAGE_POLICY
+    assert algorithm_policy is not None
 
     signature_algorithm: cms.SignedDigestAlgorithm = signer_info[
         'signature_algorithm'
@@ -506,7 +523,20 @@ async def cms_basic_validation(
             ades_subindication=AdESFailure.FORMAT_FAILURE,
         )
 
-    # first, do the cryptographic identity checks
+    try:
+        _enforce_algorithm_usage(
+            signer_info,
+            cert,
+            algorithm_usage_policy=algorithm_policy,
+            time_indic=time_indic,
+        )
+        ades_status = error_time_horizon = None
+    except errors.DisallowedAlgorithmError as e:
+        logger.warning(
+            "Encountered disallowed algorithm during CMS validation", exc_info=e
+        )
+        ades_status = e.ades_subindication
+        error_time_horizon = e.time_horizon
     # TODO theoretically (e.g. DSA with param inheritance) this requires
     #  doing the X.509 validation step first. Since nobody cares about DSA
     #  (let alone DSA with inherited parameters), that's just a "nice to have".
@@ -516,8 +546,6 @@ async def cms_basic_validation(
             cert,
             expected_content_type=expected_content_type,
             actual_digest=raw_digest,
-            algorithm_usage_policy=algorithm_policy,
-            time_indic=time_indic,
             sig_validator=validation_context.sig_validator,
         )
     except CMSStructuralError as e:
@@ -527,8 +555,8 @@ async def cms_basic_validation(
         ) from e
 
     # next, validate trust
-    ades_status = path = revo_details = error_time_horizon = None
-    if valid:
+    path = revo_details = None
+    if valid and ades_status is None:
         try:
             validation_context.certificate_registry.register_multiple(
                 other_certs
@@ -796,6 +824,7 @@ async def collect_timing_info(
     signer_info: cms.SignerInfo,
     ts_validation_context: Optional[ValidationContext],
     raw_digest: bytes,
+    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
 ):
     """
     Collect and validate timing information in a ``SignerInfo`` value.
@@ -809,6 +838,16 @@ async def collect_timing_info(
     :param raw_digest:
         The raw external message digest bytes (only relevant for the
         validation of the content timestamp token, if there is one)
+    :param algorithm_policy:
+        The algorithm usage policy for the signature validation.
+
+        .. warning::
+            This is distinct from the algorithm usage policy used for
+            certificate validation, but the latter will be used as a fallback
+            if this parameter is not specified.
+
+            It is nonetheless recommended to align both policies unless
+            there is a clear reason to do otherwise.
     """
 
     status_kwargs: Dict[str, Any] = {}
@@ -826,6 +865,7 @@ async def collect_timing_info(
             tst_signed_data,
             ts_validation_context,
             tst_signature_digest,
+            algorithm_policy=algorithm_policy,
         )
         tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
         status_kwargs['timestamp_validity'] = tst_validity
@@ -1115,6 +1155,7 @@ async def async_validate_detached_cms(
         signer_info,
         ts_validation_context=ts_validation_context,
         raw_digest=digest_bytes,
+        algorithm_policy=algorithm_policy,
     )
     key_usage_settings = StandardCMSSignatureStatus.default_usage_constraints(
         key_usage_settings
