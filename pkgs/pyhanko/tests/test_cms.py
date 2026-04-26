@@ -280,6 +280,84 @@ async def test_detached_cms_with_tst():
     assert status.intact
 
 
+class _SignatureTSWithDifferentDigestAlgos(UnsignedAttributeProviderSpec):
+    def unsigned_attr_providers(
+        self,
+        signature: bytes,
+        signed_attrs: cms.CMSAttributes,
+        digest_algorithm: str,
+    ):
+        yield TSTProvider(
+            'sha512',
+            data_to_ts=signature,
+            timestamper=DUMMY_TS,
+        )
+        yield TSTProvider(
+            'sha3_256',
+            data_to_ts=signature,
+            timestamper=DUMMY_TS,
+        )
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_detached_cms_with_multiple_signature_timestamps():
+
+    signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+    )
+    signer.unsigned_attr_prov_spec = _SignatureTSWithDifferentDigestAlgos()
+    payload = await signer.async_sign_general_data(
+        b'Hello world!',
+        'sha256',
+        detached=True,
+        timestamper=None,
+    )
+    sd = cms.ContentInfo.load(payload.dump())['content']
+    result = await async_validate_detached_cms(
+        b'Hello world!',
+        sd,
+        signer_validation_context=ValidationContext(trust_roots=[ROOT_CERT]),
+    )
+    assert result.bottom_line
+    assert result.timestamp_validity.md_algorithm in ('sha512', 'sha3_256')
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+@pytest.mark.parametrize('excluded', ['sha3_256', 'sha512'])
+async def test_detached_cms_with_multiple_signature_timestamps_algo_policy(
+    excluded,
+):
+
+    signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+    )
+    signer.unsigned_attr_prov_spec = _SignatureTSWithDifferentDigestAlgos()
+    payload = await signer.async_sign_general_data(
+        b'Hello world!',
+        'sha256',
+        detached=True,
+        timestamper=None,
+    )
+    sd = cms.ContentInfo.load(payload.dump())['content']
+    result = await async_validate_detached_cms(
+        b'Hello world!',
+        sd,
+        signer_validation_context=ValidationContext(trust_roots=[ROOT_CERT]),
+        algorithm_policy=CMSAlgorithmUsagePolicy.lift_policy(
+            DisallowWeakAlgorithmsPolicy(weak_hash_algos=(excluded,))
+        ),
+    )
+    assert result.bottom_line
+    assert result.timestamp_validity.md_algorithm in ('sha512', 'sha3_256')
+    assert result.timestamp_validity.md_algorithm != excluded
+
+
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_detached_cms_with_content_tst():

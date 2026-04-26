@@ -293,7 +293,7 @@ async def ades_timestamp_validation(
     timing_info: Optional[ValidationTimingInfo] = None,
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESBasicValidationResult: ...
+) -> AdESBasicValidationResult: ...  # pragma: nocover
 
 
 @overload
@@ -305,7 +305,7 @@ async def ades_timestamp_validation(
     timing_info: Optional[ValidationTimingInfo] = None,
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESBasicValidationResult: ...
+) -> AdESBasicValidationResult: ...  # pragma: nocover
 
 
 async def ades_timestamp_validation(
@@ -704,7 +704,7 @@ async def ades_basic_validation(
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     signature_not_before_time: Optional[datetime] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESBasicValidationResult: ...
+) -> AdESBasicValidationResult: ...  # pragma: nocover
 
 
 @overload
@@ -717,7 +717,7 @@ async def ades_basic_validation(
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     signature_not_before_time: Optional[datetime] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESBasicValidationResult: ...
+) -> AdESBasicValidationResult: ...  # pragma: nocover
 
 
 async def ades_basic_validation(
@@ -926,7 +926,7 @@ async def ades_with_time_validation(
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     signature_not_before_time: Optional[datetime] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESWithTimeValidationResult: ...
+) -> AdESWithTimeValidationResult: ...  # pragma: nocover
 
 
 @overload
@@ -940,7 +940,7 @@ async def ades_with_time_validation(
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     signature_not_before_time: Optional[datetime] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
-) -> AdESWithTimeValidationResult: ...
+) -> AdESWithTimeValidationResult: ...  # pragma: nocover
 
 
 async def ades_with_time_validation(

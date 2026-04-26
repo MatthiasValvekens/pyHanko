@@ -878,8 +878,8 @@ async def collect_timing_info(
     if signer_reported_dt is not None:
         status_kwargs['signer_reported_dt'] = signer_reported_dt
 
-    tst_signed_data = extract_single_tst_datum(signer_info, signed=False)
-    if tst_signed_data is not None:
+    tst_validity: Optional[TimestampSignatureStatus] = None
+    for tst_signed_data in extract_tst_data_iter(signer_info, signed=False):
         tst_signature_digest = compute_tst_digest(
             tst_signed_data, payload=signer_info['signature'].native
         )
@@ -891,10 +891,16 @@ async def collect_timing_info(
             algorithm_policy=algorithm_policy,
         )
         tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
+        if tst_validity.trusted:
+            break
+
+    if tst_validity is not None:
         status_kwargs['timestamp_validity'] = tst_validity
 
-    content_tst_signed_data = extract_single_tst_datum(signer_info, signed=True)
-    if content_tst_signed_data is not None:
+    content_tst_validity: Optional[TimestampSignatureStatus] = None
+    for content_tst_signed_data in extract_tst_data_iter(
+        signer_info, signed=True
+    ):
         content_tst_validity_kwargs = await validate_tst_signed_data(
             content_tst_signed_data,
             ts_validation_context,
@@ -903,6 +909,12 @@ async def collect_timing_info(
         content_tst_validity = TimestampSignatureStatus(
             **content_tst_validity_kwargs
         )
+        status_kwargs['content_timestamp_validity'] = content_tst_validity
+
+        if content_tst_validity.trusted:
+            break
+
+    if content_tst_validity is not None:
         status_kwargs['content_timestamp_validity'] = content_tst_validity
 
     return status_kwargs
