@@ -1,6 +1,6 @@
 from typing import Optional
 
-from asn1crypto import cms, core, x509
+from asn1crypto import algos, cms, core, keys, x509
 
 __all__ = [
     'AAControls',
@@ -97,3 +97,39 @@ ext_specs['aa_controls'] = AAControls
 
 ext_map['1.3.6.1.5.5.7.1.4'] = 'audit_identity'
 ext_specs['audit_identity'] = core.OctetString
+
+
+def _pqc_setup():
+    sd_algo_map = algos.SignedDigestAlgorithmId._map
+    sd_algo_map['2.16.840.1.101.3.4.3.17'] = 'mldsa44'
+    sd_algo_map['2.16.840.1.101.3.4.3.18'] = 'mldsa65'
+    sd_algo_map['2.16.840.1.101.3.4.3.19'] = 'mldsa87'
+
+    sd_algo_reverse_map = algos.SignedDigestAlgorithmId._reverse_map
+    if sd_algo_reverse_map is not None:
+        sd_algo_reverse_map['mldsa44'] = '2.16.840.1.101.3.4.3.17'
+        sd_algo_reverse_map['mldsa65'] = '2.16.840.1.101.3.4.3.18'
+        sd_algo_reverse_map['mldsa87'] = '2.16.840.1.101.3.4.3.19'
+
+    key_algo_map = keys.PublicKeyAlgorithmId._map
+    key_algo_map['2.16.840.1.101.3.4.3.17'] = 'mldsa44'
+    key_algo_map['2.16.840.1.101.3.4.3.18'] = 'mldsa65'
+    key_algo_map['2.16.840.1.101.3.4.3.19'] = 'mldsa87'
+
+    key_algo_reverse_map = keys.PublicKeyAlgorithmId._reverse_map
+
+    if key_algo_reverse_map is not None:
+        key_algo_reverse_map['mldsa44'] = '2.16.840.1.101.3.4.3.17'
+        key_algo_reverse_map['mldsa65'] = '2.16.840.1.101.3.4.3.18'
+        key_algo_reverse_map['mldsa87'] = '2.16.840.1.101.3.4.3.19'
+
+    def _public_key_spec_wrapped(public_key_info: keys.PublicKeyInfo):
+        try:
+            return public_key_info._public_key_spec()
+        except KeyError:
+            return core.OctetBitString, None
+
+    keys.PublicKeyInfo._spec_callbacks['public_key'] = _public_key_spec_wrapped
+
+
+_pqc_setup()

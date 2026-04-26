@@ -576,7 +576,10 @@ class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
         moment: Optional[datetime],
         public_key: Optional[keys.PublicKeyInfo],
     ) -> AlgorithmUsageConstraint:
-        algo_name = algo.signature_algo
+        try:
+            algo_name = algo.signature_algo
+        except ValueError:
+            algo_name = algo['algorithm'].native
         algo_allowed = algo_name not in self.weak_signature_algos
         is_rsa = algo_name.startswith('rsa')
         is_dsa = algo_name == 'dsa'

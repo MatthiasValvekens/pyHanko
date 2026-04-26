@@ -23,6 +23,11 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
 )
 from cryptography.hazmat.primitives.asymmetric.ed448 import Ed448PrivateKey
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.mldsa import (
+    MLDSA44PrivateKey,
+    MLDSA65PrivateKey,
+    MLDSA87PrivateKey,
+)
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
@@ -435,7 +440,7 @@ class Signer:
                 mech = digest_algorithm + '_rsa'
             else:
                 mech = 'rsassa_pkcs1v15'
-        elif algo in ('ed25519', 'ed448'):
+        elif algo in ('ed25519', 'ed448', 'mldsa44', 'mldsa65', 'mldsa87'):
             mech = algo
         else:  # pragma: nocover
             raise SigningError(f"Signature mechanism {algo} is unsupported.")
@@ -1444,7 +1449,10 @@ class SimpleSigner(Signer):
         signature_mechanism = self.get_signature_mechanism_for_digest(
             digest_algorithm
         )
-        mechanism = signature_mechanism.signature_algo
+        try:
+            mechanism = signature_mechanism.signature_algo
+        except ValueError:
+            mechanism = signature_mechanism['algorithm'].native
         priv_key = serialization.load_der_private_key(
             self.signing_key.dump(), password=None
         )
@@ -1472,6 +1480,15 @@ class SimpleSigner(Signer):
             return priv_key.sign(data)
         elif mechanism == 'ed448':
             assert isinstance(priv_key, Ed448PrivateKey)
+            return priv_key.sign(data)
+        elif mechanism == 'mldsa44':
+            assert isinstance(priv_key, MLDSA44PrivateKey)
+            return priv_key.sign(data)
+        elif mechanism == 'mldsa65':
+            assert isinstance(priv_key, MLDSA65PrivateKey)
+            return priv_key.sign(data)
+        elif mechanism == 'mldsa87':
+            assert isinstance(priv_key, MLDSA87PrivateKey)
             return priv_key.sign(data)
         else:  # pragma: nocover
             raise SigningError(

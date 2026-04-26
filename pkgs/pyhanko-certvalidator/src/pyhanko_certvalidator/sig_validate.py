@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import (
     ec,
     ed448,
     ed25519,
+    mldsa,
     padding,
     rsa,
 )
@@ -177,6 +178,15 @@ def _validate_raw(
         pub_key.verify(signature, signed_data)
     elif sig_algo == 'ed448':
         assert isinstance(pub_key, ed448.Ed448PublicKey)
+        pub_key.verify(signature, signed_data)
+    elif sig_algo == 'mldsa44':
+        assert isinstance(pub_key, mldsa.MLDSA44PublicKey)
+        pub_key.verify(signature, signed_data)
+    elif sig_algo == 'mldsa65':
+        assert isinstance(pub_key, mldsa.MLDSA65PublicKey)
+        pub_key.verify(signature, signed_data)
+    elif sig_algo == 'mldsa87':
+        assert isinstance(pub_key, mldsa.MLDSA87PublicKey)
         pub_key.verify(signature, signed_data)
     else:
         raise AlgorithmNotSupported(

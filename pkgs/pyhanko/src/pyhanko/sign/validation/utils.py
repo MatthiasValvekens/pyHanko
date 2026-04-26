@@ -16,23 +16,42 @@ from ..general import (
 )
 from .errors import SignatureValidationError
 
+# Table 1 in RFC 9882
+
+MLDSA87_DIGEST_ALGOS = frozenset(
+    ['sha512', 'sha3_512', 'shake256', 'shake256_len']
+)
+MLDSA65_DIGEST_ALGOS = frozenset(['sha384', 'sha3_384', *MLDSA87_DIGEST_ALGOS])
+MLDSA44_DIGEST_ALGOS = frozenset(['sha256', 'sha3_256', *MLDSA65_DIGEST_ALGOS])
+
+_SIG_ALGO_ALLOWED_DIGEST_LUT = {
+    # be a bit more tolerant here, also don't check shake256_len parameters
+    # because we only support one length anyway
+    'ed448': frozenset(['shake256', 'shake256_len']),
+    'mldsa44': MLDSA44_DIGEST_ALGOS,
+    'mldsa65': MLDSA65_DIGEST_ALGOS,
+    'mldsa87': MLDSA87_DIGEST_ALGOS,
+}
+
 
 def _ensure_digest_match(
     signature_algo: algos.SignedDigestAlgorithm,
     message_digest_algo: algos.DigestAlgorithm,
 ) -> AlgorithmUsageConstraint:
-    if signature_algo['algorithm'].native == 'ed448':
-        # be a bit more tolerant here, also don't check parameters because
-        # we only support one length anyway
+    sig_algo_name = signature_algo['algorithm'].native
+    allowed_digests_from_table = _SIG_ALGO_ALLOWED_DIGEST_LUT.get(
+        sig_algo_name, frozenset()
+    )
+    if allowed_digests_from_table:
         algo = message_digest_algo['algorithm'].native
-        if algo in ('shake256', 'shake256_len'):
+        if algo in allowed_digests_from_table:
             return AlgorithmUsageConstraint(allowed=True)
         else:
             return AlgorithmUsageConstraint(
                 allowed=False,
                 failure_reason=(
-                    f"Digest algorithm {algo} "
-                    f"does not match value implied by signature algorithm ed448"
+                    f"Digest algorithm {algo} does not match value "
+                    f"implied by signature algorithm {sig_algo_name}"
                 ),
             )
 
