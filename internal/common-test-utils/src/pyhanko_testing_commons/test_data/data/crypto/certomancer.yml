@@ -93,6 +93,30 @@ keysets:
         path: signer.key.pem
       signer2:
         path: signer2.key.pem
+  testing-ca-mldsa:
+    # NOTE: since we haven't rigged Certomancer with MLDSA support yet,
+    # all but the 3 signer keys are ED25519 keys.
+    path-prefix: keys-mldsa
+    keys:
+      root:
+        path: root_ca.key.pem
+      interm:
+        path: intermediate_ca.key.pem
+      tsa:
+        path: tsa.key.pem
+      tsa2:
+        path: tsa2.key.pem
+      interm-ocsp:
+        path: ocsp.key.pem
+      # important: these need to be serialised seed-only!
+      # This requires -provparam "ml-dsa.output_formats=seed-only", at least on the
+      # current latest system openssl version on macos
+      signer1:
+        path: signer_mldsa44.key.pem
+      signer1_65:
+        path: signer_mldsa65.key.pem
+      signer1_87:
+        path: signer_mldsa87.key.pem
   testing-ca-ed448:
     path-prefix: keys-ed448
     keys:
@@ -366,6 +390,24 @@ pki-architectures:
   testing-ca-ed25519:
     template: testing-ca
     keyset: testing-ca-ed25519
+    services:
+      time-stamping:
+        tsa:
+          signing-key: tsa
+          signing-cert: tsa
+          digest-algo: sha512
+  testing-ca-mldsa:
+    template: testing-ca
+    keyset: testing-ca-mldsa
+    certs:
+      signer1_65:
+        template: signer1
+        subject: signer1
+        subject-key: signer1_65
+      signer1_87:
+        template: signer1
+        subject: signer1
+        subject-key: signer1_97
     services:
       time-stamping:
         tsa:

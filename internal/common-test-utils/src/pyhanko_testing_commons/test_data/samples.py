@@ -3,6 +3,7 @@ import os.path
 import yaml
 from asn1crypto import cms
 from certomancer.registry import ArchLabel, CertomancerConfig
+from cryptography.hazmat.backends.openssl import backend
 from pyhanko.pdf_utils.crypt import SimpleEnvelopeKeyDecrypter
 
 
@@ -130,7 +131,9 @@ def _configure_certomancer():
         cfg_text = inf.read()
     cfg = yaml.safe_load(cfg_text)
 
-    return CertomancerConfig(cfg, key_search_dir=CRYPTO_DATA_DIR)
+    return CertomancerConfig(
+        cfg, key_search_dir=CRYPTO_DATA_DIR, lazy_load_keys=True
+    )
 
 
 CERTOMANCER = _configure_certomancer()
@@ -140,9 +143,22 @@ TESTING_CA_ERRORS = CERTOMANCER.get_pki_arch(
 )
 UNRELATED_TSA = CERTOMANCER.get_pki_arch(ArchLabel('unrelated-tsa'))
 TESTING_CA_ECDSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ecdsa'))
-TESTING_CA_DSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-dsa'))
+if backend.dsa_supported():
+    TESTING_CA_DSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-dsa'))
+else:
+    TESTING_CA_DSA = None
+
 TESTING_CA_ED25519 = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ed25519'))
-TESTING_CA_ED448 = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ed448'))
+
+if backend.ed448_supported():
+    TESTING_CA_ED448 = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ed448'))
+else:
+    TESTING_CA_ED448 = None
+
+if backend.mldsa_supported():
+    TESTING_CA_MLDSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-mldsa'))
+else:
+    TESTING_CA_MLDSA = None
 TESTING_CA_QUALIFIED = CERTOMANCER.get_pki_arch(
     ArchLabel('testing-ca-qualified')
 )

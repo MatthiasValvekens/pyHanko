@@ -27,6 +27,7 @@ from pyhanko_testing_commons.test_data.samples import (
     TESTING_CA_ECDSA,
     TESTING_CA_ED448,
     TESTING_CA_ED25519,
+    TESTING_CA_MLDSA,
     UNRELATED_TSA,
     read_all,
 )
@@ -40,14 +41,8 @@ SELF_SIGN = signers.SimpleSigner.load(
 )
 ROOT_CERT = TESTING_CA.get_cert(CertLabel('root'))
 ECC_ROOT_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('root'))
-DSA_ROOT_CERT = TESTING_CA_DSA.get_cert(CertLabel('root'))
-ED25519_ROOT_CERT = TESTING_CA_ED25519.get_cert(CertLabel('root'))
-ED448_ROOT_CERT = TESTING_CA_ED448.get_cert(CertLabel('root'))
 INTERM_CERT = TESTING_CA.get_cert(CertLabel('interm'))
 ECC_INTERM_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('interm'))
-DSA_INTERM_CERT = TESTING_CA_DSA.get_cert(CertLabel('interm'))
-ED25519_INTERM_CERT = TESTING_CA_ED25519.get_cert(CertLabel('interm'))
-ED448_INTERM_CERT = TESTING_CA_ED448.get_cert(CertLabel('interm'))
 OCSP_CERT = TESTING_CA.get_cert(CertLabel('interm-ocsp'))
 REVOKED_CERT = TESTING_CA.get_cert(CertLabel('signer2'))
 TSA_CERT = TESTING_CA.get_cert(CertLabel('tsa'))
@@ -64,13 +59,21 @@ FROM_ECC_CA = signers.SimpleSigner(
         [ECC_ROOT_CERT, ECC_INTERM_CERT]
     ),
 )
-FROM_DSA_CA = signers.SimpleSigner(
-    signing_cert=TESTING_CA_DSA.get_cert(CertLabel('signer1')),
-    signing_key=TESTING_CA_DSA.key_set.get_private_key(KeyLabel('signer1')),
-    cert_registry=SimpleCertificateStore.from_certs(
-        [DSA_ROOT_CERT, DSA_INTERM_CERT]
-    ),
-)
+if TESTING_CA_DSA:
+    DSA_ROOT_CERT = TESTING_CA_DSA.get_cert(CertLabel('root'))
+    DSA_INTERM_CERT = TESTING_CA_DSA.get_cert(CertLabel('interm'))
+    FROM_DSA_CA = signers.SimpleSigner(
+        signing_cert=TESTING_CA_DSA.get_cert(CertLabel('signer1')),
+        signing_key=TESTING_CA_DSA.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [DSA_ROOT_CERT, DSA_INTERM_CERT]
+        ),
+    )
+else:
+    DSA_ROOT_CERT = DSA_INTERM_CERT = FROM_DSA_CA = None
+
+ED25519_ROOT_CERT = TESTING_CA_ED25519.get_cert(CertLabel('root'))
+ED25519_INTERM_CERT = TESTING_CA_ED25519.get_cert(CertLabel('interm'))
 FROM_ED25519_CA = signers.SimpleSigner(
     signing_cert=TESTING_CA_ED25519.get_cert(CertLabel('signer1')),
     signing_key=TESTING_CA_ED25519.key_set.get_private_key(KeyLabel('signer1')),
@@ -78,13 +81,36 @@ FROM_ED25519_CA = signers.SimpleSigner(
         [ED25519_ROOT_CERT, ED25519_INTERM_CERT]
     ),
 )
-FROM_ED448_CA = signers.SimpleSigner(
-    signing_cert=TESTING_CA_ED448.get_cert(CertLabel('signer1')),
-    signing_key=TESTING_CA_ED448.key_set.get_private_key(KeyLabel('signer1')),
-    cert_registry=SimpleCertificateStore.from_certs(
-        [ED448_ROOT_CERT, ED448_INTERM_CERT]
-    ),
-)
+if TESTING_CA_ED448:
+    ED448_ROOT_CERT = TESTING_CA_ED448.get_cert(CertLabel('root'))
+    ED448_INTERM_CERT = TESTING_CA_ED448.get_cert(CertLabel('interm'))
+    FROM_ED448_CA = signers.SimpleSigner(
+        signing_cert=TESTING_CA_ED448.get_cert(CertLabel('signer1')),
+        signing_key=TESTING_CA_ED448.key_set.get_private_key(
+            KeyLabel('signer1')
+        ),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [ED448_ROOT_CERT, ED448_INTERM_CERT]
+        ),
+    )
+else:
+    ED448_ROOT_CERT = ED448_INTERM_CERT = FROM_ED448_CA = None
+
+if TESTING_CA_MLDSA:
+    MLDSA_ROOT_CERT = TESTING_CA_MLDSA.get_cert(CertLabel('root'))
+    MLDSA_INTERM_CERT = TESTING_CA_MLDSA.get_cert(CertLabel('interm'))
+    FROM_MLDSA_CA = signers.SimpleSigner(
+        signing_cert=TESTING_CA_MLDSA.get_cert(CertLabel('signer1')),
+        signing_key=TESTING_CA_MLDSA.key_set.get_private_key(
+            KeyLabel('signer1')
+        ),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [MLDSA_ROOT_CERT, MLDSA_INTERM_CERT]
+        ),
+    )
+else:
+    MLDSA_ROOT_CERT = MLDSA_INTERM_CERT = FROM_MLDSA_CA = None
+
 REVOKED_SIGNER = signers.SimpleSigner(
     signing_cert=TESTING_CA.get_cert(CertLabel('signer2')),
     signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),

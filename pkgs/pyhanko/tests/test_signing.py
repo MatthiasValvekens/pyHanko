@@ -79,6 +79,7 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     FROM_ECC_CA,
     FROM_ED448_CA,
     FROM_ED25519_CA,
+    FROM_MLDSA_CA,
     REVOKED_SIGNER,
     SELF_SIGN,
     TRUST_ROOTS,
@@ -1627,6 +1628,20 @@ def test_ed25519():
 
     (extn,) = r.root['/Extensions']['/ISO_']
     assert extn['/ExtensionLevel'] == 32002
+
+
+@freeze_time('2020-11-01')
+def test_mldsa44():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_MLDSA_CA,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s)
+    assert status.md_algorithm == 'sha256'
 
 
 @freeze_time('2020-11-01')
