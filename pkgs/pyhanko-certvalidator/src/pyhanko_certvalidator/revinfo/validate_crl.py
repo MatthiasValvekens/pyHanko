@@ -887,7 +887,7 @@ def _check_cert_on_crl_and_delta(
     return revoked_date, revoked_reason
 
 
-async def _classify_relevant_crls(
+def _classify_relevant_crls(
     certificate_lists: List[CRLContainer],
     poe_manager: POEManager,
     errs: _CRLErrs,
@@ -1022,7 +1022,7 @@ async def verify_crl(
     (
         complete_lists_by_issuer,
         delta_lists_by_issuer,
-    ) = await _classify_relevant_crls(certificate_lists, poe_manager, errs)
+    ) = _classify_relevant_crls(certificate_lists, poe_manager, errs)
 
     # In the main loop, only complete CRLs are processed, so delta CRLs are
     # weeded out of the to-do list
@@ -1078,9 +1078,7 @@ async def verify_crl(
     (
         extra_complete_lists_by_issuer,
         extra_delta_lists_by_issuer,
-    ) = await _classify_relevant_crls(
-        extra_certificate_lists, poe_manager, errs
-    )
+    ) = _classify_relevant_crls(extra_certificate_lists, poe_manager, errs)
 
     combined_deltas = {
         k: delta_lists_by_issuer.get(k, [])
@@ -1273,13 +1271,12 @@ async def collect_relevant_crls_with_paths(
     proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
     errs = _CRLErrs()
     candidate_crls = revinfo_manager.currently_available_crls()
-    classify_job = _classify_relevant_crls(
+    complete_lists_by_issuer, delta_lists_by_issuer = _classify_relevant_crls(
         candidate_crls,
         revinfo_manager.poe_manager,
         errs,
         control_time=control_time,
     )
-    complete_lists_by_issuer, delta_lists_by_issuer = await classify_job
 
     # In the main loop, only complete CRLs are processed, so delta CRLs are
     # weeded out of the to-do list

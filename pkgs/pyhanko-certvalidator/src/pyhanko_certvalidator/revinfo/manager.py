@@ -27,6 +27,7 @@ from pyhanko_certvalidator.revinfo.archival import (
     OCSPContainer,
     sort_freshest_first,
 )
+from pyhanko_certvalidator.util import get_ocsp_urls
 
 
 class RevinfoManager:
@@ -264,7 +265,7 @@ class RevinfoManager:
             A list of :class:`OCSPContainer` objects
         """
 
-        if not self._fetchers:
+        if not self._fetchers or not get_ocsp_urls(cert):
             return self._ocsps
 
         fetchers = self._fetchers
