@@ -89,6 +89,7 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     FROM_CA,
     INTERM_CERT,
     REVOKED_SIGNER,
+    ROOT_CERT,
     TRUST_ROOTS,
     TSA_CERT,
     live_testing_vc,
@@ -975,6 +976,38 @@ async def test_pades_lta_expired_timestamp(requests_mock, with_dts):
 
 
 @pytest.mark.asyncio
+async def test_pades_missing_dts(requests_mock):
+    md_algorithm = 'sha256'
+    trust_manager = SimpleTrustManager.build([ROOT_CERT])
+
+    with freeze_time('2020-11-20'):
+        out = await _generate_pades_test_doc(
+            requests_mock,
+            md_algorithm=md_algorithm,
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
+            use_pades_lta=False,
+        )
+
+    with freeze_time('2029-11-20'):
+        revinfo_policy = (
+            DEFAULT_SIG_VALIDATION_SPEC.cert_validation_policy.revinfo_policy
+        )
+        spec = SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=trust_manager,
+                revinfo_policy=revinfo_policy,
+            ),
+        )
+        r = PdfFileReader(out)
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0],
+            pdf_validation_spec=PdfSignatureValidationSpec(spec),
+        )
+        assert result.ades_subindic == AdESIndeterminate.NO_POE
+
+
+@pytest.mark.asyncio
 async def test_pades_lta_happy_path_past_time_with_chain(requests_mock):
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(requests_mock)
@@ -1279,7 +1312,6 @@ async def _nontraditional_hybrid_lta_doc(requests_mock):
     #  - declared PAdES (/ETSI.CAdES.detached)
     #  - short-lived leaf cert (=> expired by validation time)
     #  - Leaf cert OCSP response in Adobe revinfo archival
-    #  - Revinfo for intermediate cert must be fetched
     #  - Different TS root.
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock, with_extra_tsa=True)
@@ -1306,9 +1338,15 @@ async def _nontraditional_hybrid_lta_doc(requests_mock):
     ocsp_response = responder.assemble_simple_ocsp_responses(
         [responder.format_single_ocsp_response(cert_id, INTERM_CERT)]
     )
+    crl = TESTING_CA.service_registry.get_crl(
+        ServiceLabel('root'),
+        at_time=datetime.datetime.now(tz=tzlocal.get_localzone()),
+    )
     custom_signer.signed_attr_prov_spec = GenericPdfSignedAttributeProviderSpec(
         attr_settings=PdfCMSSignedAttributes(
-            adobe_revinfo_attr=RevocationInfoArchival({'ocsp': [ocsp_response]})
+            adobe_revinfo_attr=RevocationInfoArchival(
+                {'ocsp': [ocsp_response], 'crl': [crl]}
+            )
         ),
         signing_cert=custom_signer.signing_cert,
         signature_mechanism=custom_signer.signature_mechanism,
@@ -1352,12 +1390,10 @@ async def test_nontraditional_hybrid_lta(requests_mock):
             r.embedded_signatures[0],
             pdf_validation_spec=PdfSignatureValidationSpec(modified_policy),
         )
-        assert result.ades_subindic == AdESPassed.OK
-        assert result.api_status.bottom_line
-        assert result.api_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
-        assert result.best_signature_time == datetime.datetime(
-            2020, 11, 20, tzinfo=datetime.timezone.utc
-        )
+        # This should fail because without a DTS, there is no POE for the
+        # signer's certificate at the time of signing (not indirectly covered
+        # by signature TS either)
+        assert result.ades_subindic == AdESIndeterminate.NO_POE
 
 
 @pytest.mark.asyncio

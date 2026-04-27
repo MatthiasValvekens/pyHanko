@@ -1316,7 +1316,7 @@ async def _ades_past_signature_validation(
     signed_data: cms.SignedData,
     validation_spec: SignatureValidationSpec,
     poe_manager: POEManager,
-    current_time_sub_indic: Optional[AdESIndeterminate],
+    current_time_sub_indic: Union[AdESIndeterminate, AdESPassed, None],
     init_control_time: datetime,
     is_timestamp: bool,
 ) -> ValidationPath:
@@ -1927,8 +1927,6 @@ async def _process_signature_ts(
         and ts_current_time_sub_indic in _LTA_TS_FURTHER_PROC
     ):
         try:
-            # TODO: in principle, we should also run this if the status is
-            #  PASSED already. Ensure that that is possible.
             validation_path = await _ades_past_signature_validation(
                 signed_data=signature_ts,
                 validation_spec=validation_spec,
@@ -2188,7 +2186,7 @@ async def ades_lta_validation(
         )
 
     # (6) past signature validation
-    if isinstance(current_time_sub_indic, AdESIndeterminate):
+    if isinstance(current_time_sub_indic, (AdESPassed, AdESIndeterminate)):
         # TODO: in principle, we should also run this if the status is PASSED
         #  already. Ensure that that is possible.
         past_sig_poe_manager = copy(updated_poe_manager)

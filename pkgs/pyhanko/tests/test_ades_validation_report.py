@@ -126,6 +126,7 @@ async def test_pades_lta_report_smoke_test(requests_mock):
                 field_name='Sig1',
                 subfilter=PADES,
                 use_pades_lta=True,
+                embed_validation_info=True,
                 validation_context=live_testing_vc(requests_mock),
             ),
             signer=FROM_CA,
@@ -176,6 +177,7 @@ async def test_pades_with_attributes_report_smoke_test(requests_mock):
             signers.PdfSignatureMetadata(
                 field_name='Sig1',
                 subfilter=PADES,
+                embed_validation_info=True,
                 use_pades_lta=True,
                 validation_context=live_testing_vc(requests_mock),
                 cades_signed_attr_spec=CAdESSignedAttrSpec(
