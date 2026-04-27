@@ -2000,6 +2000,27 @@ def _dss_to_local_knowledge(
     return local_knowledge
 
 
+def _adobe_revinfo_archival_to_local_knowledge(
+    embedded_sig: EmbeddedPdfSignature,
+):
+    try:
+        revinfo_archival: asn1_pdf.RevocationInfoArchival = (
+            find_unique_cms_attribute(
+                embedded_sig.signer_info['signed_attrs'],
+                'adobe_revocation_info_archival',
+            )
+        )
+
+        crls = [CRLContainer(crl) for crl in revinfo_archival['crl']]
+        ocsps = [OCSPContainer(ocsp) for ocsp in revinfo_archival['ocsp']]
+        return LocalKnowledge(
+            known_ocsps=ocsps,
+            known_crls=crls,
+        )
+    except (MultivaluedAttributeError, NonexistentAttributeError):
+        return LocalKnowledge()
+
+
 async def ades_lta_validation(
     embedded_sig: EmbeddedPdfSignature,
     pdf_validation_spec: PdfSignatureValidationSpec,
@@ -2042,9 +2063,15 @@ async def ades_lta_validation(
     # Ingest CRLs, certs and OCSPs from the DSS
     # (POE info will be processed separately)
     dss_facts = _dss_to_local_knowledge(reader=embedded_sig.reader)
+    # Similarly, put revocation_info_archival data into local knowledge
+    ria_attr_facts = _adobe_revinfo_archival_to_local_knowledge(embedded_sig)
     local_knowledge = LocalKnowledge(
-        known_ocsps=init_local_knowledge.known_ocsps + dss_facts.known_ocsps,
-        known_crls=init_local_knowledge.known_crls + dss_facts.known_crls,
+        known_ocsps=init_local_knowledge.known_ocsps
+        + dss_facts.known_ocsps
+        + ria_attr_facts.known_ocsps,
+        known_crls=init_local_knowledge.known_crls
+        + dss_facts.known_crls
+        + ria_attr_facts.known_crls,
         known_certs=init_local_knowledge.known_certs + dss_facts.known_certs,
         known_poes=init_local_knowledge.known_poes,
         nonrevoked_assertions=init_local_knowledge.nonrevoked_assertions,
@@ -2339,6 +2366,7 @@ async def simulate_future_ades_lta_validation(
     orig_sig_validation_spec = pdf_validation_spec.signature_validation_spec
     orig_local_knowledge = orig_sig_validation_spec.local_knowledge
     dss_knowledge = _dss_to_local_knowledge(embedded_sig.reader)
+    ria_attr_facts = _adobe_revinfo_archival_to_local_knowledge(embedded_sig)
     new_nonrevoked_assertions = list(orig_local_knowledge.nonrevoked_assertions)
     # assert the nonrevoked status of the last timestamp cert, since we can't
     # get "future" revinfo anyway
@@ -2359,6 +2387,7 @@ async def simulate_future_ades_lta_validation(
         # introduce extra timestamp tokens into the validation process.
         yield from orig_local_knowledge.assert_existence_known_at(now)
         yield from dss_knowledge.assert_existence_known_at(now)
+        yield from ria_attr_facts.assert_existence_known_at(now)
         for prima_facie_poe in prima_facie_poes:
             for item in prima_facie_poe.poes_implied:
                 # for the prima facie ones, we only emit POEs for <now>, since
