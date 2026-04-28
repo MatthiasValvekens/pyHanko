@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Set
 
 import tzlocal
 from asn1crypto import algos, cms, core, keys, tsp, x509
@@ -40,21 +40,12 @@ class DummyTimeStamper(TimeStamper):
         self.override_md = override_md
         super().__init__(include_nonce=include_nonce)
 
-    def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
-        # We pretend that certReq is always true in the request
-
-        # TODO generalise my detached signature logic to include cases like this
-        #  (see § 5.4 in RFC 5652)
-        # TODO does the RFC
-        status = tsp.PKIStatusInfo({'status': tsp.PKIStatus('granted')})
-        message_imprint: tsp.MessageImprint = req['message_imprint']
-        md_algorithm = self.override_md
-        if md_algorithm is None:
-            md_algorithm = message_imprint['hash_algorithm']['algorithm'].native
-        digest_algorithm_obj = algos.DigestAlgorithm(
-            {'algorithm': md_algorithm}
-        )
-        dt = self.fixed_dt or datetime.now(tz=tzlocal.get_localzone())
+    def _build_tst_info(
+        self,
+        message_imprint: tsp.MessageImprint,
+        dt: datetime,
+        req: tsp.TimeStampReq,
+    ) -> tsp.TSTInfo:
         tst_info_args = {
             'version': 'v1',
             # See http://oidref.com/1.3.6.1.4.1.4146.2.2
@@ -71,8 +62,11 @@ class DummyTimeStamper(TimeStamper):
         if req['nonce'].native is not None:
             tst_info_args['nonce'] = req['nonce']
 
-        tst_info = tsp.TSTInfo(tst_info_args)
-        tst_info_data = tst_info.dump()
+        return tsp.TSTInfo(tst_info_args)
+
+    def _sign_tst_info(
+        self, tst_info_data: bytes, md_algorithm: str, dt: datetime
+    ) -> tuple[bytes, cms.CMSAttributes]:
         md_spec = get_pyca_cryptography_hash(md_algorithm)
         md = hashes.Hash(md_spec)
         md.update(tst_info_data)
@@ -100,6 +94,21 @@ class DummyTimeStamper(TimeStamper):
             PKCS1v15(),
             get_pyca_cryptography_hash(md_algorithm.upper()),
         )
+        return signature, signed_attrs
+
+    def _build_signed_data(
+        self,
+        tst_info_data: bytes,
+        md_algorithm: str,
+        signature: bytes,
+        signed_attrs: cms.CMSAttributes,
+    ) -> dict:
+        """
+        Construct a SignedData value from the given components.
+        """
+        digest_algorithm_obj = algos.DigestAlgorithm(
+            {'algorithm': md_algorithm}
+        )
         sig_info = cms.SignerInfo(
             {
                 'version': 'v1',
@@ -121,9 +130,9 @@ class DummyTimeStamper(TimeStamper):
                 'signature': signature,
             }
         )
-        certs = set(self.certs_to_embed)
+        certs: Set[x509.Certificate] = set(self.certs_to_embed)
         certs.add(self.tsa_cert)
-        signed_data = {
+        return {
             # must use v3 to get access to the EncapsulatedContentInfo construct
             'version': 'v3',
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
@@ -136,6 +145,28 @@ class DummyTimeStamper(TimeStamper):
             'certificates': certs,
             'signer_infos': [sig_info],
         }
+
+    def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
+        # We pretend that certReq is always true in the request
+
+        # TODO generalise my detached signature logic to include cases like this
+        #  (see § 5.4 in RFC 5652)
+        status = tsp.PKIStatusInfo({'status': tsp.PKIStatus('granted')})
+        message_imprint: tsp.MessageImprint = req['message_imprint']
+        md_algorithm = self.override_md
+        if md_algorithm is None:
+            md_algorithm = message_imprint['hash_algorithm']['algorithm'].native
+        dt = self.fixed_dt or datetime.now(tz=tzlocal.get_localzone())
+
+        tst_info = self._build_tst_info(message_imprint, dt, req)
+        tst_info_data = tst_info.dump()
+        signature, signed_attrs = self._sign_tst_info(
+            tst_info_data, md_algorithm, dt
+        )
+        signed_data = self._build_signed_data(
+            tst_info_data, md_algorithm, signature, signed_attrs
+        )
+
         tst = cms.ContentInfo(
             {
                 'content_type': cms.ContentType('signed_data'),

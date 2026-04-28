@@ -191,7 +191,7 @@ def get_declared_revinfo(
     return has_crl, has_ocsp
 
 
-def get_pyca_cryptography_hash(algorithm) -> Union[hashes.HashAlgorithm]:
+def get_pyca_cryptography_hash(algorithm) -> hashes.HashAlgorithm:
     if algorithm.lower() in ('shake256', 'shake256_len'):
         # force the output length to 64 bytes = 512 bits. We don't
         # support any other lengths because those can't be valid in CMS

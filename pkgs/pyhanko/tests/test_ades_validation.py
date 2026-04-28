@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 from collections import defaultdict
 from io import BytesIO
@@ -5,7 +6,7 @@ from typing import Optional
 
 import pytest
 import tzlocal
-from asn1crypto import algos, cms, keys, ocsp
+from asn1crypto import algos, cms, keys, ocsp, tsp
 from asn1crypto.pdf import RevocationInfoArchival
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import (
@@ -26,12 +27,15 @@ from pyhanko.sign.ades.report import (
     AdESPassed,
     AdESStatus,
 )
+from pyhanko.sign.attributes import TSTProvider, UnsignedAttributeProviderSpec
 from pyhanko.sign.signers.pdf_cms import (
     GenericPdfSignedAttributeProviderSpec,
     PdfCMSSignedAttributes,
     SimpleSigner,
 )
+from pyhanko.sign.timestamps import DummyTimeStamper
 from pyhanko.sign.validation import SignatureCoverageLevel, ades
+from pyhanko.sign.validation.errors import TSTDigestNotAvailableError
 from pyhanko.sign.validation.policy_decl import (
     LocalKnowledge,
     PdfSignatureValidationSpec,
@@ -79,6 +83,7 @@ from pyhanko_testing_commons.test_data.samples import (
     CERTOMANCER,
     MINIMAL_ONE_FIELD,
     TESTING_CA,
+    TESTING_CA_ECDSA,
     TESTING_CA_QUALIFIED,
     UNRELATED_TSA,
 )
@@ -86,7 +91,9 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     DUMMY_HTTP_TS_VARIANT,
     DUMMY_TS,
     DUMMY_TS2,
+    ECC_ROOT_CERT,
     FROM_CA,
+    FROM_ECC_CA,
     INTERM_CERT,
     REVOKED_SIGNER,
     ROOT_CERT,
@@ -1083,6 +1090,33 @@ class BanAllTheThings(AlgorithmUsagePolicy):
         return AlgorithmUsageConstraint(allowed=False)
 
 
+class RSAConsideredHarmful(AlgorithmUsagePolicy):
+    def __init__(self, year):
+        self.cutoff = datetime.datetime(
+            year, 12, 31, 23, 59, 59, tzinfo=datetime.timezone.utc
+        )
+
+    def signature_algorithm_allowed(
+        self,
+        algo: algos.SignedDigestAlgorithm,
+        moment: Optional[datetime.datetime],
+        public_key: Optional[keys.PublicKeyInfo],
+    ) -> AlgorithmUsageConstraint:
+        name = algo['algorithm'].native
+        if moment is None or moment > self.cutoff and 'rsa' in name:
+            return AlgorithmUsageConstraint(
+                allowed=False,
+                not_allowed_after=self.cutoff,
+                failure_reason='RSA considered harmful',
+            )
+        return AlgorithmUsageConstraint(allowed=True)
+
+    def digest_algorithm_allowed(
+        self, algo: algos.DigestAlgorithm, moment: Optional[datetime.datetime]
+    ) -> AlgorithmUsageConstraint:
+        return AlgorithmUsageConstraint(allowed=True)
+
+
 def _assert_certs_known(certs):
     return [
         KnownPOE(
@@ -1417,3 +1451,261 @@ async def test_nontraditional_hybrid_lta_with_failed_timestamp(requests_mock):
         assert result.best_signature_time == datetime.datetime(
             2022, 11, 20, tzinfo=datetime.timezone.utc
         )
+
+
+@pytest.mark.asyncio
+async def test_pades_multi_sig_timestamp_algo_hedge_ok(requests_mock):
+    md_algorithm = 'sha256'
+
+    Illusionist(TESTING_CA_ECDSA).register(requests_mock)
+    tsa_ecdsa = timestamps.HTTPTimeStamper(
+        'http://pyhanko.tests/testing-ca-ecdsa/tsa/tsa',
+        https=False,
+    )
+    tsa_rsa = timestamps.HTTPTimeStamper(
+        'http://pyhanko.tests/testing-ca-ecdsa/tsa/tsa-rsa',
+        https=False,
+    )
+
+    class _Spec(UnsignedAttributeProviderSpec):
+        def unsigned_attr_providers(
+            self,
+            signature: bytes,
+            signed_attrs: cms.CMSAttributes,
+            digest_algorithm: str,
+        ):
+            yield TSTProvider(
+                'sha256',
+                data_to_ts=signature,
+                timestamper=tsa_rsa,
+            )
+            yield TSTProvider(
+                'sha3_256',
+                data_to_ts=signature,
+                timestamper=tsa_ecdsa,
+            )
+
+    store = SimpleCertificateStore().from_certs(FROM_ECC_CA.cert_registry)
+    signer = SimpleSigner(
+        signing_cert=FROM_ECC_CA.signing_cert,
+        signing_key=FROM_ECC_CA.signing_key,
+        cert_registry=store,
+    )
+    signer.unsigned_attr_prov_spec = _Spec()
+
+    trust_manager = SimpleTrustManager.build([ECC_ROOT_CERT])
+
+    with freeze_time('2020-11-20'):
+        vc = ValidationContext(
+            trust_manager=trust_manager,
+            allow_fetching=True,
+            other_certs=[],
+        )
+
+        out = await _generate_pades_test_doc(
+            requests_mock,
+            md_algorithm=md_algorithm,
+            signer=signer,
+            vc=vc,
+            timestamper=tsa_rsa,
+            # to make sure that we really exercise the multi-attr signature,
+            # we will add the PoEs for the validation data by hand
+            use_pades_lta=False,
+        )
+
+    with freeze_time('2029-11-20'):
+        revinfo_policy = (
+            DEFAULT_SIG_VALIDATION_SPEC.cert_validation_policy.revinfo_policy
+        )
+        from pyhanko.sign.validation.ades import _dss_to_local_knowledge
+
+        r = PdfFileReader(out)
+        local_knowledge = _dss_to_local_knowledge(r)
+        local_knowledge = dataclasses.replace(
+            local_knowledge,
+            known_poes=list(
+                local_knowledge.assert_existence_known_at(
+                    datetime.datetime(
+                        2020, 11, 20, tzinfo=datetime.timezone.utc
+                    )
+                )
+            ),
+        )
+        spec = SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=trust_manager,
+                algorithm_usage_policy=RSAConsideredHarmful(2025),
+                revinfo_policy=revinfo_policy,
+            ),
+            local_knowledge=local_knowledge,
+        )
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0],
+            pdf_validation_spec=PdfSignatureValidationSpec(spec),
+        )
+        assert result.ades_subindic == AdESPassed.OK
+        assert result.best_signature_time == datetime.datetime(
+            2020, 11, 20, tzinfo=datetime.timezone.utc
+        )
+
+
+@pytest.mark.asyncio
+async def test_pades_multi_doc_timestamp_algo_hedge_ok(requests_mock):
+    md_algorithm = 'sha256'
+
+    Illusionist(TESTING_CA_ECDSA).register(requests_mock)
+    tsa_ecdsa = timestamps.HTTPTimeStamper(
+        'http://pyhanko.tests/testing-ca-ecdsa/tsa/tsa',
+        https=False,
+    )
+    tsa_rsa = timestamps.HTTPTimeStamper(
+        'http://pyhanko.tests/testing-ca-ecdsa/tsa/tsa-rsa',
+        https=False,
+    )
+
+    store = SimpleCertificateStore().from_certs(FROM_ECC_CA.cert_registry)
+    signer = SimpleSigner(
+        signing_cert=FROM_ECC_CA.signing_cert,
+        signing_key=FROM_ECC_CA.signing_key,
+        cert_registry=store,
+    )
+
+    trust_manager = SimpleTrustManager.build([ECC_ROOT_CERT])
+
+    with freeze_time('2020-11-20'):
+        vc = ValidationContext(
+            trust_manager=trust_manager,
+            allow_fetching=True,
+            other_certs=[],
+        )
+
+        out = await _generate_pades_test_doc(
+            requests_mock,
+            md_algorithm=md_algorithm,
+            signer=signer,
+            vc=vc,
+            timestamper=tsa_rsa,
+            use_pades_lta=False,
+        )
+        w = IncrementalPdfFileWriter(out)
+        await PdfTimeStamper(tsa_rsa).async_timestamp_pdf(
+            w, 'sha256', validation_context=vc, in_place=True
+        )
+        w = IncrementalPdfFileWriter(out)
+        await PdfTimeStamper(tsa_ecdsa).async_timestamp_pdf(
+            w, 'sha256', validation_context=vc, in_place=True
+        )
+
+    with freeze_time('2029-11-20'):
+        revinfo_policy = (
+            DEFAULT_SIG_VALIDATION_SPEC.cert_validation_policy.revinfo_policy
+        )
+        spec = SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=trust_manager,
+                algorithm_usage_policy=RSAConsideredHarmful(2025),
+                revinfo_policy=revinfo_policy,
+            ),
+        )
+        r = PdfFileReader(out)
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0],
+            pdf_validation_spec=PdfSignatureValidationSpec(spec),
+        )
+        assert result.ades_subindic == AdESPassed.OK
+        assert result.best_signature_time == datetime.datetime(
+            2020, 11, 20, tzinfo=datetime.timezone.utc
+        )
+
+
+@pytest.mark.asyncio
+async def test_pades_multi_sig_timestamp_with_unknown_digest(requests_mock):
+    md_algorithm = 'sha256'
+
+    class FunkyTimeStamper(DummyTimeStamper):
+        def _build_tst_info(
+            self,
+            message_imprint: tsp.MessageImprint,
+            dt: datetime.datetime,
+            req: tsp.TimeStampReq,
+        ) -> tsp.TSTInfo:
+            message_imprint['hash_algorithm'] = {
+                'algorithm': '2.999',
+            }
+            return super()._build_tst_info(message_imprint, dt, req)
+
+    trust_manager = SimpleTrustManager.build([ECC_ROOT_CERT, ROOT_CERT])
+
+    with freeze_time('2020-11-20'):
+        out = await _generate_pades_test_doc(
+            requests_mock,
+            md_algorithm=md_algorithm,
+            signer=FROM_CA,
+            timestamper=FunkyTimeStamper(
+                tsa_cert=TSA_CERT,
+                tsa_key=TESTING_CA.key_set.get_private_key('tsa'),
+                certs_to_embed=FROM_CA.cert_registry,
+            ),
+            # to make sure that we really exercise the multi-attr signature,
+            # we will add the PoEs for the validation data by hand
+            use_pades_lta=False,
+        )
+
+    with freeze_time('2029-11-20'):
+        revinfo_policy = (
+            DEFAULT_SIG_VALIDATION_SPEC.cert_validation_policy.revinfo_policy
+        )
+        r = PdfFileReader(out)
+        spec = SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=trust_manager,
+                revinfo_policy=revinfo_policy,
+            ),
+        )
+        with pytest.raises(TSTDigestNotAvailableError):
+            await ades.ades_lta_validation(
+                r.embedded_signatures[0],
+                pdf_validation_spec=PdfSignatureValidationSpec(spec),
+            )
+
+
+@pytest.mark.asyncio
+async def test_content_ts_with_different_digest_not_supported(requests_mock):
+    class FunkyTimeStamper(DummyTimeStamper):
+        def _build_tst_info(
+            self,
+            message_imprint: tsp.MessageImprint,
+            dt: datetime.datetime,
+            req: tsp.TimeStampReq,
+        ) -> tsp.TSTInfo:
+            # this of course makes the hash invalid, but that's not the point
+            # of the test.
+            message_imprint['hash_algorithm'] = {
+                'algorithm': 'sha3_512',
+            }
+            return super()._build_tst_info(message_imprint, dt, req)
+
+    with freeze_time('2020-12-10'):
+        signature = await REVOKED_SIGNER.async_sign_general_data(
+            b'Hello world!',
+            'sha256',
+            detached=False,
+            timestamper=FunkyTimeStamper(
+                tsa_cert=TSA_CERT,
+                tsa_key=TESTING_CA.key_set.get_private_key('tsa'),
+                certs_to_embed=FROM_CA.cert_registry,
+            ),
+            use_cades=True,
+            signed_attr_settings=PdfCMSSignedAttributes(
+                cades_signed_attrs=CAdESSignedAttrSpec(timestamp_content=True)
+            ),
+        )
+        signature = cms.ContentInfo.load(signature.dump())
+
+    with freeze_time('2020-12-25'):
+        live_testing_vc(requests_mock)
+        with pytest.raises(TSTDigestNotAvailableError):
+            await ades.ades_basic_validation(
+                signature['content'],
+                validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
+            )

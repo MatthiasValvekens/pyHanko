@@ -3,7 +3,7 @@ import re
 from io import BytesIO
 
 import pytest
-from asn1crypto import cms, pem
+from asn1crypto import cms, pem, tsp
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
@@ -12,7 +12,8 @@ from pyhanko.cli._ctx import CLIContext, UXContext
 from pyhanko.pdf_utils import writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
+from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf, signers
+from pyhanko.sign.timestamps import DummyTimeStamper
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 from pyhanko_testing_commons.test_data.samples import (
     MINIMAL,
@@ -21,6 +22,7 @@ from pyhanko_testing_commons.test_data.samples import (
     MINIMAL_PUBKEY_AES256,
     TESTING_CA,
 )
+from pyhanko_testing_commons.test_utils.signing_commons import FROM_CA, TSA_CERT
 
 from ..conftest import (
     FREEZE_DT,
@@ -470,6 +472,55 @@ def test_basic_validate_with_weak_hash(cli_runner, pretty, cli_context):
     )
     assert result.exit_code == 1
     assert 'sha1_rsa is not allowed' in result.output
+
+
+@pytest.mark.parametrize('pretty', [True, False])
+def test_basic_validate_with_unknown_hash(cli_runner, pretty, cli_context):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    class FunkyTimeStamper(DummyTimeStamper):
+        def _build_tst_info(
+            self,
+            message_imprint: tsp.MessageImprint,
+            dt: datetime.datetime,
+            req: tsp.TimeStampReq,
+        ) -> tsp.TSTInfo:
+            message_imprint['hash_algorithm'] = {
+                'algorithm': '2.999',
+            }
+            return super()._build_tst_info(message_imprint, dt, req)
+
+    fname = 'to-validate.pdf'
+    with open(fname, 'wb') as outf:
+        signers.sign_pdf(
+            w,
+            signers.PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=None,
+            ),
+            signer=FROM_CA,
+            timestamper=FunkyTimeStamper(
+                tsa_cert=TSA_CERT,
+                tsa_key=TESTING_CA.key_set.get_private_key('tsa'),
+                certs_to_embed=FROM_CA.cert_registry,
+            ),
+            output=outf,
+        )
+    root_cert = _write_cert(TESTING_CA, CertLabel('root'), 'root.cert.pem')
+    _write_config({'validation-contexts': {'default': {'trust': root_cert}}})
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            *(('--pretty-print',) if pretty else ()),
+            fname,
+        ],
+        obj=cli_context,
+    )
+    assert result.exit_code == 1
+    assert 'An error occurred' in result.output
+    assert 'Unknown hash function' in result.output
 
 
 @pytest.mark.parametrize('verbosity', ['default', 'verbose', 'pretty'])

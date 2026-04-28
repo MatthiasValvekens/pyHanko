@@ -36,6 +36,7 @@ from pyhanko.sign.general import (
     find_cms_attribute_iter,
     find_unique_cms_attribute,
 )
+from pyhanko.sign.validation.errors import TSTDigestNotAvailableError
 from pyhanko_certvalidator import (
     CancelableAsyncIterator,
     ValidationContext,
@@ -812,33 +813,31 @@ def extract_single_tst_datum(
         return None
 
 
-def compute_tst_digest(
-    tst_signed_data: cms.SignedData,
-    payload: bytes,
-) -> bytes:
-    """
-    Compute the digest of a payload (typically another signature)
-    according to the message imprint algorithm information in a timestamp token.
-
-    Internal API.
-
-    :param tst_signed_data:
-        A :class:`cms.SignedData` object containing encapsulated timestamp
-        information.
-    :param payload:
-        Bytes over which to compute the digest.
-    :return:
-        The computed digest.
-    """
-
+def identify_tst_message_imprint_algo(tst_signed_data) -> str:
     eci = tst_signed_data['encap_content_info']
     mi = eci['content'].parsed['message_imprint']
-    tst_md_algorithm = mi['hash_algorithm']['algorithm'].native
+    return mi['hash_algorithm']['algorithm'].native
 
-    tst_md_spec = get_pyca_cryptography_hash(tst_md_algorithm)
-    md = hashes.Hash(tst_md_spec)
-    md.update(payload)
-    return md.finalize()
+
+def message_imprint_checker(
+    signer_info: cms.SignerInfo,
+) -> Callable[[str], bytes]:
+    def _mi_check(mi_hash_algo: str) -> bytes:
+        tst_md_spec = get_hash_spec_for_tst_digest(mi_hash_algo)
+        md = hashes.Hash(tst_md_spec)
+        md.update(signer_info['signature'].native)
+        return md.finalize()
+
+    return _mi_check
+
+
+def get_hash_spec_for_tst_digest(mi_hash_algo: str):
+    try:
+        return get_pyca_cryptography_hash(mi_hash_algo)
+    except AttributeError as e:
+        raise TSTDigestNotAvailableError(
+            f"Unknown hash function {mi_hash_algo!r}"
+        ) from e
 
 
 async def collect_timing_info(
@@ -880,14 +879,10 @@ async def collect_timing_info(
 
     tst_validity: Optional[TimestampSignatureStatus] = None
     for tst_signed_data in extract_tst_data_iter(signer_info, signed=False):
-        tst_signature_digest = compute_tst_digest(
-            tst_signed_data, payload=signer_info['signature'].native
-        )
-        assert tst_signature_digest is not None
         tst_validity_kwargs = await validate_tst_signed_data(
             tst_signed_data,
             ts_validation_context,
-            tst_signature_digest,
+            message_imprint_checker(signer_info),
             algorithm_policy=algorithm_policy,
         )
         tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)

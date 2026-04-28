@@ -39,7 +39,6 @@ from asn1crypto import cms, keys, tsp, x509
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto.crl import CertificateList
 from asn1crypto.ocsp import OCSPResponse
-from cryptography.hazmat.primitives import hashes
 from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.sign.ades.report import (
     AdESFailure,
@@ -63,10 +62,6 @@ from pyhanko.sign.validation import (
     generic_cms,
 )
 from pyhanko.sign.validation.errors import TSTDigestNotAvailableError
-from pyhanko.sign.validation.generic_cms import (
-    compute_tst_digest,
-    extract_tst_data_iter,
-)
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.sign.validation.status import (
     DocumentTimestampStatus,
@@ -110,7 +105,6 @@ from pyhanko_certvalidator.registry import PathBuilder, TrustManager
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 from pyhanko_certvalidator.revinfo.validate_crl import CRLOfInterest
 from pyhanko_certvalidator.revinfo.validate_ocsp import OCSPResponseOfInterest
-from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 from ..diff_analysis import DiffPolicy
 from .dss import enumerate_ocsp_certs
@@ -1054,17 +1048,6 @@ async def ades_with_time_validation(
     )
 
     # process signature timestamps
-    def _mi_check(mi_hash_algo: str) -> bytes:
-        try:
-            tst_md_spec = get_pyca_cryptography_hash(mi_hash_algo)
-        except AttributeError as e:
-            raise TSTDigestNotAvailableError(
-                f"Unknown hash function {mi_hash_algo!r}"
-            ) from e
-        md = hashes.Hash(tst_md_spec)
-        md.update(signer_info['signature'].native)
-        return md.finalize()
-
     try:
         next(generic_cms.extract_tst_data_iter(signer_info, signed=False))
     except StopIteration:
@@ -1089,7 +1072,9 @@ async def ades_with_time_validation(
         signer_info,
         ts_validation_context,
         signed=False,
-        expected_tst_digest_by_md=_mi_check,
+        expected_tst_digest_by_md=generic_cms.message_imprint_checker(
+            signer_info
+        ),
         qualification_requirements=ts_qualification_requirements,
     )
     vos = ValidationObjectSet(
@@ -1960,15 +1945,14 @@ async def _process_signature_ts(
         or validation_spec.cert_validation_policy
     )
     algo_policy = cert_validation_policy.algorithm_usage_policy
-    expected_tst_imprint = compute_tst_digest(
-        signature_ts, payload=signature_bytes
-    )
 
     signature_ts_prelim_result = await ades_timestamp_validation(
         tst_signed_data=signature_ts,
         validation_spec=validation_spec,
         timing_info=timing_info,
-        expected_tst_imprint=expected_tst_imprint,
+        expected_tst_imprint=generic_cms.message_imprint_checker(
+            embedded_sig.signer_info
+        ),
         validation_data_handlers=bootstrap_validation_data_handlers(
             validation_spec,
             timing_info=timing_info,
@@ -2229,7 +2213,7 @@ async def ades_lta_validation(
     # If all results are failures, the last one is preserved
     # (currently there's no way to track results for multiple validations)
     signature_ts_result: Optional[AdESBasicValidationResult] = None
-    for signature_ts in extract_tst_data_iter(
+    for signature_ts in generic_cms.extract_tst_data_iter(
         embedded_sig.signer_info, signed=False
     ):
         current_ts_result = await _process_signature_ts(

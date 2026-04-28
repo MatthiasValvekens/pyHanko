@@ -29,6 +29,7 @@ from pyhanko.sign.general import (
     byte_range_digest,
     extract_signer_info,
 )
+from pyhanko.sign.validation import generic_cms
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
 
@@ -36,16 +37,6 @@ from .errors import (
     SignatureValidationError,
     SigSeedValueValidationError,
     ValidationInfoReadingError,
-)
-from .generic_cms import (
-    cms_basic_validation,
-    collect_signer_attr_status,
-    collect_timing_info,
-    compute_tst_digest,
-    extract_certs_for_validation,
-    extract_self_reported_ts,
-    extract_single_tst_datum,
-    validate_tst_signed_data,
 )
 from .settings import KeyUsageConstraints
 from .status import (
@@ -221,7 +212,9 @@ class EmbeddedPdfSignature:
 
     def _init_cert_info(self) -> SignedDataCerts:
         if self._sd_cert_info is None:
-            self._sd_cert_info = extract_certs_for_validation(self.signed_data)
+            self._sd_cert_info = generic_cms.extract_certs_for_validation(
+                self.signed_data
+            )
         return self._sd_cert_info
 
     @property
@@ -273,7 +266,7 @@ class EmbeddedPdfSignature:
             signature's signed attributes or provided as part of the signature
             object in the PDF document.
         """
-        ts = extract_self_reported_ts(self.signer_info)
+        ts = generic_cms.extract_self_reported_ts(self.signer_info)
         if ts is not None:
             return ts
 
@@ -292,7 +285,7 @@ class EmbeddedPdfSignature:
             The signed data component of the timestamp token embedded in this
             signature, if present.
         """
-        return extract_single_tst_datum(self.signer_info)
+        return generic_cms.extract_single_tst_datum(self.signer_info)
 
     def compute_integrity_info(self, diff_policy=None, skip_diff=False):
         """
@@ -469,13 +462,16 @@ class EmbeddedPdfSignature:
         if self.tst_signature_digest is not None:
             return self.tst_signature_digest
 
-        tst_data = extract_single_tst_datum(self.signer_info, signed=False)
+        tst_data = generic_cms.extract_single_tst_datum(
+            self.signer_info, signed=False
+        )
 
         if tst_data is None:
             self.tst_signature_digest = digest = None
         else:
-            self.tst_signature_digest = digest = compute_tst_digest(
-                tst_data, payload=self.signer_info['signature'].native
+            mi_algo = generic_cms.identify_tst_message_imprint_algo(tst_data)
+            self.tst_signature_digest = digest = (
+                generic_cms.message_imprint_checker(self.signer_info)(mi_algo)
             )
         return digest
 
@@ -898,7 +894,7 @@ async def async_validate_pdf_signature(
     )
     status_kwargs = embedded_sig.summarise_integrity_info()
 
-    ts_status_kwargs = await collect_timing_info(
+    ts_status_kwargs = await generic_cms.collect_timing_info(
         embedded_sig.signer_info,
         ts_validation_context,
         raw_digest=embedded_sig.compute_digest,
@@ -914,7 +910,7 @@ async def async_validate_pdf_signature(
     key_usage_settings = PdfSignatureStatus.default_usage_constraints(
         key_usage_settings
     )
-    status_kwargs = await cms_basic_validation(
+    status_kwargs = await generic_cms.cms_basic_validation(
         embedded_sig.signed_data,
         raw_digest=embedded_sig.compute_digest(),
         validation_context=signer_validation_context,
@@ -935,7 +931,7 @@ async def async_validate_pdf_signature(
             embedded_sig.other_embedded_certs
         )
     status_kwargs.update(
-        await collect_signer_attr_status(
+        await generic_cms.collect_signer_attr_status(
             sd_attr_certificates=embedded_sig.embedded_attr_certs,
             signer_cert=embedded_sig.signer_cert,
             validation_context=ac_validation_context,
@@ -988,7 +984,7 @@ async def async_validate_pdf_timestamp(
         diff_policy=diff_policy, skip_diff=skip_diff
     )
 
-    status_kwargs = await validate_tst_signed_data(
+    status_kwargs = await generic_cms.validate_tst_signed_data(
         embedded_sig.signed_data,
         validation_context,
         embedded_sig.compute_digest,
