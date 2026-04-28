@@ -2752,22 +2752,6 @@
     }
   },
   {
-    "id": "41303",
-    "name": "invalid_dn_nameconstraints_test3",
-    "cert": "InvalidDNnameConstraintsTest3EE.crt",
-    "other_certs": [
-      "nameConstraintsDN1CACert.crt"
-    ],
-    "crls": [
-      "nameConstraintsDN1CACRL.crl"
-    ],
-    "path_len": 3,
-    "error": {
-      "class": "PathValidationError",
-      "msg_regex": "The path could not be validated because not all names of the end-entity certificate are in the permitted namespace of the issuing authority."
-    }
-  },
-  {
     "id": "41304",
     "name": "valid_dn_nameconstraints_test4",
     "cert": "ValidDNnameConstraintsTest4EE.crt",

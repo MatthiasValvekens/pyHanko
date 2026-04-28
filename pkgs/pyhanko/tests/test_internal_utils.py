@@ -183,8 +183,6 @@ def test_whitespace_variants():
         b'   \n a',
         b'   \r\n a',
         b'   \r a',
-        b'   \r a',
-        b'   \r a',
     ],
 )
 def test_skip_ws_behaviour(data):
@@ -1942,7 +1940,6 @@ COMMENT_IN_HEX_STRING_DATA = [
     b'<dead %Bleh\nbeef>',
     b'<deadbeef %Bleh\n>',
     b'<d %Bleh\neadbeef>',
-    b'<deadbee%Bleh\nf>',
     b'<%Bleh\n deadbeef>',
     b'<dead%Bleh\n beef>',
     b'<deadbeef%Bleh\n >',
@@ -1973,8 +1970,6 @@ UNORTHODOX_STREAM_SYNTAX = [
     b'\nstream\nabcdefg\nendstream ',
     b'stream\nabcdefg\nendstream ',
     b' \nstream\nabcdefg\nendstream ',
-    b'\nstream \nabcdefg\nendstream',
-    b'\nstream \nabcdefg\nendstream',
 ]
 
 

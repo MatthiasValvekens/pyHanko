@@ -90,6 +90,7 @@ markers = [
     "hsm: run test on HSM platform",
     "algo: indicate signing algorithm used in test",  # so far only used in PKCS#11 suite
 ]
+strict = true
 
 [tool.coverage.run]
 omit = ["*docs*", "*test*", "*venv*", "setup.py", "_saslprep.py"]
