@@ -168,9 +168,8 @@ Long-term verifiability checking
 
 .. versionchanged:: 0.31.0
 
-    The :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
-    function was deprecated in favour of the newer AdES-based
-    functionality in :mod:`pyhanko.sign.validation.ades`.
+    Updated to reference newer AdES-based API in
+    :mod:`pyhanko.sign.validation.ades`.
 
 
 As explained :ref:`here <pdf-signing-background>` and
@@ -181,12 +180,12 @@ implementations, where LTV is short for *long-term verifiable*.
 
 The notion of what it means to be "LTV enabled" is not entirely well-defined
 (since it inherently depends on the set of trust roots and policies
-used by the validator). PyHanko exposes the (now deprecated)
-:func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature` function
-to make this assessment, but the implementation is quite ad-hoc and
-therefore overly opinionated. See
-:func:`~.pyhanko.sign.validation.ades.simulate_future_ades_lta_validation`
-for a similar but more standards-based approach.
+used by the validator).
+One way to model this is to ask what a future validator would conclude
+given the validation information embedded into the document at the time of
+signing (assuming reasonable timestamp chain maintenance).
+See :func:`~.pyhanko.sign.validation.ades.simulate_future_ades_lta_validation`
+for a standards-based attempt to formalise this.
 
 
 To validate a signature while taking into account embedded historical
