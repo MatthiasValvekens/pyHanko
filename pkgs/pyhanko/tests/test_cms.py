@@ -51,24 +51,34 @@ from pyhanko.sign.validation import (
     StandardCMSSignatureStatus,
     async_validate_cms_signature,
     async_validate_detached_cms,
-    async_validate_pdf_ltv_signature,
     async_validate_pdf_signature,
     collect_validation_info,
     validate_cms_signature,
     validate_pdf_signature,
 )
+from pyhanko.sign.validation.ades import ades_lta_validation
 from pyhanko.sign.validation.errors import (
     SignatureValidationError,
 )
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
+from pyhanko.sign.validation.policy_decl import (
+    PdfSignatureValidationSpec,
+    SignatureValidationSpec,
+)
 from pyhanko.sign.validation.status import ClaimedAttributes
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.context import CertValidationPolicySpec
 from pyhanko_certvalidator.policy_decl import (
+    REQUIRE_REVINFO,
     AlgorithmUsageConstraint,
+    CertRevTrustPolicy,
     DisallowWeakAlgorithmsPolicy,
 )
-from pyhanko_certvalidator.registry import SimpleCertificateStore
+from pyhanko_certvalidator.registry import (
+    SimpleCertificateStore,
+    SimpleTrustManager,
+)
 from pyhanko_testing_commons.test_data.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
@@ -1693,10 +1703,9 @@ async def test_embed_ac(requests_mock, ac_to_include):
     assert role['role_name'].native == 'bigboss@example.com'
 
 
-# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_embed_ac_revinfo_adobe_style(requests_mock, expect_deprecation):
+async def test_embed_ac_revinfo_adobe_style(requests_mock):
     signer = get_ac_aware_signer()
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
@@ -1745,16 +1754,27 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock, expect_deprecation):
     # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert -> 7 certs
     assert len(s.other_embedded_certs) == 5  # signer cert is excluded
     assert len(s.embedded_attr_certs) == 1
-    from pyhanko.sign.validation import RevocationInfoValidationType
 
-    status = await async_validate_pdf_ltv_signature(
-        s,
-        RevocationInfoValidationType.ADOBE_STYLE,
-        validation_context_kwargs={'trust_roots': [pki_arch.get_cert('root')]},
-        ac_validation_context_kwargs={
-            'trust_roots': [pki_arch.get_cert('root-aa')]
-        },
+    trust_manager = SimpleTrustManager.build(
+        trust_roots=[pki_arch.get_cert('root')],
     )
+    ac_trust_manager = SimpleTrustManager.build(
+        trust_roots=[pki_arch.get_cert('root-aa')],
+    )
+    validation_spec = PdfSignatureValidationSpec(
+        SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=trust_manager,
+                revinfo_policy=CertRevTrustPolicy(REQUIRE_REVINFO),
+            ),
+            ac_validation_policy=CertValidationPolicySpec(
+                ac_trust_manager,
+                revinfo_policy=CertRevTrustPolicy(REQUIRE_REVINFO),
+            ),
+        )
+    )
+    ades_status = await ades_lta_validation(s, validation_spec)
+    status = ades_status.api_status
     assert status.bottom_line
     roles = list(status.ac_attrs['role'].attr_values)
     role = roles[0]

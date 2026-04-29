@@ -41,12 +41,16 @@ from pyhanko.sign import (
 from pyhanko.sign.general import SigningError, simple_cms_attribute
 from pyhanko.sign.signers import cms_embedder
 from pyhanko.sign.signers.pdf_byterange import SigByteRangeObject
-from pyhanko.sign.validation import (
-    RevocationInfoValidationType,
-    validate_pdf_ltv_signature,
-)
+from pyhanko.sign.validation.ades import ades_lta_validation
 from pyhanko.sign.validation.errors import DisallowedAlgorithmError
+from pyhanko.sign.validation.policy_decl import (
+    PdfSignatureValidationSpec,
+    SignatureValidationSpec,
+)
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.context import CertValidationPolicySpec
+from pyhanko_certvalidator.policy_decl import NO_REVOCATION, CertRevTrustPolicy
+from pyhanko_certvalidator.registry import SimpleTrustManager
 from pyhanko_testing_commons.test_data.samples import (
     PUBKEY_TEST_DECRYPTER,
     TESTING_CA_ECDSA,
@@ -350,10 +354,9 @@ def test_signature_nondefault_hash(encryption_type):
     return out
 
 
-# noinspection PyDeprecation
 @pdf_mac_good
 @freeze_time('2020-11-01')
-def test_pdf_mac_pades(requests_mock, expect_deprecation):
+def test_pdf_mac_pades(requests_mock):
     w = init_sample_doc(EncryptionType.STANDARD)
 
     trust_roots = [ECC_ROOT_CERT]
@@ -386,15 +389,23 @@ def test_pdf_mac_pades(requests_mock, expect_deprecation):
 
     r = PdfFileReader(out)
     r.decrypt(DUMMY_PASSWORD)
-    validate_pdf_ltv_signature(
-        r.embedded_signatures[0],
-        validation_type=RevocationInfoValidationType.PADES_LTA,
-        validation_context_kwargs={
-            'trust_roots': trust_roots,
-            'allow_fetching': False,
-            'revocation_mode': 'soft-fail',
-        },
+
+    trust_manager = SimpleTrustManager.build(
+        trust_roots=trust_roots,
     )
+    validation_spec = PdfSignatureValidationSpec(
+        SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=trust_manager,
+                revinfo_policy=CertRevTrustPolicy(NO_REVOCATION),
+            ),
+        )
+    )
+    ades_status = asyncio.run(
+        ades_lta_validation(r.embedded_signatures[0], validation_spec)
+    )
+    status = ades_status.api_status
+    assert status.bottom_line
     return out
 
 

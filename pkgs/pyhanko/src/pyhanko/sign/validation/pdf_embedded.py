@@ -24,6 +24,8 @@ from pyhanko.sign.fields import (
     SigSeedValueSpec,
 )
 from pyhanko.sign.general import (
+    MultivaluedAttributeError,
+    NonexistentAttributeError,
     SignedDataCerts,
     UnacceptableSignerError,
     byte_range_digest,
@@ -36,7 +38,6 @@ from pyhanko_certvalidator.path import ValidationPath
 from .errors import (
     SignatureValidationError,
     SigSeedValueValidationError,
-    ValidationInfoReadingError,
 )
 from .settings import KeyUsageConstraints
 from .status import (
@@ -278,15 +279,6 @@ class EmbeddedPdfSignature:
         except KeyError:  # pragma: nocover
             return None
 
-    @property
-    def attached_timestamp_data(self) -> Optional[cms.SignedData]:
-        """
-        :return:
-            The signed data component of the timestamp token embedded in this
-            signature, if present.
-        """
-        return generic_cms.extract_single_tst_datum(self.signer_info)
-
     def compute_integrity_info(self, diff_policy=None, skip_diff=False):
         """
         Compute the various integrity indicators of this signature.
@@ -301,7 +293,6 @@ class EmbeddedPdfSignature:
         """
         self._enforce_hybrid_xref_policy()
         self.compute_digest()
-        self.compute_tst_digest()
 
         # TODO in scenarios where we have to verify multiple signatures, we're
         #  doing a lot of double work here. This could be improved.
@@ -441,38 +432,6 @@ class EmbeddedPdfSignature:
             md_algorithm=digest_algorithm,
         )
         self.external_digests[digest_algorithm] = digest
-        return digest
-
-    def compute_tst_digest(self) -> Optional[bytes]:
-        """
-        Compute the digest of the signature needed to validate its timestamp
-        token (if present).
-
-        .. warning::
-            This computation is only relevant for timestamp tokens embedded
-            inside a regular signature.
-            If the signature in question is a document timestamp (where the
-            entire signature object is a timestamp token), this method
-            does not apply.
-
-        :return:
-            The digest value, or ``None`` if there is no timestamp token.
-        """
-
-        if self.tst_signature_digest is not None:
-            return self.tst_signature_digest
-
-        tst_data = generic_cms.extract_single_tst_datum(
-            self.signer_info, signed=False
-        )
-
-        if tst_data is None:
-            self.tst_signature_digest = digest = None
-        else:
-            mi_algo = generic_cms.identify_tst_message_imprint_algo(tst_data)
-            self.tst_signature_digest = digest = (
-                generic_cms.message_imprint_checker(self.signer_info)(mi_algo)
-            )
         return digest
 
     def evaluate_signature_coverage(self) -> SignatureCoverageLevel:
@@ -717,12 +676,12 @@ def _validate_sv_constraints(
     if (
         flags & SigSeedValFlags.ADD_REV_INFO
     ) and sv_spec.add_rev_info is not None:
-        from pyhanko.sign.validation.ltv import retrieve_adobe_revocation_info
-
         try:
-            retrieve_adobe_revocation_info(signer_info)
+            generic_cms.find_unique_cms_attribute(
+                signer_info['signed_attrs'], "adobe_revocation_info_archival"
+            )
             revinfo_found = True
-        except ValidationInfoReadingError:
+        except (NonexistentAttributeError, MultivaluedAttributeError):
             revinfo_found = False
 
         if sv_spec.add_rev_info != revinfo_found:

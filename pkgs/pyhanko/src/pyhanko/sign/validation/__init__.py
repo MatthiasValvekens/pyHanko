@@ -17,14 +17,6 @@ from .generic_cms import (
     async_validate_cms_signature,
     async_validate_detached_cms,
 )
-
-# noinspection PyDeprecation
-from .ltv import (
-    RevocationInfoValidationType,
-    apply_adobe_revocation_info,
-    async_validate_pdf_ltv_signature,
-    get_timestamp_chain,
-)
 from .pdf_embedded import (
     DocMDPInfo,
     EmbeddedPdfSignature,
@@ -50,22 +42,17 @@ __all__ = [
     'EmbeddedPdfSignature',
     'ModificationInfo',
     'PdfSignatureStatus',
-    'RevocationInfoValidationType',
     'SignatureCoverageLevel',
     'StandardCMSSignatureStatus',
     'add_validation_info',
-    'apply_adobe_revocation_info',
     'async_validate_cms_signature',
     'async_validate_detached_cms',
-    'async_validate_pdf_ltv_signature',
     'async_validate_pdf_signature',
     'async_validate_pdf_timestamp',
     'collect_validation_info',
-    'get_timestamp_chain',
     'read_certification_data',
     'validate_cms_signature',
     'validate_detached_cms',
-    'validate_pdf_ltv_signature',
     'validate_pdf_signature',
     'validate_pdf_timestamp',
 ]
@@ -327,70 +314,5 @@ def add_validation_info(
         in_place=in_place,
         chunk_size=chunk_size,
         force_write=force_write,
-    )
-    return asyncio.run(coro)
-
-
-def validate_pdf_ltv_signature(
-    embedded_sig: EmbeddedPdfSignature,
-    validation_type: RevocationInfoValidationType,
-    validation_context_kwargs=None,
-    bootstrap_validation_context=None,
-    force_revinfo=False,
-    diff_policy: Optional[DiffPolicy] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
-    skip_diff: bool = False,
-) -> PdfSignatureStatus:
-    """
-    .. versionchanged:: 0.9.0
-        Wrapper around :func:`async_validate_pdf_ltv_signature`.
-
-    Validate a PDF LTV signature according to a particular profile.
-
-    :param embedded_sig:
-        Embedded signature to evaluate.
-    :param validation_type:
-        Validation profile to use.
-    :param validation_context_kwargs:
-        Keyword args to instantiate
-        :class:`.pyhanko_certvalidator.ValidationContext` objects needed over
-        the course of the validation.
-    :param bootstrap_validation_context:
-        Validation context used to validate the current timestamp.
-    :param force_revinfo:
-        Require all certificates encountered to have some form of live
-        revocation checking provisions.
-    :param diff_policy:
-        Policy to evaluate potential incremental updates that were appended
-        to the signed revision of the document.
-        Defaults to
-        :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
-    :param key_usage_settings:
-        A :class:`.KeyUsageConstraints` object specifying which key usages
-        must or must not be present in the signer's certificate.
-    :param skip_diff:
-        If ``True``, skip the difference analysis step entirely.
-    :return:
-        The status of the signature.
-    """
-
-    warnings.warn(
-        "'validate_pdf_ltv_signature' uses a deprecated "
-        "ad-hoc validation methodology, use 'ades_lta_validation' instead "
-        "for a more standards-based approach. This function may be removed "
-        "in a future pyHanko version.",
-        DeprecationWarning,
-    )
-
-    # noinspection PyDeprecation
-    coro = async_validate_pdf_ltv_signature(
-        embedded_sig=embedded_sig,
-        validation_type=validation_type,
-        validation_context_kwargs=validation_context_kwargs,
-        bootstrap_validation_context=bootstrap_validation_context,
-        force_revinfo=force_revinfo,
-        diff_policy=diff_policy,
-        key_usage_settings=key_usage_settings,
-        skip_diff=skip_diff,
     )
     return asyncio.run(coro)

@@ -1,5 +1,4 @@
 import asyncio
-import warnings
 from dataclasses import replace
 from datetime import datetime
 
@@ -22,14 +21,12 @@ from pyhanko.pdf_utils.misc import isoparse
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import validation
 from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY
-from pyhanko.sign.validation import RevocationInfoValidationType
 from pyhanko.sign.validation.ades import (
     AdESLTAValidationResult,
     ades_lta_validation,
 )
 from pyhanko.sign.validation.errors import (
     SignatureValidationError,
-    ValidationInfoReadingError,
 )
 from pyhanko.sign.validation.policy_decl import (
     LocalKnowledge,
@@ -72,38 +69,18 @@ def _print_summary_result(name, fingerprint, status_str):
 
 
 def _signature_status(
-    ltv_profile,
     vc_kwargs,
-    force_revinfo,
     key_usage_settings,
     embedded_sig,
     skip_diff=False,
 ):
-    if ltv_profile is None:
-        vc = ValidationContext(**vc_kwargs)
-        status = pyhanko.sign.validation.validate_pdf_signature(
-            embedded_sig,
-            key_usage_settings=key_usage_settings,
-            signer_validation_context=vc,
-            skip_diff=skip_diff,
-        )
-    else:
-        warnings.warn(
-            "LTV validation as part of the validate command is deprecated. "
-            "Use pyhanko sign adesverify instead.",
-            UserWarning,
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=DeprecationWarning)
-            # noinspection PyDeprecation
-            status = validation.validate_pdf_ltv_signature(
-                embedded_sig,
-                ltv_profile,
-                key_usage_settings=key_usage_settings,
-                force_revinfo=force_revinfo,
-                validation_context_kwargs=vc_kwargs,
-                skip_diff=skip_diff,
-            )
+    vc = ValidationContext(**vc_kwargs)
+    status = pyhanko.sign.validation.validate_pdf_signature(
+        embedded_sig,
+        key_usage_settings=key_usage_settings,
+        signer_validation_context=vc,
+        skip_diff=skip_diff,
+    )
     return status
 
 
@@ -148,16 +125,6 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
             return pretty_printed, status.bottom_line
         else:
             return status.summary(), status.bottom_line
-    except ValidationInfoReadingError as e:
-        msg = (
-            'An error occurred while parsing the revocation information '
-            'for this signature: ' + str(e)
-        )
-        logger.error(msg)
-        if pretty_print:
-            return msg, False
-        else:
-            return 'REVINFO_FAILURE', False
     except SignatureValidationError as e:
         msg = 'An error occurred while validating this signature: ' + str(e)
         logger.error(msg, exc_info=e)
@@ -225,12 +192,6 @@ def _open_file_for_validation(infile, no_strict_syntax, password):
     is_flag=True,
     default=False,
     show_default=True,
-)
-@click.option(
-    '--ltv-profile',
-    help='LTV signature validation profile',
-    type=click.Choice(RevocationInfoValidationType.as_tuple()),
-    required=False,
 )
 @click.option(
     '--force-revinfo',
@@ -324,7 +285,6 @@ def validate_signatures(
     eutl_force_redownload,
     eutl_territories,
     other_certs,
-    ltv_profile,
     force_revinfo,
     soft_revocation_check,
     no_revocation_check,
@@ -346,12 +306,6 @@ def validate_signatures(
         soft_revocation_check = True
 
     _assert_consistent_print_settings(pretty_print, executive_summary)
-    if ltv_profile is not None:
-        if validation_time is not None:
-            raise click.ClickException(
-                "--validation-time is not compatible with --ltv-profile"
-            )
-        ltv_profile = RevocationInfoValidationType(ltv_profile)
 
     if no_revocation_check:
         rev_mode = 'none'
@@ -410,8 +364,6 @@ def validate_signatures(
                 vc_kwargs['moment'] = embedded_sig.self_reported_timestamp
             (status_str, signature_ok) = _signature_status_str(
                 status_callback=lambda: _signature_status(
-                    ltv_profile=ltv_profile,
-                    force_revinfo=force_revinfo,
                     vc_kwargs=vc_kwargs,
                     key_usage_settings=key_usage_settings,
                     embedded_sig=embedded_sig,

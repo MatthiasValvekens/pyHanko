@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from typing import (
@@ -92,7 +91,6 @@ __all__ = [
     'collect_timing_info',
     'extract_certs_for_validation',
     'extract_self_reported_ts',
-    'extract_single_tst_datum',
     'get_signing_cert_attr',
     'validate_algorithm_protection',
     'validate_sig_integrity',
@@ -789,36 +787,6 @@ def extract_tst_data_iter(
         yield tst['content']
 
 
-def extract_single_tst_datum(
-    signer_info: cms.SignerInfo, signed: bool = False
-) -> Optional[cms.SignedData]:
-    """
-    Extract signed data associated with a timestamp token.
-
-    Internal API.
-
-    :param signer_info:
-        A ``SignerInfo`` value.
-    :param signed:
-        If ``True``, look for a content timestamp (among the signed
-        attributes), else look for a signature timestamp (among the unsigned
-        attributes).
-    :return:
-        The ``SignedData`` value found, or ``None``.
-    """
-
-    try:
-        return next(extract_tst_data_iter(signer_info, signed=signed))
-    except StopIteration:
-        return None
-
-
-def identify_tst_message_imprint_algo(tst_signed_data) -> str:
-    eci = tst_signed_data['encap_content_info']
-    mi = eci['content'].parsed['message_imprint']
-    return mi['hash_algorithm']['algorithm'].native
-
-
 def message_imprint_checker(
     signer_info: cms.SignerInfo,
 ) -> Callable[[str], bytes]:
@@ -843,7 +811,7 @@ def get_hash_spec_for_tst_digest(mi_hash_algo: str):
 async def collect_timing_info(
     signer_info: cms.SignerInfo,
     ts_validation_context: Optional[ValidationContext],
-    raw_digest: Union[bytes, Callable[[str], bytes]],
+    raw_digest: Callable[[str], bytes],
     algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
 ):
     """
@@ -918,7 +886,7 @@ async def collect_timing_info(
 async def validate_tst_signed_data(
     tst_signed_data: cms.SignedData,
     validation_context: Optional[ValidationContext],
-    expected_tst_imprint: Union[bytes, Callable[[str], bytes]],
+    expected_tst_imprint: Callable[[str], bytes],
     algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
 ):
     """
@@ -933,11 +901,6 @@ async def validate_tst_signed_data(
         A callable that takes a hash algorithm names and returns a digest value.
         detailing the expected message imprint value that should be contained in
         the encapsulated ``TSTInfo``.
-
-        If this parameter is specified as a ``bytes`` value directly,
-        the digest algorithm will not be checked.
-        This usage is deprecated, but still present in some code paths that
-        enforce the digest algorithm consistency through another mechanism.
     :param algorithm_policy:
         The algorithm usage policy for the signature validation.
 
@@ -974,19 +937,8 @@ async def validate_tst_signed_data(
     # compare the expected TST digest against the message imprint
     # inside the signed data
     tst_imprint = tst_info['message_imprint']['hashed_message'].native
-    if isinstance(expected_tst_imprint, bytes):
-        warnings.warn(
-            "Passing a 'bytes' object as the expected TST imprint is "
-            "deprecated, since it obscures the check that the digest "
-            "algorithm is in fact the expected one. ",
-            DeprecationWarning,
-        )
-        expected_tst_imprint_value = expected_tst_imprint
-    else:
-        tst_algo = tst_info['message_imprint']['hash_algorithm'][
-            'algorithm'
-        ].native
-        expected_tst_imprint_value = expected_tst_imprint(tst_algo)
+    tst_algo = tst_info['message_imprint']['hash_algorithm']['algorithm'].native
+    expected_tst_imprint_value = expected_tst_imprint(tst_algo)
 
     if expected_tst_imprint_value != tst_imprint:
         logger.warning(

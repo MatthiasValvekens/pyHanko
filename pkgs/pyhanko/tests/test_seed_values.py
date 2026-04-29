@@ -15,8 +15,6 @@ from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
 from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
 from pyhanko.sign.validation import (
     EmbeddedPdfSignature,
-    RevocationInfoValidationType,
-    async_validate_pdf_ltv_signature,
     async_validate_pdf_signature,
 )
 from pyhanko_certvalidator import CertificateValidator
@@ -28,7 +26,6 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     INTERM_CERT,
     ROOT_CERT,
     SELF_SIGN,
-    TRUST_ROOTS,
     dummy_ocsp_vc,
     live_testing_vc,
 )
@@ -528,10 +525,9 @@ async def test_sv_sign_subfilter_hint():
     assert emb_sig.sig_object['/SubFilter'] == PADES.value
 
 
-# noinspection PyDeprecation
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_sv_sign_addrevinfo_req(requests_mock, expect_deprecation):
+async def test_sv_sign_addrevinfo_req(requests_mock):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO, add_rev_info=True
     )
@@ -542,14 +538,7 @@ async def test_sv_sign_addrevinfo_req(requests_mock, expect_deprecation):
         subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
         embed_validation_info=True,
     )
-    emb_sig = await sign_with_sv(sv, meta)
-    status = await async_validate_pdf_ltv_signature(
-        emb_sig,
-        RevocationInfoValidationType.ADOBE_STYLE,
-        {'trust_roots': TRUST_ROOTS},
-    )
-    assert status.valid and status.trusted
-    assert emb_sig.sig_object['/SubFilter'] == '/adbe.pkcs7.detached'
+    await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(
         field_name='Sig',

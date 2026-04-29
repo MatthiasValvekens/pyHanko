@@ -44,6 +44,8 @@ from pyhanko.sign.general import (
     simple_cms_attribute,
 )
 from pyhanko.sign.timestamps import TimeStamper
+from pyhanko.sign.validation import EmbeddedPdfSignature
+from pyhanko.sign.validation.ades import ades_timestamp_validation_internal
 from pyhanko.stamp import BaseStampStyle
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
@@ -960,7 +962,8 @@ class PdfTimeStamper:
         from .. import validation
         from ..validation.status import TimestampSignatureStatus
 
-        timestamps = validation.get_timestamp_chain(reader)
+        timestamps = reversed(reader.embedded_timestamp_signatures)
+        last_timestamp: Optional[EmbeddedPdfSignature]
         try:
             last_timestamp = next(timestamps)
         except StopIteration:
@@ -975,14 +978,17 @@ class PdfTimeStamper:
         if last_timestamp is None:
             md_algorithm = default_md_algorithm
         else:
-            expected_imprint = last_timestamp.compute_digest()
-
             tst_token = last_timestamp.signed_data
 
             # run validation logic
-            last_tst_status = await validation.ltv.establish_timestamp_trust(
-                tst_token, validation_context, expected_imprint
+            last_tst_ades_status = await ades_timestamp_validation_internal(
+                tst_token,
+                validation_context=validation_context,
+                expected_tst_imprint=last_timestamp.compute_digest,
+                ts_qualification_requirements=None,
             )
+            last_tst_status = last_tst_ades_status.api_status
+            assert last_tst_status is not None
 
             md_algorithm = last_tst_status.md_algorithm
             tst_status = last_tst_status
@@ -1883,12 +1889,11 @@ class PdfSigningSession:
         self, validation_context, prev_reader
     ):
         signer = self.pdf_signer.signer
-        from pyhanko.sign.validation import get_timestamp_chain
 
         # try to grab the most recent document timestamp
         last_ts = None
         try:
-            last_ts = next(get_timestamp_chain(prev_reader))
+            last_ts = next(reversed(prev_reader.embedded_timestamp_signatures))
         except StopIteration:
             pass
         last_ts_validation_path = None

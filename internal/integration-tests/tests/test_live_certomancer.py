@@ -25,10 +25,15 @@ from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
-    RevocationInfoValidationType,
-    async_validate_pdf_ltv_signature,
+)
+from pyhanko.sign.validation.ades import ades_lta_validation
+from pyhanko.sign.validation.policy_decl import (
+    PdfSignatureValidationSpec,
+    RevocationInfoGatheringSpec,
+    SignatureValidationSpec,
 )
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.context import CertValidationPolicySpec
 from pyhanko_certvalidator.fetchers import Fetchers
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
     AIOHttpCertificateFetcher,
@@ -42,7 +47,14 @@ from pyhanko_certvalidator.fetchers.requests_fetchers import (
     RequestsCRLFetcher,
     RequestsOCSPFetcher,
 )
-from pyhanko_certvalidator.registry import SimpleCertificateStore
+from pyhanko_certvalidator.policy_decl import (
+    REQUIRE_REVINFO,
+    CertRevTrustPolicy,
+)
+from pyhanko_certvalidator.registry import (
+    SimpleCertificateStore,
+    SimpleTrustManager,
+)
 from pyhanko_testing_commons.test_data.samples import MINIMAL_ONE_FIELD
 
 logger = logging.getLogger(__name__)
@@ -59,6 +71,26 @@ TIMEOUT = 5
 run_if_live = pytest.mark.skipif(
     SKIP_LIVE, reason="no Certomancer instance available"
 )
+
+
+async def _async_simple_pades_check(trust_roots, emb_sig, *, backend):
+    trust_manager = SimpleTrustManager.build(
+        trust_roots=trust_roots,
+    )
+    validation_spec = PdfSignatureValidationSpec(
+        SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=trust_manager,
+                revinfo_policy=CertRevTrustPolicy(
+                    REQUIRE_REVINFO,
+                ),
+            ),
+            revinfo_gathering_policy=RevocationInfoGatheringSpec(
+                fetcher_backend=backend
+            ),
+        )
+    )
+    return await ades_lta_validation(emb_sig, validation_spec)
 
 
 async def _retrieve_credentials(
@@ -126,54 +158,14 @@ async def _init_validation_context(session, arch, *, backend=None, **kwargs):
     return vc, root
 
 
-# noinspection PyDeprecation
-async def _check_pades_result(out, roots, session, rivt_pades):
+async def _check_pades_result(out, roots, session):
     r = PdfFileReader(out)
-    with pytest.warns(DeprecationWarning):
-        status = await async_validate_pdf_ltv_signature(
-            r.embedded_signatures[0],
-            rivt_pades,
-            {
-                'trust_roots': roots,
-                'fetcher_backend': _fetcher_backend(session),
-            },
-        )
+    ades_status = await _async_simple_pades_check(
+        roots, r.embedded_signatures[0], backend=_fetcher_backend(session)
+    )
+    status = ades_status.api_status
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
-
-
-@run_if_live
-@pytest.mark.asyncio
-@pytest.mark.parametrize('start_with_full_chain', [True, False])
-async def test_pades_lt_live(start_with_full_chain):
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    arch = "testing-ca"
-
-    async with aiohttp.ClientSession() as session:
-        signer = await _retrieve_and_decode_credentials(
-            session,
-            arch,
-            "signer1-long",
-            skip_other_certs=start_with_full_chain,
-        )
-
-        vc, root = await _init_validation_context(session, arch)
-        out = await signers.async_sign_pdf(
-            w,
-            signers.PdfSignatureMetadata(
-                field_name='Sig1',
-                validation_context=vc,
-                subfilter=SigSeedSubFilter.PADES,
-                embed_validation_info=True,
-            ),
-            signer=signer,
-            timestamper=AIOHttpTimeStamper(
-                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa", session=session
-            ),
-        )
-        await _check_pades_result(
-            out, [root], session, RevocationInfoValidationType.PADES_LT
-        )
 
 
 @run_if_live
@@ -206,9 +198,7 @@ async def test_pades_lta_live(start_with_full_chain):
                 f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa", session=session
             ),
         )
-        await _check_pades_result(
-            out, [root], session, RevocationInfoValidationType.PADES_LTA
-        )
+        await _check_pades_result(out, [root], session)
 
 
 @run_if_live
@@ -251,9 +241,7 @@ async def test_async_sign_many_concurrent():
             emb = r.embedded_signatures[0]
             assert emb.field_name == 'Sig1'
             assert emb.sig_object['/Reason'].endswith(f"#{i}!")
-            await _check_pades_result(
-                out, [root], session, RevocationInfoValidationType.PADES_LTA
-            )
+            await _check_pades_result(out, [root], session)
 
 
 @run_if_live
@@ -286,9 +274,7 @@ async def test_async_lazy_session():
     pdf_signer = signers.PdfSigner(meta, signer, timestamper=timestamper)
     out = await pdf_signer.async_sign_pdf(w, in_place=True)
     async with aiohttp.ClientSession() as session:
-        await _check_pades_result(
-            out, [root], session, RevocationInfoValidationType.PADES_LTA
-        )
+        await _check_pades_result(out, [root], session)
 
 
 @run_if_live
@@ -324,9 +310,7 @@ async def test_async_strict_cert_fetchers_happy_path():
         )
         pdf_signer = signers.PdfSigner(meta, signer, timestamper=timestamper)
         out = await pdf_signer.async_sign_pdf(w, in_place=True)
-        await _check_pades_result(
-            out, [root], session, RevocationInfoValidationType.PADES_LTA
-        )
+        await _check_pades_result(out, [root], session)
 
 
 @run_if_live
@@ -362,9 +346,7 @@ async def test_requests_fetchers_happy_path(strict):
     pdf_signer = signers.PdfSigner(meta, signer, timestamper=timestamper)
     out = await pdf_signer.async_sign_pdf(w, in_place=True)
     async with aiohttp.ClientSession() as session:
-        await _check_pades_result(
-            out, [root], session, RevocationInfoValidationType.PADES_LTA
-        )
+        await _check_pades_result(out, [root], session)
 
 
 async def _retrieve_and_save_credentials(fname, session, arch, label):
@@ -412,9 +394,7 @@ def test_pades_lta_live_with_cli():
         async with aiohttp.ClientSession() as session:
             with open(outfile, 'rb') as f:
                 root = await _retrieve_cert(session, arch, "root")
-                await _check_pades_result(
-                    f, [root], session, RevocationInfoValidationType.PADES_LTA
-                )
+                await _check_pades_result(f, [root], session)
                 r = PdfFileReader(f)
                 dss = DocumentSecurityStore.read_dss(r)
                 assert len(dss.crls) == 1
@@ -461,7 +441,7 @@ async def test_ts_fetch_requests():
     result = await validate_tst_signed_data(
         ts_result['content'],
         ValidationContext(trust_roots=[]),
-        expected_tst_imprint=MESSAGE_DIGEST,
+        expected_tst_imprint=lambda x: MESSAGE_DIGEST,
     )
     assert result['valid'] and result['intact']
     # empty trust root list
@@ -484,7 +464,7 @@ async def test_ts_fetch_aiohttp():
         result = await validate_tst_signed_data(
             ts_result['content'],
             ValidationContext(trust_roots=[]),
-            expected_tst_imprint=MESSAGE_DIGEST,
+            expected_tst_imprint=lambda x: MESSAGE_DIGEST,
         )
         assert result['valid'] and result['intact']
         # empty trust root list

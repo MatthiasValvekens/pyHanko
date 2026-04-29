@@ -275,15 +275,13 @@ class DocumentSecurityStore:
             yield cert
 
     def as_validation_context(
-        self, validation_context_kwargs, include_revinfo=True
+        self, validation_context_kwargs
     ) -> ValidationContext:
         """
         Construct a validation context from the data in this DSS.
 
         :param validation_context_kwargs:
             Extra kwargs to pass to the ``__init__`` function.
-        :param include_revinfo:
-            If ``False``, revocation info is skipped.
         :return:
             A validation context preloaded with information from this DSS.
         """
@@ -292,20 +290,19 @@ class DocumentSecurityStore:
         extra_certs = validation_context_kwargs.pop('other_certs', [])
         certs = list(self.load_certs()) + extra_certs
 
-        if include_revinfo:
-            ocsps = list(validation_context_kwargs.pop('ocsps', ()))
-            for ocsp_ref in self.ocsps:
-                ocsp_stream: generic.StreamObject = ocsp_ref.get_object()
-                resp = asn1_ocsp.OCSPResponse.load(ocsp_stream.data)
-                ocsps.append(resp)
-            validation_context_kwargs['ocsps'] = ocsps
+        ocsps = list(validation_context_kwargs.pop('ocsps', ()))
+        for ocsp_ref in self.ocsps:
+            ocsp_stream: generic.StreamObject = ocsp_ref.get_object()
+            resp = asn1_ocsp.OCSPResponse.load(ocsp_stream.data)
+            ocsps.append(resp)
+        validation_context_kwargs['ocsps'] = ocsps
 
-            crls = list(validation_context_kwargs.pop('crls', ()))
-            for crl_ref in self.crls:
-                crl_stream: generic.StreamObject = crl_ref.get_object()
-                crl = asn1_crl.CertificateList.load(crl_stream.data)
-                crls.append(crl)
-            validation_context_kwargs['crls'] = crls
+        crls = list(validation_context_kwargs.pop('crls', ()))
+        for crl_ref in self.crls:
+            crl_stream: generic.StreamObject = crl_ref.get_object()
+            crl = asn1_crl.CertificateList.load(crl_stream.data)
+            crls.append(crl)
+        validation_context_kwargs['crls'] = crls
 
         return ValidationContext(other_certs=certs, **validation_context_kwargs)
 

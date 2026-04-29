@@ -281,7 +281,7 @@ class _InternalBasicValidationResult:
 async def ades_timestamp_validation(
     tst_signed_data: cms.SignedData,
     validation_spec: SignatureValidationSpec,
-    expected_tst_imprint: Union[bytes, Callable[[str], bytes]],
+    expected_tst_imprint: Callable[[str], bytes],
     *,
     status_cls: Type[StatusType],
     timing_info: Optional[ValidationTimingInfo] = None,
@@ -294,7 +294,7 @@ async def ades_timestamp_validation(
 async def ades_timestamp_validation(
     tst_signed_data: cms.SignedData,
     validation_spec: SignatureValidationSpec,
-    expected_tst_imprint: Union[bytes, Callable[[str], bytes]],
+    expected_tst_imprint: Callable[[str], bytes],
     *,
     timing_info: Optional[ValidationTimingInfo] = None,
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
@@ -305,7 +305,7 @@ async def ades_timestamp_validation(
 async def ades_timestamp_validation(
     tst_signed_data: cms.SignedData,
     validation_spec: SignatureValidationSpec,
-    expected_tst_imprint: Union[bytes, Callable[[str], bytes]],
+    expected_tst_imprint: Callable[[str], bytes],
     timing_info: Optional[ValidationTimingInfo] = None,
     validation_data_handlers: Optional[ValidationDataHandlers] = None,
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
@@ -322,11 +322,6 @@ async def ades_timestamp_validation(
         A callable that takes a hash algorithm names and returns a digest value.
         detailing the expected message imprint value that should be contained in
         the encapsulated ``TSTInfo``.
-
-        If this parameter is specified as a ``bytes`` value directly,
-        the digest algorithm will not be checked.
-        This usage is deprecated, but still present in some code paths that
-        enforce the digest algorithm consistency through another mechanism.
     :param timing_info:
         Data object describing the timing of the validation.
         Defaults to :meth:`.ValidationTimingInfo.now`.
@@ -360,7 +355,7 @@ async def ades_timestamp_validation(
         validation_spec.ts_qualification_requirements
         or validation_spec.qualification_requirements
     )
-    return await _ades_timestamp_validation_from_context(
+    return await ades_timestamp_validation_internal(
         tst_signed_data,
         validation_context,
         expected_tst_imprint,
@@ -427,10 +422,10 @@ def _enumerate_certs_in_paths(
         yield from _enumerate_certs_in_paths(status.content_ts_validity)
 
 
-async def _ades_timestamp_validation_from_context(
+async def ades_timestamp_validation_internal(
     tst_signed_data: cms.SignedData,
     validation_context: ValidationContext,
-    expected_tst_imprint: Union[bytes, Callable[[str], bytes]],
+    expected_tst_imprint: Callable[[str], bytes],
     ts_qualification_requirements: Optional[QualificationRequirements],
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
     status_cls=TimestampSignatureStatus,
@@ -527,7 +522,7 @@ async def _ades_process_attached_ts(
     for tst_signed_data in generic_cms.extract_tst_data_iter(
         signer_info, signed=signed
     ):
-        result = await _ades_timestamp_validation_from_context(
+        result = await ades_timestamp_validation_internal(
             tst_signed_data,
             validation_context,
             expected_tst_digest_by_md,
