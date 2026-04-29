@@ -46,14 +46,6 @@ pyhanko.sign.validation.generic\_cms module
    :undoc-members:
    :show-inheritance:
 
-pyhanko.sign.validation.ltv module
-----------------------------------
-
-.. automodule:: pyhanko.sign.validation.ltv
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 pyhanko.sign.validation.pdf\_embedded module
 --------------------------------------------
 
@@ -98,5 +90,5 @@ Module contents
 ---------------
 
 .. automodule:: pyhanko.sign.validation
-   :members: validate_cms_signature, validate_detached_cms, validate_pdf_signature, validate_pdf_timestamp, add_validation_info, validate_pdf_ltv_signature
+   :members: validate_cms_signature, validate_detached_cms, validate_pdf_signature, validate_pdf_timestamp, add_validation_info
    :show-inheritance:
