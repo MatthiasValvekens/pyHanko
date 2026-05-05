@@ -6,6 +6,36 @@ Release history
 pyHanko
 -------
 
+.. _release-0.35.1:
+
+0.35.1
+=====
+
+*Release date:* 2026-05-06
+
+
+Dependency changes
+------------------
+
+ * Bump ``cryptography`` to ``48.0.0``.
+ * Relax upper bound for ``uharfbuzz`` to ``<0.55.0``.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Allow signing with ML-DSA
+
+
+Validation
+^^^^^^^^^^
+
+ * Allow validating ML-DSA signatures
+
+
 .. _release-0.35.0:
 
 0.35.0
@@ -2559,6 +2589,17 @@ Initial release.
 ---------------------
 pyhanko-certvalidator
 ---------------------
+
+.. _certvalidator-release-0.31.1:
+
+0.31.1
+======
+
+*Release date:* 2026-05-06
+
+ * Bump ``cryptography`` to ``48.0.0``.
+ * ML-DSA support.
+
 
 .. _certvalidator-release-0.31.0:
 
