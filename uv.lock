@@ -950,7 +950,7 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9,<3.14" },
     { name = "certomancer" },
-    { name = "certomancer", extras = ["web-api"], specifier = ">=0.13.0,<0.15" },
+    { name = "certomancer", extras = ["web-api"], specifier = ">=0.14.0,<0.15" },
     { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pyhanko", editable = "pkgs/pyhanko" },
