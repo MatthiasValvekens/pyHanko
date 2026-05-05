@@ -277,8 +277,6 @@ certificate authorities to publicly supply historical validity proofs for all
 certificates they ever signed at all possible points in time.
 
 
-The last property makes it so that the validity of the
-
 Hence, in order for a signature to remain valid long after signing, the signer
 generally needs to ensure the following criteria are met:
 
