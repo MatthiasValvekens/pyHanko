@@ -149,6 +149,10 @@ class ASCIIHexDecode(Decoder, metaclass=Singleton):
     def decode(self, data, decode_params=None):
         data, _ = data.split(ASCII_HEX_EOD_MARKER, 1)
         data = WS_REGEX.sub(b'', data)
+        # Per ISO 32000-2 §7.4.2: an odd number of hexadecimal digits
+        # before the EOD marker is treated as if a trailing 0 were present.
+        if len(data) % 2:
+            data += b'0'
         return binascii.unhexlify(data)
 
 
