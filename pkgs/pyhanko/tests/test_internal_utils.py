@@ -337,6 +337,20 @@ def test_ascii_hex_decode():
     assert filters.ASCIIHexDecode().decode(encoded) == data
 
 
+def test_ascii_hex_decode_odd_digits():
+    # Per ISO 32000-2 §7.4.2: an odd number of hexadecimal digits before
+    # the EOD marker shall be handled as if a trailing 0 were present.
+    from pyhanko.pdf_utils import filters
+
+    decoder = filters.ASCIIHexDecode()
+    # '6C6C6' is odd-length; spec mandates it be treated as '6C6C60'.
+    assert decoder.decode(b'6C6C6>') == b'll\x60'
+    # Whitespace inside the stream is ignored before the parity check.
+    assert decoder.decode(b'6C 6C\n6>') == b'll\x60'
+    # A single trailing nibble decodes to a single zero-padded byte.
+    assert decoder.decode(b'A>') == b'\xa0'
+
+
 def test_ascii85_decode():
     from pyhanko.pdf_utils import filters
 
