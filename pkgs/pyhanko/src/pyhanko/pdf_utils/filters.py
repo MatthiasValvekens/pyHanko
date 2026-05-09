@@ -103,6 +103,8 @@ class FlateDecode(Decoder, metaclass=Singleton):
     """
 
     def decode(self, data: bytes, decode_params):
+        # there's lots of slicing ahead, so let's reduce copying overhead
+        data_view = memoryview(decompress(data))
         predictor = 1
         if decode_params:
             try:
@@ -112,13 +114,11 @@ class FlateDecode(Decoder, metaclass=Singleton):
 
         # predictor 1 == no predictor
         if predictor == 1:
-            return data
+            return data_view
 
         columns = decode_params["/Columns"]
         # PNG prediction:
         if 10 <= predictor <= 15:
-            # there's lots of slicing ahead, so let's reduce copying overhead
-            data_view = memoryview(decompress(data))
             return _png_decode(data_view, columns)
         else:
             # unsupported predictor
