@@ -8,6 +8,10 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[options]
+exclude-newer = "2026-05-15T04:24:50.231095Z"
+exclude-newer-span = "P3D"
+
 [manifest]
 members = [
     "common-test-utils",
@@ -1870,7 +1874,7 @@ requires-dist = [
     { name = "python-pkcs11", marker = "extra == 'pkcs11'", specifier = "~=0.9.3" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qrcode", marker = "extra == 'qr'", specifier = ">=7.3.1" },
-    { name = "requests", specifier = ">=2.34.1" },
+    { name = "requests", specifier = ">=2.31.0" },
     { name = "signxml", marker = "extra == 'etsi'", specifier = ">=4.2.0" },
     { name = "tzlocal", specifier = ">=4.3" },
     { name = "uharfbuzz", marker = "extra == 'opentype'", specifier = ">=0.25.0,<0.55.0" },
@@ -1938,7 +1942,7 @@ requires-dist = [
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "oscrypto", specifier = ">=1.1.0" },
-    { name = "requests", specifier = ">=2.34.1" },
+    { name = "requests", specifier = ">=2.31.0" },
     { name = "uritools", specifier = ">=3.0.1" },
 ]
 provides-extras = ["async-http"]
