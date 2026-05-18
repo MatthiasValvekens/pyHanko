@@ -69,7 +69,7 @@ docs-build = [
     "pyhanko-certvalidator",
     "pyhanko-cli",
 ]
-release = ["setuptools>=80.8.0", "tomlkit>=0.15.0", "requests>=2.34.1"]
+release = ["setuptools>=80.8.0", "tomlkit>=0.15.0", "requests>=2.34.2"]
 lint = ["ruff"]
 dev = [
     { include-group = "docs" },

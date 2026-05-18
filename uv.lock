@@ -9,7 +9,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-05-15T04:24:50.231095Z"
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P3D"
 
 [manifest]
@@ -1866,7 +1866,7 @@ requires-dist = [
     { name = "aiohttp", marker = "extra == 'async-http'", specifier = ">=3.9,<3.14" },
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "cryptography", specifier = ">=48.0.0" },
-    { name = "fonttools", marker = "extra == 'opentype'", specifier = ">=4.63.0" },
+    { name = "fonttools", marker = "extra == 'opentype'", specifier = ">=4.33.3" },
     { name = "lxml", specifier = ">=5.4.0" },
     { name = "pillow", marker = "extra == 'image-support'", specifier = ">=7.2.0" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
@@ -1874,7 +1874,7 @@ requires-dist = [
     { name = "python-pkcs11", marker = "extra == 'pkcs11'", specifier = "~=0.9.3" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qrcode", marker = "extra == 'qr'", specifier = ">=7.3.1" },
-    { name = "requests", specifier = ">=2.31.0" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "signxml", marker = "extra == 'etsi'", specifier = ">=4.2.0" },
     { name = "tzlocal", specifier = ">=4.3" },
     { name = "uharfbuzz", marker = "extra == 'opentype'", specifier = ">=0.25.0,<0.55.0" },
@@ -1942,7 +1942,7 @@ requires-dist = [
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "oscrypto", specifier = ">=1.1.0" },
-    { name = "requests", specifier = ">=2.31.0" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "uritools", specifier = ">=3.0.1" },
 ]
 provides-extras = ["async-http"]
@@ -2092,7 +2092,7 @@ requires-dist = [{ name = "pytest-asyncio", specifier = ">=0.26.0" }]
 dev = [
     { name = "lxml-stubs" },
     { name = "mypy" },
-    { name = "requests", specifier = ">=2.34.1" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "ruff" },
     { name = "setuptools", specifier = ">=80.8.0" },
     { name = "sphinx" },
@@ -2124,7 +2124,7 @@ mypy = [
     { name = "types-tzlocal" },
 ]
 release = [
-    { name = "requests", specifier = ">=2.34.1" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "setuptools", specifier = ">=80.8.0" },
     { name = "tomlkit", specifier = ">=0.15.0" },
 ]
@@ -2338,7 +2338,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.34.1"
+version = "2.34.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2346,9 +2346,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/36/7180e7f077c38108945dbbdf60fe04db681c3feb6e96419f8c6dc8723741/requests-2.34.1.tar.gz", hash = "sha256:0fc5669f2b69704449fe1552360bd2a73a54512dfd03e65529157f1513322beb", size = 142783, upload-time = "2026-05-13T19:20:24.662Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/5a/4a949d170476de3c04ac036b5466422fbcbf348a917d8042eedf2cac7d1b/requests-2.34.1-py3-none-any.whl", hash = "sha256:bf38a3ff993960d3dd819c08862c40b3c703306eb7c744fcd9f4ddbb95b548f0", size = 73085, upload-time = "2026-05-13T19:20:22.827Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
 ]
 
 [[package]]
