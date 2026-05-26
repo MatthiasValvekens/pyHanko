@@ -9,7 +9,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer = "2026-05-23T20:33:48.791921Z"
 exclude-newer-span = "P3D"
 
 [manifest]
@@ -1861,7 +1861,7 @@ requires-dist = [
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "fonttools", marker = "extra == 'opentype'", specifier = ">=4.33.3" },
-    { name = "lxml", specifier = ">=6.1.1" },
+    { name = "lxml", specifier = ">=5.4.0" },
     { name = "pillow", marker = "extra == 'image-support'", specifier = ">=7.2.0" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
     { name = "python-barcode", marker = "extra == 'image-support'", specifier = "==0.16.1" },
@@ -1992,7 +1992,7 @@ testing-base = [
 requires-dist = [
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "certifi", specifier = ">=2023.5.7" },
-    { name = "click", specifier = "!=8.2.0,>=8.4.0" },
+    { name = "click", specifier = ">=8.1.3,!=8.2.0" },
     { name = "platformdirs", specifier = ">=4.3.8" },
     { name = "pyhanko", editable = "pkgs/pyhanko" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
