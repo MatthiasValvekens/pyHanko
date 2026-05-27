@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timezone
 from io import BytesIO
 from itertools import product
+from pathlib import Path
 
 import pytest
 from freezegun.api import freeze_time
@@ -1043,6 +1044,32 @@ def test_inline_ap_pades_lta(requests_mock):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert s.field_name == 'SigNew'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize(
+    'fname',
+    ['simple-acroform-states.pdf', 'simple-acroform-states-ap-indirect.pdf'],
+)
+def test_button_appearance_streams_pades_lta(requests_mock, fname):
+    testfile = Path(PDF_DATA_DIR) / fname
+    vc = live_testing_vc(requests_mock)
+    meta = signers.PdfSignatureMetadata(
+        field_name='Signature',
+        validation_context=vc,
+        embed_validation_info=True,
+        subfilter=fields.SigSeedSubFilter.PADES,
+        use_pades_lta=True,
+    )
+    with open(testfile, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        out = signers.sign_pdf(w, meta, signer=FROM_CA, timestamper=DUMMY_TS)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Signature'
     status = val_trusted(s, extd=True)
     assert status.modification_level == ModificationLevel.LTA_UPDATES
 

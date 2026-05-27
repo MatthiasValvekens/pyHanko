@@ -863,6 +863,13 @@ def _allow_in_place_appearance_update(
     # Overwriting appearance streams is inherently more risky, than other
     # operations, so this check can be disabled.
 
+    # Short-circuit for stateful fields. In these cases we do not expect
+    # any appearance stream updates to be needed, so we don't collect them.
+    # Nonetheless, this check is needed because the structure of the appearance
+    # dictionary is different for these fields.
+    if '/AS' in old_field:
+        return
+
     try:
         old_ap_raw = old_field.raw_get('/AP')
         new_ap_raw = new_field.raw_get('/AP')
