@@ -68,7 +68,7 @@ image-support = [
     "python-barcode==0.16.1"
 ]
 pkcs11 = ["python-pkcs11~=0.9.3"]
-async-http = ["aiohttp>=3.9,<3.14"]
+async-http = ["aiohttp>=3.9,<3.15"]
 etsi = [
     "xsdata>=24.4,<27.0",
     "signxml>=4.2.0"
@@ -85,7 +85,7 @@ testing-base = [
     "pytest-asyncio>=1.1.0,<2.0",
 ]
 testing-aiohttp = [
-    "aiohttp>=3.9,<3.14",
+    "aiohttp>=3.9,<3.15",
     "pytest-aiohttp>=1.0.4,<1.2.0",
 ]
 testing = [

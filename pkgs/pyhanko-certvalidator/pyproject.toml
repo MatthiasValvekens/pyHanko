@@ -46,17 +46,16 @@ content-type = "text/markdown"
 Homepage = "https://github.com/MatthiasValvekens/pyHanko/tree/master/pkgs/pyhanko-certvalidator"
 
 [project.optional-dependencies]
-async-http = ["aiohttp>=3.9,<3.14"]
+async-http = ["aiohttp>=3.9,<3.15"]
 
 [dependency-groups]
 testing-base = [
     "pytest>=6.1.1",
     "pytest-cov>=4.0,<7.2",
     "freezegun>=1.1.0",
-    "aiohttp>=3.9,<3.14",
+    "aiohttp>=3.9,<3.15",
     "pytest-aiohttp>=1.0.4,<1.2.0",
     "certifi>=2023.5.7",
-    "aiohttp>=3.9,<3.14",
 ]
 
 [tool.setuptools]
