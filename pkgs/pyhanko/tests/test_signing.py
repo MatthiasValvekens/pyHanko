@@ -4,8 +4,6 @@ import os
 from datetime import datetime
 from io import BytesIO
 
-import pyhanko.pdf_utils.content
-import pyhanko.sign.fields
 import pytest
 from asn1crypto import cms
 from asn1crypto.algos import SignedDigestAlgorithm
@@ -37,6 +35,7 @@ from pyhanko.sign.signers.pdf_cms import (
 from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
+    EmbeddedPdfSignature,
     SignatureCoverageLevel,
     add_validation_info,
     async_validate_detached_cms,
@@ -389,7 +388,7 @@ def test_certify():
         signers.PdfSignatureMetadata(
             field_name='Sig1',
             certify=True,
-            docmdp_permissions=pyhanko.sign.fields.MDPPerm.NO_CHANGES,
+            docmdp_permissions=fields.MDPPerm.NO_CHANGES,
         ),
         signer=FROM_CA,
     )
@@ -402,7 +401,7 @@ def test_certify():
 
     info = read_certification_data(r)
     assert info.author_sig == s.sig_object.get_object()
-    assert info.permission == pyhanko.sign.fields.MDPPerm.NO_CHANGES
+    assert info.permission == fields.MDPPerm.NO_CHANGES
 
     # with NO_CHANGES, we shouldn't be able to append an approval signature
     out.seek(0)
@@ -436,7 +435,7 @@ def test_no_certify_after_sign():
             signers.PdfSignatureMetadata(
                 field_name='Sig2',
                 certify=True,
-                docmdp_permissions=pyhanko.sign.fields.MDPPerm.FILL_FORMS,
+                docmdp_permissions=fields.MDPPerm.FILL_FORMS,
             ),
             signer=FROM_CA,
         )
@@ -468,7 +467,7 @@ def test_approval_sig():
 
     info = read_certification_data(r)
     assert info.author_sig == s.sig_object.get_object()
-    assert info.permission == pyhanko.sign.fields.MDPPerm.FILL_FORMS
+    assert info.permission == fields.MDPPerm.FILL_FORMS
 
     s = r.embedded_signatures[1]
     assert s.field_name == 'Sig2'
@@ -743,9 +742,30 @@ def test_sig_wrong_subfilter(wrong_subfilter):
     out = _tamper_with_sig_obj(tamper)
 
     r = PdfFileReader(out)
-    emb = r.embedded_signatures[0]
+    fq_name, sig_obj, sig_field = list(
+        fields.enumerate_sig_fields(r, filled_status=True)
+    )[0]
+    emb = EmbeddedPdfSignature(r, sig_field, fq_name)
     with pytest.raises(SignatureValidationError):
         val_trusted(emb)
+
+
+@pytest.mark.parametrize(
+    'wrong_subfilter',
+    [pdf_name('/abcde'), None, generic.NullObject()],
+)
+@freeze_time('2020-11-01')
+def test_sig_wrong_subfilter_at_enum_time(wrong_subfilter):
+    def tamper(writer, sig_obj):
+        if wrong_subfilter:
+            sig_obj['/SubFilter'] = wrong_subfilter
+        else:
+            del sig_obj['/SubFilter']
+
+    out = _tamper_with_sig_obj(tamper)
+
+    r = PdfFileReader(out)
+    assert len(r.embedded_signatures) == 0
 
 
 @freeze_time('2020-11-01')

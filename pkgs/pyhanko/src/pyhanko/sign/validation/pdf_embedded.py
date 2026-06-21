@@ -22,6 +22,7 @@ from pyhanko.sign.fields import (
     SigSeedSubFilter,
     SigSeedValFlags,
     SigSeedValueSpec,
+    enumerate_sig_fields,
 )
 from pyhanko.sign.general import (
     MultivaluedAttributeError,
@@ -55,6 +56,7 @@ __all__ = [
     'extract_contents',
     'read_certification_data',
     'report_seed_value_validation',
+    'collect_embedded_signatures',
 ]
 
 
@@ -952,3 +954,31 @@ async def async_validate_pdf_timestamp(
     status_kwargs['coverage'] = embedded_sig.coverage
     status_kwargs['diff_result'] = embedded_sig.diff_result
     return DocumentTimestampStatus(**status_kwargs)
+
+
+def collect_embedded_signatures(r: PdfFileReader):
+    sig_fields = enumerate_sig_fields(r, filled_status=True)
+
+    def _gen():
+        for fq_name, sig_obj, sig_field in sig_fields:
+            subfilter_str = sig_obj.get_object().get('/SubFilter', None)
+            try:
+                _validate_subfilter(
+                    subfilter_str,
+                    list(SigSeedSubFilter),
+                    "%s is not a recognized SubFilter type",
+                )
+            except SignatureValidationError as e:
+                logger.warning(
+                    f"Encountered signature with unsupported SubFilter "
+                    f"type % {subfilter_str}; ignoring",
+                    exc_info=e,
+                )
+                continue
+            yield EmbeddedPdfSignature(r, sig_field, fq_name)
+
+    result = sorted(
+        _gen(),
+        key=lambda emb: emb.signed_revision,
+    )
+    return result
