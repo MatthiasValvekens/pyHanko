@@ -12,6 +12,13 @@ Developing CLI plugins
 Since version ``0.18.0``, pyHanko's CLI can load |Signer| implementations
 from external sources with minimal configuration.
 
+.. testsetup:: *
+
+    from typing import List, ContextManager
+    import click
+    from pyhanko.cli.plugin_api import SigningCommandPlugin, CLIContext
+    from pyhanko.sign.signers.pdf_cms import Signer
+
 If you develop an integration for a remote signing service or hardware
 device that isn't already supported by the pyHanko CLI out of the box,
 you can make your implementation available to CLI users as a separate
@@ -49,7 +56,7 @@ pyHanko's ``click``-based CLI and your custom |Signer|.
 
 This is what the basic skeleton looks like.
 
-.. code-block:: python
+.. testcode::
 
     class MySigningCommand(SigningCommandPlugin):
         subcommand_name = 'mysigner'
@@ -78,7 +85,7 @@ see `the Click documentation <https://click.palletsprojects.com/en/latest/api/#c
 As an example, the options for a simplified version of the ``pkcs11`` subcommand
 in pyHanko's CLI could've been defined as follows.
 
-.. code-block:: python
+.. testcode::
 
     def click_options(self) -> List[click.Option]:
         return [

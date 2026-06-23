@@ -267,6 +267,23 @@ jobs:
         with:
           name: coverage-smoke-tests
           path: "pkgs/pyhanko/*-coverage.xml"
+  doctest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+      - name: Disable Python problem matchers
+        shell: bash
+        run: echo "::remove-matcher owner=python::"
+      - name: Run documentation doctests
+        # Executes every library Python code sample in docs/ as a Sphinx
+        # doctest; see docs/DOCTESTS.md.
+        run: make -C docs doctest
   codecov-upload:
     permissions:
       actions: write

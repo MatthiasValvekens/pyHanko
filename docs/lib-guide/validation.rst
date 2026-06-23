@@ -7,6 +7,21 @@ Validation functionality
     Before reading this, you may want to take a look at
     :ref:`validation-factors` for some background on the validation process.
 
+.. testsetup:: *
+
+    globals().update(make_doc_env(DocEnvSpec(
+        files={},
+        signers=(),
+        signed_documents=(
+            SignedDocSpec(profile=SignatureProfile.PADES_LTA),
+        ),
+        trust=TrustSpec(fetch_revocation=True),
+    )))
+
+.. testcleanup:: *
+
+    teardown_doc_env(_doc_env)
+
 
 .. |EmbeddedPdfSignature| replace:: :class:`~.pyhanko.sign.validation.pdf_embedded.EmbeddedPdfSignature`
 .. |SignatureStatus| replace:: :class:`~.pyhanko.sign.validation.status.SignatureStatus`
@@ -81,7 +96,7 @@ Here's a simple example to illustrate the process of validating a PDF signature
 w.r.t. a specific trust root.
 
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.keys import load_cert_from_pemder
     from pyhanko_certvalidator import ValidationContext
@@ -96,6 +111,11 @@ w.r.t. a specific trust root.
         sig = r.embedded_signatures[0]
         status = validate_pdf_signature(sig, vc)
         print(status.pretty_print_details())
+
+.. testoutput::
+    :hide:
+
+    ...
 
 
 .. _os-trust-deprecation:
@@ -232,7 +252,7 @@ This function is part of pyHanko's AdES validation API, which
 aims to implement the validation methodology laid out in
 ETSI EN 319 102-1. Here's what that looks like.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.keys import load_cert_from_pemder
     from pyhanko.pdf_utils.reader import PdfFileReader
@@ -242,7 +262,10 @@ ETSI EN 319 102-1. Here's what that looks like.
         SignatureValidationSpec
     )
     from pyhanko_certvalidator.context import CertValidationPolicySpec
-    from pyhanko_certvalidator.policy_decl import REQUIRE_REVINFO
+    from pyhanko_certvalidator.policy_decl import (
+        REQUIRE_REVINFO,
+        CertRevTrustPolicy,
+    )
     from pyhanko_certvalidator.registry import SimpleTrustManager
 
     async def run():
@@ -255,7 +278,7 @@ ETSI EN 319 102-1. Here's what that looks like.
             SignatureValidationSpec(
                 cert_validation_policy=CertValidationPolicySpec(
                     trust_manager=trust_manager,
-                    revinfo_policy=REQUIRE_REVINFO,
+                    revinfo_policy=CertRevTrustPolicy(REQUIRE_REVINFO),
                 ),
             )
         )
@@ -267,6 +290,17 @@ ETSI EN 319 102-1. Here's what that looks like.
             )
             print(ades_status.ades_subindic)
             print(ades_status.api_status.pretty_print_details())
+
+.. testcode::
+    :hide:
+
+    import asyncio
+    asyncio.run(run())
+
+.. testoutput::
+    :hide:
+
+    ...
 
 
 Notice how, rather than passing a |ValidationContext| object directly, the
@@ -394,7 +428,7 @@ Anyhow, to disable diff analysis completely, it suffices to pass the
 :func:`~.pyhanko.sign.validation.validate_pdf_signature`.
 
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.keys import load_cert_from_pemder
     from pyhanko_certvalidator import ValidationContext
@@ -409,6 +443,11 @@ Anyhow, to disable diff analysis completely, it suffices to pass the
         sig = r.embedded_signatures[0]
         status = validate_pdf_signature(sig, vc, skip_diff=True)
         print(status.pretty_print_details())
+
+.. testoutput::
+    :hide:
+
+    ...
 
 
 Probing different aspects of the validity of a signature

@@ -11,6 +11,28 @@ This page describes pyHanko's signing API.
     :ref:`background on PDF signatures <pdf-signing-background>` in the CLI
     documentation.
 
+.. testsetup:: *
+
+    globals().update(make_doc_env(DocEnvSpec(
+        files={
+            'document.pdf': 'MINIMAL',
+            'input.pdf': 'MINIMAL',
+            'path/to/NotoSans-Regular.ttf': 'NotoSans-Regular.ttf',
+            'stamp.png': 'stamp.png',
+            'my-fancy-appearance.pdf': 'VECTOR_IMAGE_PDF',
+        },
+        signers=(
+            SignerSpec(),
+            SignerSpec(provisioning=SignerProvisioning.PKCS12),
+        ),
+        timestamping=TimestampSpec(),
+        trust=TrustSpec(fetch_revocation=True),
+    )))
+
+.. testcleanup:: *
+
+    teardown_doc_env(_doc_env)
+
 
 General API design
 ------------------
@@ -76,7 +98,7 @@ signature fields in the document isn't exactly one.
 
 In simple cases, signing a document can therefore be as easy as this:
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.sign import signers
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -103,7 +125,7 @@ wrapper around |PdfSigner|'s :meth:`~.pyhanko.sign.signers.pdf_signer.PdfSigner.
 method, with essentially the same API.
 The following code is more or less equivalent.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.sign import signers
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -159,7 +181,7 @@ Note that, from version 0.9.0 onwards, pyHanko can also be called asynchronously
 In fact, this is now the preferred mode of invocation for most lower-level functionality.
 Anyway, the example from this section could have been written asynchronously as follows.
 
-.. code-block:: python
+.. testcode::
 
     import asyncio
     from pyhanko.sign import signers
@@ -225,7 +247,7 @@ Text stamp styles are (unsurprisingly) described by a :class:`~.pyhanko.stamp.Te
 object. Here's a code sample demonstrating basic usage, with some custom text using a TrueType font,
 and a bitmap background.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko import stamp
     from pyhanko.pdf_utils import text, images
@@ -234,7 +256,11 @@ and a bitmap background.
     from pyhanko.sign import fields, signers
 
 
-    signer = signers.SimpleSigner.load(...)
+    signer = signers.SimpleSigner.load(
+        'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+        ca_chain_files=('path/to/relevant/certs.pem',),
+        key_passphrase=b'secret'
+    )
     with open('document.pdf', 'rb') as inf:
         w = IncrementalPdfFileWriter(inf)
         fields.append_signature_field(
@@ -286,7 +312,7 @@ Besides text stamps, pyHanko also supports signature appearances with a QR code 
 Here's a variation of the previous example that leaves out the background, but includes a QR code
 in the end result.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko import stamp
     from pyhanko.pdf_utils import text
@@ -295,7 +321,11 @@ in the end result.
     from pyhanko.sign import fields, signers
 
 
-    signer = signers.SimpleSigner.load(...)
+    signer = signers.SimpleSigner.load(
+        'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+        ca_chain_files=('path/to/relevant/certs.pem',),
+        key_passphrase=b'secret'
+    )
     with open('document.pdf', 'rb') as inf:
         w = IncrementalPdfFileWriter(inf)
         fields.append_signature_field(
@@ -344,14 +374,18 @@ primitive. If you want to go beyond pyHanko's default signature appearances, you
 to import an entire page from an external PDF file to use as the appearance, without anything else
 overlaid on top. Here's how that works.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko import stamp
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.sign import fields, signers
 
 
-    signer = signers.SimpleSigner.load(...)
+    signer = signers.SimpleSigner.load(
+        'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+        ca_chain_files=('path/to/relevant/certs.pem',),
+        key_passphrase=b'secret'
+    )
     with open('document.pdf', 'rb') as inf:
         w = IncrementalPdfFileWriter(inf)
         fields.append_signature_field(
@@ -424,7 +458,7 @@ field's seed values.
 The example from the previous section doesn't need to be modified by a lot
 to include a trusted timestamp in the signature.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.sign import signers, timestamps
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -436,7 +470,7 @@ to include a trusted timestamp in the signature.
         key_passphrase=b'secret'
     )
 
-    tst_client = timestamps.HTTPTimeStamper('http://example.com/tsa')
+    tst_client = timestamps.HTTPTimeStamper(TSA_URL)
 
     with open('document.pdf', 'rb') as doc:
         w = IncrementalPdfFileWriter(doc)
@@ -472,8 +506,9 @@ baseline profiles, tweak the parameters of the |PdfSignatureMetadata| object
 accordingly.
 
 
-.. code-block:: python
+.. testcode::
 
+    from pyhanko.keys import load_certs_from_pemder
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.sign import signers, timestamps
     from pyhanko.sign.fields import SigSeedSubFilter
@@ -488,7 +523,7 @@ accordingly.
 
     # Set up a timestamping client to fetch timestamps tokens
     timestamper = timestamps.HTTPTimeStamper(
-        url='http://tsa.example.com/timestampService'
+        url=TSA_URL
     )
 
     # Settings for PAdES-LTA
@@ -496,9 +531,16 @@ accordingly.
         field_name='Signature', md_algorithm='sha256',
         # Mark the signature as a PAdES signature
         subfilter=SigSeedSubFilter.PADES,
-        # We'll also need a validation context
-        # to fetch & embed revocation info.
-        validation_context=ValidationContext(allow_fetching=True),
+        # We'll also need a validation context to fetch & embed revocation
+        # info. If the signer's chain doesn't terminate in a root that is
+        # part of your system trust, supply it via trust_roots /
+        # extra_trust_roots (see the warning below).
+        validation_context=ValidationContext(
+            allow_fetching=True,
+            extra_trust_roots=list(
+                load_certs_from_pemder(['path/to/relevant/certs.pem'])
+            ),
+        ),
         # Embed relevant OCSP responses / CRLs (PAdES-LT)
         embed_validation_info=True,
         # Tell pyHanko to put in an extra DocumentTimeStamp
@@ -559,9 +601,10 @@ additional effort |---| ``aiohttp`` is a widely-used
 Here's an example demonstrating how you could use ``aiohttp``-based networking
 in pyHanko to create a PAdES-B-LTA signature.
 
-.. code-block:: python
+.. testcode::
 
     import aiohttp
+    from pyhanko.keys import load_certs_from_pemder
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.sign import signers
     from pyhanko.sign.fields import SigSeedSubFilter
@@ -583,13 +626,18 @@ in pyHanko to create a PAdES-B-LTA signature.
         # and tell it to use our client session.
         validation_context = ValidationContext(
             fetcher_backend=AIOHttpFetcherBackend(session),
-            allow_fetching=True
+            allow_fetching=True,
+            # supply the signer's trust anchors explicitly if they aren't
+            # part of your system trust (see the earlier PAdES warning)
+            extra_trust_roots=list(
+                load_certs_from_pemder(['path/to/relevant/certs.pem'])
+            ),
         )
 
         # Similarly, we choose an RFC 3161 client implementation
         # that uses AIOHttp under the hood
         timestamper = AIOHttpTimeStamper(
-            'http://tsa.example.com/timestampService',
+            TSA_URL,
             session=session
         )
 
@@ -613,6 +661,13 @@ in pyHanko to create a PAdES-B-LTA signature.
        # Set up our aiohttp session
        async with aiohttp.ClientSession() as session:
            await sign_doc_demo(session, 'input.pdf', 'output.pdf')
+
+.. testcode::
+    :hide:
+
+    run_async_signing(
+        lambda session: sign_doc_demo(session, 'input.pdf', 'output.pdf')
+    )
 
 
 .. note::
@@ -684,18 +739,20 @@ control over what data ends up in the signature object's ``/Contents`` entry.
 Here is an example demonstrating its use, sourced more or less directly from
 the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
 
-.. code-block:: python
+.. testcode::
 
     import asyncio
+    import tzlocal
     from datetime import datetime
-    from pyhanko.sign import signers
+    from pyhanko.sign import signers, fields
     from pyhanko.sign.signers import cms_embedder
     from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
     from io import BytesIO
 
-    input_buf = BytesIO(b'<input file goes here>')
+    with open('document.pdf', 'rb') as inf:
+        input_buf = BytesIO(inf.read())
     w = IncrementalPdfFileWriter(input_buf)
 
     # Phase 1: coroutine sets up the form field, and returns a reference
@@ -739,7 +796,11 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
     # NOTE: I'm using a regular SimpleSigner here, but you can substitute
     # whatever CMS supplier you want.
 
-    signer: signers.SimpleSigner = FROM_CA
+    signer = signers.SimpleSigner.load(
+        'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+        ca_chain_files=('path/to/relevant/certs.pem',),
+        key_passphrase=b'secret'
+    )
     # let's supply the CMS object as a raw bytestring
     cms_bytes = asyncio.run(
         signer.async_sign(
@@ -821,7 +882,7 @@ remote signers that supply complete CMS objects.
                 # (for example's sake)
                 signature_value=bytes(256),
             ),
-            timestamper=timestamps.HTTPTimeStamper('http://tsa.example.com')
+            timestamper=timestamps.HTTPTimeStamper(TSA_URL)
         )
         prep_digest, tbs_document, output_handle = \
             await pdf_signer.async_digest_doc_for_signing(w)
@@ -886,40 +947,55 @@ complete CMS signature containers).
 
 Here's what that might look like in a toy example.
 
-.. code-block:: python
+.. testcode::
 
-    w = IncrementalPdfFileWriter(pdf_file_handle)
-    pdf_signer = signers.PdfSigner(
-        # Specifying a digest algorithm (or signature mechanism)
-        # is necessary if the signing cert is not available
-        signers.PdfSignatureMetadata(
-            field_name='Signature',
-            md_algorithm='sha256',
-        ),
-        signer=ExternalSigner(
-            # note the 'None's
-            signing_cert=None, cert_registry=None,
-            signature_value=256,
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+    from pyhanko.sign import signers
+    from pyhanko.sign.signers.pdf_cms import ExternalSigner
+    from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
+
+    async def sign_with_remote_cert(pdf_file_handle):
+        w = IncrementalPdfFileWriter(pdf_file_handle)
+        pdf_signer = signers.PdfSigner(
+            # Specifying a digest algorithm (or signature mechanism)
+            # is necessary if the signing cert is not available
+            signers.PdfSignatureMetadata(
+                field_name='Signature',
+                md_algorithm='sha256',
+            ),
+            signer=ExternalSigner(
+                # note the 'None's
+                signing_cert=None, cert_registry=None,
+                signature_value=256,
+            )
         )
-    )
 
-    # Since estimation is disabled without a certificate
-    # available, bytes_reserved becomes mandatory.
-    prep_digest, tbs_document, output = await pdf_signer\
-        .async_digest_doc_for_signing(w, bytes_reserved=8192)
+        # Since estimation is disabled without a certificate
+        # available, bytes_reserved becomes mandatory.
+        prep_digest, tbs_document, output = await pdf_signer\
+            .async_digest_doc_for_signing(w, bytes_reserved=8192)
 
-    # Call the external service
-    # note: the signing certificate is in the returned payload,
-    # but we don't (necessarily) need to do anything with it.
-    signature_container = \
-        await call_external_service(prep_digest.document_digest)
+        # Call the external service
+        # note: the signing certificate is in the returned payload,
+        # but we don't (necessarily) need to do anything with it.
+        signature_container = \
+            await call_external_service(prep_digest.document_digest)
 
-    # Note: in the meantime, we could've serialised and deserialised
-    # the contents of 'output', of course
-    await PdfTBSDocument.async_finish_signing(output, prep_digest, signature_container)
+        # Note: in the meantime, we could've serialised and deserialised
+        # the contents of 'output', of course
+        await PdfTBSDocument.async_finish_signing(
+            output, prep_digest, signature_container
+        )
 
-    # If you want, you can now proceed to tack on additional revisions
-    # with revocation information, document timestamps and the like.
+        # If you want, you can now proceed to tack on additional revisions
+        # with revocation information, document timestamps and the like.
+
+.. testcode::
+    :hide:
+
+    import asyncio
+    with open('document.pdf', 'rb') as _fh:
+        asyncio.run(sign_with_remote_cert(_fh))
 
 
 .. _generic-signing:
@@ -958,7 +1034,7 @@ Here is an example showcasing a typical invocation, combined with a call to
 :func:`~pyhanko.sign.signers.functions.embed_payload_with_cms` to embed the resulting payload as
 a signed attachment in a PDF file.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.sign.signers.pdf_cms import SimpleSigner
     from pyhanko.sign.signers.functions import embed_payload_with_cms
@@ -966,11 +1042,16 @@ a signed attachment in a PDF file.
 
     async def demo():
         data = b'Hello world!'
-        # instantiate a SimpleSigner
-        sgn = SimpleSigner(...)
+        # any Signer will do here; instantiate a SimpleSigner of your own,
+        # or reuse one you already have
+        sgn = signers.SimpleSigner.load(
+            'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+            ca_chain_files=('path/to/relevant/certs.pem',),
+            key_passphrase=b'secret'
+        )
         # Sign some data
         signature = \
-            await sign.async_sign_general_data(data, 'sha256', detached=False)
+            await sgn.async_sign_general_data(data, 'sha256', detached=False)
 
         # Embed the payload into a PDF file, with the signature
         # object as a related file.
@@ -984,6 +1065,12 @@ a signed attachment in a PDF file.
             cms_obj=signature,
             file_spec_kwargs={'description': "Signed attachment test"}
         )
+
+.. testcode::
+    :hide:
+
+    import asyncio
+    asyncio.run(demo())
 
 .. warning::
     This way of signing attachments is not standard, and chances are that your PDF reader won't

@@ -17,6 +17,14 @@ However, if you want more control, or you need some of the more advanced
 functionality (such as seed value support or field locking) that the
 PDF standard offers, you might want to read on.
 
+.. testsetup:: *
+
+    globals().update(make_doc_env(DocEnvSpec(signers=(), trust=TrustSpec())))
+
+.. testcleanup:: *
+
+    teardown_doc_env(_doc_env)
+
 
 .. _sigfield-api-design:
 
@@ -54,7 +62,7 @@ Hence, to create a signature field specification for an invisible signature
 field named ``Sig1``, and add it to a file ``document.pdf``, you would proceed
 as follows.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.sign.fields import SigFieldSpec, append_signature_field
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -193,7 +201,7 @@ for a ballot form of sorts, subject to the following requirements.
  * Since we want to avoid cast ballots being modified after the fact, we require
    a strong hash function to be used (at least ``sha256``).
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.sign import fields
     from pyhanko.keys import load_cert_from_pemder
@@ -262,10 +270,10 @@ In pyHanko, these settings are controlled by the
 of |SigFieldSpec|.
 The example below specifies a field with instructions for the signer to
 lock a field called ``SomeTextField``, and set the DocMDP value for that
-signature to :attr:`~.pyhanko.sign.fields.MDPPerm.FORM_FILLING` (i.e. level 2).
+signature to :attr:`~.pyhanko.sign.fields.MDPPerm.FILL_FORMS` (i.e. level 2).
 PyHanko will respect these settings when signing, but other software might not.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.sign import fields
 
@@ -274,7 +282,7 @@ PyHanko will respect these settings when signing, but other software might not.
         field_mdp_spec=fields.FieldMDPSpec(
             fields.FieldMDPAction.INCLUDE, fields=['SomeTextField']
         ),
-        doc_mdp_update_value=fields.MDPPerm.FORM_FILLING
+        doc_mdp_update_value=fields.MDPPerm.FILL_FORMS
     )
 
 The :attr:`~.pyhanko.sign.fields.SigFieldSpec.doc_mdp_update_value` value is

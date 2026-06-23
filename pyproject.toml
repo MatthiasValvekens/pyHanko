@@ -69,6 +69,13 @@ docs-build = [
     "pyhanko-certvalidator",
     "pyhanko-cli",
 ]
+docs-doctest = [
+    { include-group = "docs-build" },
+    "common-test-utils",
+    "certomancer[web-api,web-api-async]>=0.15.1",
+    "requests-mock>=1.8.0",
+    "freezegun>=1.1.0",
+]
 release = ["setuptools>=80.8.0", "tomlkit>=0.15.0", "requests>=2.34.2"]
 lint = ["ruff"]
 provenance-check = ["sigstore>=4.4.0", "pyasn1", "cryptography"]
@@ -114,6 +121,9 @@ ignore = [
     "LOG015",
 ]
 "asn1_types.py" = ["RUF012"]
+# certomancer's label types are immutable string wrappers, so sharing one
+# instance across the doctest environment specs is harmless.
+"docs_testing.py" = ["RUF009"]
 
 
 [tool.uv.sources]
