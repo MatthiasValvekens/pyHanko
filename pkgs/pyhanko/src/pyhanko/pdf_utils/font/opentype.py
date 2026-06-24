@@ -368,12 +368,15 @@ class GlyphAccumulator(FontEngine):
         font_bytes = font_handle.read()
         font_handle.seek(0)
         face = hb.Face(font_bytes)
-        self.font_size = font_size
         self.hb_font = hb.Font(face)
         self.tt = tt = ttLib.TTFont(font_handle)
         base_ps_name = _read_ps_name(tt)
         super().__init__(
-            writer, base_ps_name, embedded_subset=True, obj_stream=obj_stream
+            writer,
+            base_ps_name,
+            embedded_subset=True,
+            obj_stream=obj_stream,
+            font_size=font_size,
         )
         self._font_ref = writer.allocate_placeholder()
         self.cidfont_obj: CIDFont

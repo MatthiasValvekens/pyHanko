@@ -1,3 +1,4 @@
+import re
 from io import BytesIO
 
 import pytest
@@ -62,6 +63,33 @@ def test_simple_textbox_color():
 
 
 NOTO_SERIF_JP = f'{TEST_DIR}/data/fonts/NotoSerifJP-Regular.otf'
+
+
+def test_multiline_textbox_no_drift_with_nondefault_font_size():
+    factory = GlyphAccumulatorFactory(NOTO_SERIF_JP)
+    style = text.TextBoxStyle(font=factory, font_size=8)
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    tb = text.TextBox(style=style, writer=w)
+
+    # GlyphAccumulator.font_size must match style.font_size after construction
+    assert tb.font_engine.font_size == style.font_size
+
+    tb.content = 'Line one\nLine two'
+    content = tb.render()
+
+    # Extract all "x y Td" values from the content stream
+    td_pairs = [
+        (float(m.group(1)), float(m.group(2)))
+        for m in re.finditer(rb'(-?[\d.]+) (-?[\d.]+) Td', content)
+    ]
+
+    # The inner Td from shape() and the outer newline Td from put_string_line
+    # must sum to zero in x for each line.
+    x_running = 0.0
+    for x, _ in td_pairs:
+        x_running += x
+    assert abs(x_running) < 1e-6, f"Drift! {x_running}"
 
 
 def test_embed_subset():

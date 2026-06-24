@@ -48,7 +48,11 @@ class TextStyle(ConfigurableMixin):
 
             from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
 
-            config_dict['font'] = GlyphAccumulatorFactory(fc)
+            try:
+                factory_kwargs = {'font_size': config_dict['font_size']}
+            except KeyError:
+                factory_kwargs = {}
+            config_dict['font'] = GlyphAccumulatorFactory(fc, **factory_kwargs)
         except KeyError:
             pass
 
@@ -115,6 +119,9 @@ class TextBox(PdfContent):
         self._content_lines = self._wrapped_lines = None
         self.font_name = font_name
         self.font_engine = style.font.create_font_engine(writer)
+        # Sync font_size so the Td operators in shape() use the same size as
+        # the Tf operator in render(), preventing horizontal drift on line breaks.
+        self.font_engine.font_size = style.font_size
         self._nat_text_height = self._nat_text_width = 0
 
     def put_string_line(self, txt):

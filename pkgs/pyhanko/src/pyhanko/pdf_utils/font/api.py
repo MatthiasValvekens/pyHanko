@@ -64,6 +64,7 @@ class FontEngine:
         base_postscript_name: str,
         embedded_subset: bool,
         obj_stream=None,
+        font_size: int = 10,
     ):
         fsc = writer.get_subset_collection(base_postscript_name)
         if embedded_subset:
@@ -73,6 +74,7 @@ class FontEngine:
         fsc.subsets[prefix] = self
         self.writer = writer
         self.obj_stream = obj_stream
+        self.font_size = font_size
 
     @property
     def uses_complex_positioning(self):
