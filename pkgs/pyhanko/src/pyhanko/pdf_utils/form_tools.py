@@ -213,7 +213,7 @@ def find_existing_empty_field(
         A reference to the form field dictionary of the resulting field,
         if found.
     :raises FormFillingError:
-    if the form field does not exist or is filled.
+        if the form field does not exist or is filled.
     """
     try:
         field_list = handler.root['/AcroForm']['/Fields']

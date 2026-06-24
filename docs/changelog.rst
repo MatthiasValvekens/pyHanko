@@ -9,7 +9,7 @@ pyHanko
 .. _release-0.35.1:
 
 0.35.1
-=====
+======
 
 *Release date:* 2026-05-06
 
@@ -39,7 +39,7 @@ Validation
 .. _release-0.35.0:
 
 0.35.0
-=====
+======
 
 *Release date:* 2026-05-03
 
