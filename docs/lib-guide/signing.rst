@@ -854,39 +854,42 @@ In the example scenario, we use :class:`~pyhanko.sign.signers.pdf_cms.ExternalSi
 signed attributes and the final CMS object, but the same principle applies (mutatis mutandis) to
 remote signers that supply complete CMS objects.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.sign import signers, fields, timestamps
     from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
     from pyhanko_certvalidator import ValidationContext
     from pyhanko.pdf_utils.writer import BasePdfFileWriter
+    from pyhanko.keys import load_certs_from_pemder
 
     # Skeleton code for an interrupted PAdES signature
 
+    def build_vc():
+        return ValidationContext(
+            trust_roots=list(
+                load_certs_from_pemder(['path/to/relevant/certs.pem'])
+            ),
+            allow_fetching=True,
+        )
 
     async def prep_document(w: BasePdfFileWriter):
-        vc = ValidationContext(...)
         pdf_signer = signers.PdfSigner(
             signers.PdfSignatureMetadata(
                 field_name='SigNew', embed_validation_info=True, use_pades_lta=True,
                 subfilter=fields.SigSeedSubFilter.PADES,
-                validation_context=vc,
+                validation_context=build_vc(),
                 md_algorithm='sha256'
             ),
             # note: this signer will not perform any cryptographic operations,
             # it's just there to bundle certificates with the generated CMS
-            # object and to provide size estimates
-            signer=signers.ExternalSigner(
-                signing_cert=..., ...,
-                # placeholder value, appropriate for a 2048-bit RSA key
-                # (for example's sake)
-                signature_value=bytes(256),
-            ),
+            # object and to provide size estimates. Here, 'ext_signer' is an
+            # ExternalSigner that carries the signer's certificate and a
+            # placeholder signature_value of the right length.
+            signer=ext_signer,
             timestamper=timestamps.HTTPTimeStamper(TSA_URL)
         )
         prep_digest, tbs_document, output_handle = \
             await pdf_signer.async_digest_doc_for_signing(w)
-        md_algorithm = tbs_document.md_algorithm
         psi = tbs_document.post_sign_instructions
 
         signed_attrs = await ext_signer.signed_attrs(
@@ -911,16 +914,34 @@ remote signers that supply complete CMS objects.
         ext_signer = instantiate_external_signer(sig_value)
         sig_cms = await ext_signer.async_sign_prescribed_attributes(
             'sha256', signed_attrs=signed_attrs,
-            timestamper=DUMMY_HTTP_TS
+            timestamper=timestamps.HTTPTimeStamper(TSA_URL)
         )
 
-        validation_context = ValidationContext(...)
         await PdfTBSDocument.async_finish_signing(
             output_handle, prepared_digest=prep_digest,
             signature_cms=sig_cms,
             post_sign_instr=psi,
-            validation_context=validation_context
+            validation_context=build_vc()
         )
+
+.. testcode::
+    :hide:
+
+    import asyncio
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+
+    async def _run_interrupted():
+        with open('input.pdf', 'rb') as inf:
+            w = IncrementalPdfFileWriter(inf)
+            prep_digest, signed_attrs, psi, output_handle = \
+                await prep_document(w)
+            # 'sign_remotely' stands in for the external signing service.
+            sig_value = await sign_remotely(signed_attrs.dump())
+            await finish_signing(
+                sig_value, prep_digest, signed_attrs, psi, output_handle
+            )
+
+    asyncio.run(_run_interrupted())
 
 
 The above example below also showcases how to apply proper post-signature processing in an

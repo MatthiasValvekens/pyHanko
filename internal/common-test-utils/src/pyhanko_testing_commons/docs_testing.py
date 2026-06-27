@@ -27,8 +27,9 @@ import os
 import tempfile
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 from typing import (
     Any,
 )
@@ -41,15 +42,25 @@ from asn1crypto import pem, tsp
 from certomancer import PKIArchitecture
 from certomancer.integrations.aiohttp_illusionist import AsyncIllusionist
 from certomancer.integrations.illusionist import Illusionist
-from certomancer.registry import ArchLabel, CertLabel, KeyLabel, ServiceLabel
+from certomancer.registry import (
+    ArchLabel,
+    CertLabel,
+    EntityLabel,
+    KeyLabel,
+    ServiceLabel,
+)
 from cryptography.hazmat.primitives import serialization
 from freezegun import freeze_time
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import fields, signers, timestamps
 from pyhanko.sign.signers.pdf_cms import ExternalSigner, SimpleSigner
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko_testing_commons.test_data import samples
+from pyhanko_testing_commons.test_data.certomancer_trust_lists import (
+    certomancer_pki_as_trusted_list,
+)
 from pyhanko_testing_commons.test_utils import signing_commons
 
 __all__ = [
@@ -62,8 +73,11 @@ __all__ = [
     'SignerProvisioning',
     'SignerSpec',
     'TimestampSpec',
+    'TrustListSpec',
     'TrustSpec',
     'make_doc_env',
+    'run_with_seeded_lotl',
+    'seed_lotl_cache',
     'teardown_doc_env',
 ]
 
@@ -74,7 +88,18 @@ EXAMPLE_DOMAIN = 'pyhanko.tests'
 
 #: Fixed point in time at which the doctests run. Chosen to fall within the
 #: validity window of the certomancer ``testing-ca`` material.
-FREEZE_DT = datetime(2020, 8, 1, tzinfo=tzlocal.get_localzone())
+FREEZE_DT = datetime(2020, 8, 1, tzinfo=timezone.utc).astimezone(
+    tz=tzlocal.get_localzone()
+)
+
+#: Point in time at which samples that consume the *real* bundled EU trusted
+#: lists run. Those are signed by actual EU trust service providers, whose
+#: certificates postdate :data:`FREEZE_DT` by years; this instant sits within
+#: their validity window instead. Refreshing the bundled lists may require
+#: moving it.
+REAL_TL_DT = datetime(2026, 3, 1, tzinfo=timezone.utc).astimezone(
+    tz=tzlocal.get_localzone()
+)
 
 
 class SignerProvisioning(enum.Enum):
@@ -129,6 +154,24 @@ class TrustSpec:
 
 
 @dataclass(frozen=True)
+class TrustListSpec:
+    """ETSI trusted-list configuration for qualified-signature samples.
+
+    When present, a signed trusted list covering the architecture's PKI is
+    written to disk so a sample can build a
+    :class:`~pyhanko.sign.validation.qualified.tsp.TSPRegistry` from it, exactly
+    as it would from a real national trusted list.
+    """
+
+    tlso_entity: EntityLabel = EntityLabel('root')
+    """Entity in the test PKI that acts as trusted-list scheme operator and
+    signs the list."""
+
+    xml_path: str = 'trusted-list.xml'
+    """Destination for the signed trusted-list XML."""
+
+
+@dataclass(frozen=True)
 class TimestampSpec:
     """Timestamping configuration for samples that embed timestamp tokens."""
 
@@ -141,6 +184,11 @@ class SignatureProfile(enum.Enum):
 
     PLAIN = 'plain'
     """A single, plain approval signature."""
+
+    PADES = 'pades'
+    """A PAdES baseline (B-B) signature, without embedded revocation info or a
+    timestamp (suitable for qualified-signature samples that fetch revocation
+    info live)."""
 
     PADES_LTA = 'pades_lta'
     """A PAdES B-LTA signature with embedded revocation info and a document
@@ -163,6 +211,18 @@ class SignedDocSpec:
 
     profile: SignatureProfile = SignatureProfile.PLAIN
     """Which :class:`SignatureProfile` to produce."""
+
+    signer_cert: CertLabel = CertLabel('signer1')
+    """Certificate (within the architecture) of the signer."""
+
+    signer_key: KeyLabel = KeyLabel('signer1')
+    """Private key (within the architecture) used to sign."""
+
+    signer_chain: tuple[CertLabel, ...] = (
+        CertLabel('root'),
+        CertLabel('interm'),
+    )
+    """CA certificates to embed alongside the signature."""
 
 
 @dataclass(frozen=True)
@@ -195,6 +255,10 @@ class DocEnvSpec:
 
     trust: TrustSpec | None = None
     """Chain-of-trust configuration, or ``None``."""
+
+    trust_list: TrustListSpec | None = None
+    """ETSI trusted-list configuration for qualified-signature samples, or
+    ``None``."""
 
     timestamping: TimestampSpec = TimestampSpec()
     """Timestamping configuration, or ``None``."""
@@ -273,6 +337,16 @@ def _provision_signer(arch: PKIArchitecture, spec: SignerSpec) -> None:
         _write_file(spec.chain_path, chain)
 
 
+def _build_signer(arch: PKIArchitecture, spec: SignedDocSpec) -> SimpleSigner:
+    return SimpleSigner(
+        signing_cert=arch.get_cert(spec.signer_cert),
+        signing_key=arch.key_set.get_private_key(spec.signer_key),
+        cert_registry=SimpleCertificateStore.from_certs(
+            arch.get_cert(label) for label in spec.signer_chain
+        ),
+    )
+
+
 def _generate_signed_doc(
     arch: PKIArchitecture, spec: SignedDocSpec, ts_spec: TimestampSpec | None
 ) -> None:
@@ -283,6 +357,7 @@ def _generate_signed_doc(
     """
     base = _resolve_source(spec.base_file)
     writer = IncrementalPdfFileWriter(BytesIO(base))
+    signer = _build_signer(arch, spec)
     if spec.profile == SignatureProfile.PADES_LTA:
         if not ts_spec:
             raise ValueError("ts_spec must not be None")
@@ -300,17 +375,27 @@ def _generate_signed_doc(
         out = signers.sign_pdf(
             writer,
             meta,
-            signer=signing_commons.FROM_CA,
+            signer=signer,
             timestamper=timestamps.HTTPTimeStamper(
                 arch.service_registry.get_tsa_info(ts_spec.service).url
             ),
+            existing_fields_only=True,
+        )
+    elif spec.profile == SignatureProfile.PADES:
+        out = signers.sign_pdf(
+            writer,
+            signers.PdfSignatureMetadata(
+                field_name=spec.field_name,
+                subfilter=fields.SigSeedSubFilter.PADES,
+            ),
+            signer=signer,
             existing_fields_only=True,
         )
     else:
         out = signers.sign_pdf(
             writer,
             signers.PdfSignatureMetadata(field_name=spec.field_name),
-            signer=signing_commons.FROM_CA,
+            signer=signer,
             existing_fields_only=True,
         )
     _write_file(spec.path, out.getvalue())
@@ -455,11 +540,18 @@ def make_doc_env(spec: DocEnvSpec = DocEnvSpec()) -> dict:
                 pem.armor('CERTIFICATE', trust_cert.dump()),
             )
 
+        if spec.trust_list is not None:
+            tl_xml = certomancer_pki_as_trusted_list(
+                arch, spec.trust_list.tlso_entity
+            )
+            _write_file(spec.trust_list.xml_path, tl_xml.encode('utf-8'))
+
         for doc_spec in spec.signed_documents:
             _generate_signed_doc(arch, doc_spec, spec.timestamping)
 
         injected: dict[str, Any] = {
             'run_async_signing': _make_async_runner(arch),
+            'run_with_seeded_lotl': run_with_seeded_lotl,
             'TSA_URL': arch.service_registry.get_tsa_info(
                 spec.timestamping.service
             ).url,
@@ -497,3 +589,60 @@ def teardown_doc_env(env: DocEnv) -> None:
         closer()
     env._closers.clear()
     os.chdir(env.prev_cwd)
+
+
+def seed_lotl_cache(cache_dir: str | os.PathLike) -> str:
+    """Pre-seed a :class:`FileSystemTLCache` directory with the bundled EU
+    list-of-the-lists and the Belgian national trusted list.
+
+    This lets the live-bootstrap sample in the qualified-validation guide run
+    without touching the network: every download
+    :func:`~.pyhanko.sign.validation.qualified.eutl_fetch.lotl_to_registry`
+    would otherwise perform becomes a cache hit. Restricting the sample to a
+    single member state (``only_territories={'be'}``) keeps it fast and means
+    only the Belgian list has to be seeded alongside the LOTL itself.
+
+    :param cache_dir:
+        Directory to populate; created if it does not yet exist.
+    :return:
+        The cache directory as a string, handy for feeding straight back into
+        the sample.
+    """
+    from pyhanko.sign.validation.qualified.eutl_fetch import (
+        EU_LOTL_LOCATION,
+        FileSystemTLCache,
+    )
+
+    tl_dir = Path(samples.TEST_DIR) / 'data' / 'tl'
+    cache = FileSystemTLCache(
+        Path(cache_dir), expire_after=timedelta(days=3650)
+    )
+    cache[EU_LOTL_LOCATION] = (tl_dir / 'eu-lotl.xml').read_text(
+        encoding='utf8'
+    )
+    # The Belgian list's location as advertised in the bundled LOTL.
+    cache['https://tsl.belgium.be/tsl-be-v6.xml'] = (
+        tl_dir / 'tsl-be-v6.xml'
+    ).read_text(encoding='utf8')
+    return str(cache_dir)
+
+
+def run_with_seeded_lotl(
+    body: Callable[[str], Awaitable[Any]], cache_dir: str = 'lotl-cache'
+) -> Any:
+    """Run a coroutine that bootstraps from the EU list-of-the-lists.
+
+    Seeds ``cache_dir`` through :func:`seed_lotl_cache` and runs ``body``
+    against it at :data:`REAL_TL_DT`, overriding the document's usual frozen
+    clock for the duration.
+
+    :param body:
+        Callable taking the cache directory and returning the coroutine to run.
+    :param cache_dir:
+        Directory to seed and hand to ``body``.
+    :return:
+        Whatever the coroutine returns.
+    """
+    with freeze_time(REAL_TL_DT):
+        seed_lotl_cache(cache_dir)
+        return asyncio.run(body(cache_dir))

@@ -14,8 +14,22 @@ __all__ = [
 @dataclass(frozen=True)
 class ValidationTimingInfo:
     validation_time: datetime
+    """
+    Reference time for the validation.
+    """
+
     best_signature_time: datetime
+    """
+    Earliest time at which the signature was known to exist.
+    In the absence of other evidence, initialise this to
+    :attr:`validation_time`.
+    """
+
     point_in_time_validation: bool
+    """
+    Metadata parameter indicating whether the validation is considered
+    "live" or historical.
+    """
 
     @classmethod
     def now(cls, tz: tzinfo | None = None) -> 'ValidationTimingInfo':

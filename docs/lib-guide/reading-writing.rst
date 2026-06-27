@@ -37,12 +37,13 @@ In-memory data can be read in a similar way: if ``buf`` is a :class:`bytes`
 object containing data from a PDF file, you can use it in a
 :class:`~.pyhanko.pdf_utils.reader.PdfFileReader` as follows.
 
-.. code-block:: python
+.. testcode::
 
     from pyhanko.pdf_utils.reader import PdfFileReader
     from io import BytesIO
 
-    buf = b'<PDF file data goes here>'
+    with open('document.pdf', 'rb') as f:
+        buf = f.read()  # buf holds the raw PDF bytes
     doc = BytesIO(buf)
     r = PdfFileReader(doc)
     # ... do stuff ...

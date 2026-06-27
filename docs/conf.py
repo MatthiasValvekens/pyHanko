@@ -49,8 +49,6 @@ version = release.split('-')[0]  # strip the release tag
 # ones.
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.doctest', 'sphinx_rtd_theme']
 
-# Allow loose matching of sample output: ELLIPSIS lets a hidden ``testoutput``
-# of ``...`` stand for "this block prints something we don't want to assert on".
 doctest_default_flags = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
 
 # Imports shared by every doctest document. The heavy lifting (PKI material,
@@ -65,6 +63,7 @@ from pyhanko_testing_commons.docs_testing import (
     SignerSpec,
     SignerProvisioning,
     TrustSpec,
+    TrustListSpec,
     TimestampSpec,
     SignatureProfile,
     SignedDocSpec,

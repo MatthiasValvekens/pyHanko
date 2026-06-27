@@ -36,7 +36,7 @@ Support for certificate validation is provided by the
     reading-writing
     sig-fields
     signing
-    validation
+    validation/index
     pdf-utils
     cli-plugins
     adv-examples
