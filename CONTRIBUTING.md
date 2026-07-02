@@ -26,6 +26,10 @@ and development should be asked in the discussion forum instead.
 Note that community support is provided on a best-effort basis without any
 service level guarantees.
 
+**There is no free e-mail support.** If you need help, make a post on the
+discussion forum where the answers can benefit others.
+Support over private communication channels (e.g. e-mail) requires
+a paid consulting arrangement.
 
 ### Bug reports
 
@@ -35,15 +39,14 @@ relevant information indicated in the template.
 
 Some additional pointers:
 
- * For bugs in library code, always include a stack trace, and (if at all
-   possible) a minimal, reproducible code sample.
+ * For bugs in library code, always include a stack trace. Adding a minimal code
+   sample to reproduce the wrong behaviour is strongly encouraged.
  * For issues with CLI bugs, include the full output in `--verbose` mode.
- * When available, example files are appreciated. If you're not comfortable
-   sharing your example files in public, you can also email them to
-   `pyhanko.samples@mvalvekens.be`.
+ * When available, including example files is strongly recommended.
+ * If you cannot provide sample input to reproduce a particular problem,
+   you MUST post on the discussion forum before filing a bug report.
 
-**IMPORTANT: NEVER disclose production private keys in your bug reports or
-in your e-mails.**
+**IMPORTANT: NEVER disclose production private keys in your bug reports.**
 
 ### On the distinction between a bug report and a support request
 
@@ -65,6 +68,10 @@ useful feedback:
    hallucination until proven otherwise. Forget about the issue tracker; post on
    the discussion forum if you must, but above all: read the docs to see if what the
    LLM spat out even makes sense.
+ * LLM-assisted analysis is NOT a substitute for bug reproduction steps.
+ * While this project permits using LLMs for diagnosing bugs, it is
+   the reporter's responsibility to disclose which parts of the bug
+   report include such analysis.
 
 Bug reports that don't pass the smell test will be mercilessly converted to discussions
 at the maintainer's discretion.
