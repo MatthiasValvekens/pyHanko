@@ -807,13 +807,56 @@ PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE = """
 """
 
 
-@pytest.mark.parametrize('sample', ['ok', 'wrong uri type'])
+# https://github.com/itext/itext-java/pull/100
+# noinspection HttpUrlsUsage
+PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE_ITEXT_PRE804_STYLE = """
+<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+      xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"
+      xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+      xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"
+      xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+   <pdfaid:part>3</pdfaid:part>
+   <pdfaid:conformance>A</pdfaid:conformance>
+   <pdfaExtension:schemas>
+    <rdf:Bag>
+     <rdf:li rdf:parseType="Resource">
+      <pdfaSchema:schema>PDF/UA identification schema</pdfaSchema:schema>
+      <pdfaSchema:namespaceURI>http://www.aiim.org/pdfua/ns/id/</pdfaSchema:namespaceURI>
+      <pdfaSchema:prefix>pdfuaid</pdfaSchema:prefix>
+      <pdfaSchema:property>
+       <rdf:Seq>
+        <rdf:li rdf:parseType="Resource">
+         <pdfaProperty:name>part</pdfaProperty:name>
+         <pdfaProperty:valueType>Integer</pdfaProperty:valueType>
+         <pdfaProperty:category>internal</pdfaProperty:category>
+         <pdfaProperty:description>PDF/UA version identifier</pdfaProperty:description>
+        </rdf:li>
+       </rdf:Seq>
+      </pdfaSchema:property>
+     </rdf:li>
+    </rdf:Bag>
+   </pdfaExtension:schemas>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>
+"""
+
+
+@pytest.mark.parametrize(
+    'sample',
+    ['ok', 'wrong uri type (attribute)', 'wrong uri type (iText <8.0.4)'],
+)
 def test_parse_pdfa_ext_schema(sample):
-    xmp = (
-        PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE
-        if sample == 'ok'
-        else PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE
-    )
+    samples = {
+        'ok': PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE,
+        'wrong uri type (attribute)': PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE,
+        'wrong uri type (iText <8.0.4)': PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE_ITEXT_PRE804_STYLE,
+    }
+    xmp = samples[sample]
     roots = xmp_xml.parse_xmp(BytesIO(xmp.encode('utf8')))
     root = roots[0]
     pdfa_ext = root[model.ExpandedName(model.NS['pdfaExtension'], 'schemas')]
@@ -832,6 +875,8 @@ def test_parse_pdfa_ext_schema(sample):
     ns_uri = pdfua_ext_schema.value[
         model.ExpandedName(model.NS['pdfaSchema'], 'namespaceURI')
     ].value
+    # assert that the rdf:parseType directives didn't leak into the property list
+    assert len(property_seq.entries[0].value) == 4
     assert isinstance(ns_uri, model.XmpUri)
     assert ns_uri.value == model.NS['pdfuaid']
 

@@ -232,6 +232,26 @@ RDF_PARSE_TYPE = ExpandedName(ns=NS['rdf'], local_name='parseType')
 ``parseType`` in the ``rdf`` namespace.
 """
 
+RDF_ID = ExpandedName(ns=NS['rdf'], local_name='ID')
+"""
+``ID`` in the ``rdf`` namespace.
+"""
+
+RDF_NODE_ID = ExpandedName(ns=NS['rdf'], local_name='nodeID')
+"""
+``nodeId`` in the ``rdf`` namespace.
+"""
+
+RDF_OLD_TERMS = (
+    ExpandedName(ns=NS['rdf'], local_name='aboutEach'),
+    ExpandedName(ns=NS['rdf'], local_name='aboutEachPrefix'),
+    ExpandedName(ns=NS['rdf'], local_name='bagID'),
+)
+"""
+Deprecated attributes in the ``rdf`` namespace.
+"""
+
+
 RDF_DESCRIPTION = ExpandedName(ns=NS['rdf'], local_name='Description')
 """
 ``Description`` in the ``rdf`` namespace.
@@ -448,6 +468,9 @@ class XmpStructure:
 
     def __iter__(self) -> Iterator[Tuple[ExpandedName, 'XmpValue']]:
         yield from self._fields.items()
+
+    def __len__(self) -> int:
+        return len(self._fields)
 
     def __repr__(self):
         return f"XmpStructure({self._fields!r})"

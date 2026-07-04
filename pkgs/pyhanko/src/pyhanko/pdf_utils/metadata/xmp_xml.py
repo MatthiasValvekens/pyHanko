@@ -381,6 +381,21 @@ def _check_lang(elem: etree._Element) -> Optional[str]:
     return elem.get(_tag(model.XML_LANG), None)
 
 
+NOT_PROPERTY_ATTRIBUTES = (
+    # excluded because xml namespace stuff is
+    # by definition not part of an attribute event
+    model.XML_LANG,
+    # excluded because the RDF spec explicitly labels them
+    # as "not property attributes"; see propertyAttributeURIs in the spec
+    model.RDF_PARSE_TYPE,
+    model.RDF_ID,
+    model.RDF_NODE_ID,
+    model.RDF_DESCRIPTION,
+    model.RDF_LI,
+    *model.RDF_OLD_TERMS,
+)
+
+
 def _proc_xmp_struct(
     elem: etree._Element, lang: Optional[str]
 ) -> model.XmpStructure:
@@ -398,16 +413,17 @@ def _proc_xmp_struct(
     # extract attributes as unqualified simple values
     value: Union[model.XmpUri, str]
     for name, attr_value in iter_attrs(elem):
-        if name != model.XML_LANG:
-            if HTTP_URI_RE.match(attr_value):
-                # hack to get around some popular XMP processors
-                # putting URIs in places where they shouldn't go
-                # (in particular: "Structure element with field attributes"
-                # pattern
-                value = model.XmpUri(attr_value)
-            else:
-                value = attr_value
-            fields[name] = model.XmpValue(value)
+        if name in NOT_PROPERTY_ATTRIBUTES:
+            continue
+        if HTTP_URI_RE.match(attr_value):
+            # hack to get around some popular XMP processors
+            # putting URIs in places where they shouldn't go
+            # (in particular: "Structure element with field attributes"
+            # pattern
+            value = model.XmpUri(attr_value)
+        else:
+            value = attr_value
+        fields[name] = model.XmpValue(value)
 
     return model.XmpStructure(fields)
 
@@ -490,9 +506,14 @@ def _proc_xmp_value(
         if uri_str is not None:
             return model.XmpValue(model.XmpUri(uri_str))
         elif elem.text:
-            return model.XmpValue(
-                elem.text, model.Qualifiers.lang_as_qual(lang)
-            )
+            text = elem.text
+            if HTTP_URI_RE.match(text):
+                # hack to get around some popular XMP processors
+                # putting URIs in places where they shouldn't go
+                # (see in particular https://github.com/itext/itext-java/pull/100)
+                return model.XmpValue(model.XmpUri(text))
+            else:
+                return model.XmpValue(text, model.Qualifiers.lang_as_qual(lang))
         elif elem.attrib:
             return model.XmpValue(_proc_xmp_struct(elem, lang))
         else:
