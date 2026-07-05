@@ -6,6 +6,37 @@ Release history
 pyHanko
 -------
 
+
+.. _release-0.35.2:
+
+0.35.2
+======
+
+*Release date:* 2026-07-05
+
+
+Dependency changes
+------------------
+
+ * Relax upper bound for ``aiohttp`` to ``<3.15``.
+
+
+Bugs fixed
+----------
+
+ - Fix ISO 32000-1 §7.4.2 odd-digit handling in ``ASCIIHexDecode``.
+ - Handle fields with ``/AS`` in difference analysis.
+ - Drop unsupported subfilters while enumerating signature fields,
+   i.e. before validation.
+ - Sync font size between style and :class:`~pyhanko.pdf_utils.font.api.FontEngine`.
+   This also promotes the ``font_size`` field to :class:`~pyhanko.pdf_utils.font.api.FontEngine`.
+ - When parsing XMP, auto-promote URIs serialised as text properties to URI status
+   when they appear as text in an XML element.
+   That was already the case for XML attributes; this change generalises the existing behaviour.
+ - When parsing XMP, make sure that XML attributes that are part of RDF/XML meta-syntax
+   are not accidentally treated as semantic property attributes at the XMP level.
+
+
 .. _release-0.35.1:
 
 0.35.1
