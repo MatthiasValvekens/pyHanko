@@ -619,7 +619,7 @@ def _verify_xml(tl_xml: str, tlso_cert: x509.Certificate):
         )
     except InvalidXmlSignature as e:
         raise SignatureValidationError(
-            f"Invalid XML signature on trusted list: {e}",
+            f"Invalid XML signature on trusted list: [{type(e).__name__}] {e}",
             ades_subindication=AdESIndeterminate.GENERIC,
         ) from e
     return verify_results
@@ -666,11 +666,14 @@ def _validate_and_extract_tl_data_multiple_certs(
             result = _validate_and_extract_tl_data(tl_xml, candidate)
             break
         except SignatureValidationError as e:
-            errors.append(e)
+            errors.append(
+                f"<{candidate.serial_number}|{candidate.subject.human_friendly}> {e.failure_message}"
+            )
     if not result:
+        sep = '\n - '
         msg = (
             f"None of the candidate TLSO certs could be used to validate "
-            f"the TL signature: {','.join(e.failure_message for e in errors)}"
+            f"the TL signature:{sep}{sep.join(errors)}"
         )
         raise SignatureValidationError(
             msg,
