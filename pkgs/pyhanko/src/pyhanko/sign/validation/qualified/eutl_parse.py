@@ -765,6 +765,9 @@ class LOTLParseResult:
     pivot_urls: List[str]
 
 
+KNOWN_OJEU_REANCHOR_URLS = ('https://eur-lex.europa.eu/eli/C/2026/1944/oj',)
+
+
 def parse_lotl_unsafe(
     lotl_xml: str,
 ) -> LOTLParseResult:
@@ -824,11 +827,17 @@ def parse_lotl_unsafe(
             location, territory, tl_issuer_certs, frozenset(rules)
         )
         references.append(ref)
-    pivots = [
-        info_uri.value
-        for info_uri in info_uris.uri
-        if info_uri.value.endswith(".xml")
-    ]
+
+    def _pivots():
+        for info_uri in info_uris.uri:
+            if info_uri.value.endswith(".xml"):
+                yield info_uri.value
+            elif info_uri.value in KNOWN_OJEU_REANCHOR_URLS:
+                # Reanchoring point by legislative fiat.
+                # Pivots older than this point don't apply
+                break
+
+    pivots = list(_pivots())
     return LOTLParseResult(
         references=references, errors=errors, pivot_urls=pivots
     )
@@ -848,20 +857,21 @@ def latest_known_lotl_tlso_certs() -> List[x509.Certificate]:
     return _lotl_certs_file("latest.cert.pem")
 
 
-def ojeu_bootstrap_lotl_tlso_certs() -> List[x509.Certificate]:
+def ojeu_bootstrap_lotl_tlso_certs(anchor=1) -> List[x509.Certificate]:
     """
     Retrieve the list of certificates published
     in `OJ C 276, 16.8.2019 <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG>`_,
     which is bundled with this library.
     """
-    return _lotl_certs_file("bootstrap.cert.pem")
+    return _lotl_certs_file(f"bootstrap-{anchor}.cert.pem")
 
 
 # TODO check validity time windows
 
 
 def validate_and_parse_lotl(
-    lotl_xml: str, lotl_tlso_certs: Optional[List[x509.Certificate]] = None
+    lotl_xml: str,
+    lotl_tlso_certs: Optional[List[x509.Certificate]] = None,
 ) -> LOTLParseResult:
     """
     Validate and parse a list-of-the-lists (LOTL).

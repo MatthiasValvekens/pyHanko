@@ -190,6 +190,7 @@ async def bootstrap_lotl_signers(
     client: aiohttp.ClientSession,
     bootstrap_lotl_tlso_certs: Optional[List[x509.Certificate]] = None,
     cache: Optional[TLCache] = None,
+    anchor: int = 1,
 ) -> List[x509.Certificate]:
     """
     Perform the bootstrapping process specified in
@@ -216,12 +217,21 @@ async def bootstrap_lotl_signers(
         An :class:`aiohttp.ClientSession` object to use for fetching pivot
         lists-of-the-lists.
     :param bootstrap_lotl_tlso_certs:
-        Initial list of certificates. This defaults to the list published
-        in `OJ C 276, 16.8.2019 <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG>`_,
-        which is bundled with this library.
+        Initial list of certificates. If not specified, the ``anchor`` parameter
+        determines the bootstrap list.
     :param cache:
         An optional :class:`TLCache` to be used while fetching pivot
         lists-of-the-lists.
+    :param anchor:
+        Index of the OJEU anchor to bootstrap against. Known OJEU anchors
+        are bundled with this library. Defaults to the latest.
+
+         * Anchor 0 was sourced from  <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG>`_,
+         * Anchor 1 was sourced from <https://eur-lex.europa.eu/eli/C/2026/1944/oj>`_.
+
+        .. info::
+            At the time of writing, the LotL has been re-anchored once in its history.
+
     :return:
         The list of certificates that can be used to verify the most recent
         list-of-the-lists.
@@ -232,7 +242,7 @@ async def bootstrap_lotl_signers(
     if bootstrap_lotl_tlso_certs:
         current_certs = bootstrap_lotl_tlso_certs
     else:
-        current_certs = eutl_parse.ojeu_bootstrap_lotl_tlso_certs()
+        current_certs = eutl_parse.ojeu_bootstrap_lotl_tlso_certs(anchor=anchor)
 
     for pivot in sorted_pivots:
         logger.info(f"Processing LOTL pivot {pivot}...")

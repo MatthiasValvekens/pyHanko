@@ -102,13 +102,15 @@ def _raw_tlservice_parse(xml: str) -> ts_119612.TSPService:
 
 TEST_DATA_DIR = Path(TEST_DIR) / 'data' / 'tl'
 CRYPTO_DIR = Path(TEST_DIR) / 'data' / 'crypto'
-TEST_REAL_TL_BE = TEST_DATA_DIR / 'tsl-be.xml'
+TEST_REAL_TL_BE = TEST_DATA_DIR / 'tsl-be-v6.xml'
+TEST_REAL_TL_BE_OLD = TEST_DATA_DIR / 'tsl-be-old.xml'
 TEST_REAL_TL_EE = TEST_DATA_DIR / 'tsl-ee.xml'
 TEST_REAL_LOTL = TEST_DATA_DIR / 'eu-lotl.xml'
+TEST_REAL_LOTL_OLD = TEST_DATA_DIR / 'eu-lotl-old.xml'
 
 
 def test_parse_cas_from_real_tl_smoke_test():
-    cas_read = _read_cas_from_file(TEST_REAL_TL_BE)
+    cas_read = _read_cas_from_file(TEST_REAL_TL_BE_OLD)
     current_cas = [ca for ca in cas_read if not ca.base_info.valid_until]
     # note: this double-counts CAs with more than one service definition
     assert len(current_cas) == 28
@@ -116,14 +118,14 @@ def test_parse_cas_from_real_tl_smoke_test():
 
 
 def test_parse_qtsts_from_real_tl_smoke_test():
-    qtsts_read = _read_qtsts_from_file(TEST_REAL_TL_BE)
+    qtsts_read = _read_qtsts_from_file(TEST_REAL_TL_BE_OLD)
     current_qtsts = [tst for tst in qtsts_read if not tst.base_info.valid_until]
     assert len(current_qtsts) == 17
     assert len(qtsts_read) == 18
 
 
 def test_parse_services_from_real_tl_smoke_test():
-    with TEST_REAL_TL_BE.open('r', encoding='utf8') as inf:
+    with TEST_REAL_TL_BE_OLD.open('r', encoding='utf8') as inf:
         tl_str = inf.read()
         registry, errors = eutl_parse.trust_list_to_registry_unsafe(tl_str)
         assert len(errors) == 0
@@ -164,9 +166,10 @@ d0YBxTjEairZKyzhgGbZEnBUWSkn6n9uZ5Ai2lo=
 """
 
 
+@freeze_time("2025-06-01T00:05:00+00:00")
 def test_parse_services_from_real_tl_with_validation_smoke_test():
     tlso_cert = x509.Certificate.load(base64.b64decode(BE_TLSO_CERT_B64))
-    with TEST_REAL_TL_BE.open('r', encoding='utf8') as inf:
+    with TEST_REAL_TL_BE_OLD.open('r', encoding='utf8') as inf:
         tl_str = inf.read()
         registry, errors = eutl_parse.trust_list_to_registry(
             tl_str, [tlso_cert]
@@ -210,11 +213,15 @@ def aiohttp_client_cls():
     return PathRetainingClient
 
 
-def _check_lotl_signers(results):
+def _check_lotl_signers(results, reference='latest'):
     result_set = {r.sha256_fingerprint for r in results}
-    expected_result_set = {
-        r.sha256_fingerprint for r in eutl_parse.latest_known_lotl_tlso_certs()
-    }
+    if reference == 'pre-reanchor':
+        target = eutl_parse._lotl_certs_file(
+            str(TEST_DATA_DIR / 'pre-reanchor.cert.pem')
+        )
+    else:
+        target = eutl_parse.latest_known_lotl_tlso_certs()
+    expected_result_set = {r.sha256_fingerprint for r in target}
     assert result_set == expected_result_set
 
 
@@ -235,10 +242,10 @@ def test_parse_generated_lotl():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('pass_empty_cache', [True, False])
-async def test_bootstrap_signers(aiohttp_client, pass_empty_cache):
+async def test_bootstrap_signers_post_reanchor(
+    aiohttp_client, pass_empty_cache
+):
     app = web.Application()
-    for pivot in LOTL_PIVOTS:
-        app.router.add_get(f"/tools/lotl/{pivot}", serve_tl_file)
     with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
         client = await aiohttp_client(app)
         results = await eutl_fetch.bootstrap_lotl_signers(
@@ -247,6 +254,22 @@ async def test_bootstrap_signers(aiohttp_client, pass_empty_cache):
             cache=InMemoryTLCache() if pass_empty_cache else None,
         )
         _check_lotl_signers(results)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pass_empty_cache', [True, False])
+async def test_bootstrap_signers_old(aiohttp_client, pass_empty_cache):
+    app = web.Application()
+    for pivot in LOTL_PIVOTS:
+        app.router.add_get(f"/tools/lotl/{pivot}", serve_tl_file)
+    with TEST_REAL_LOTL_OLD.open('r', encoding='utf8') as inf:
+        client = await aiohttp_client(app)
+        results = await eutl_fetch.bootstrap_lotl_signers(
+            inf.read(),
+            client,
+            cache=InMemoryTLCache() if pass_empty_cache else None,
+        )
+        _check_lotl_signers(results, reference='pre-reanchor')
 
 
 @pytest.mark.asyncio
@@ -260,12 +283,12 @@ async def test_bootstrap_signers_with_populated_cache(aiohttp_client):
         with path.open('r', encoding='utf8') as inf:
             cache[url] = inf.read()
 
-    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+    with TEST_REAL_LOTL_OLD.open('r', encoding='utf8') as inf:
         client = await aiohttp_client(app)
         results = await eutl_fetch.bootstrap_lotl_signers(
             inf.read(), client, cache=cache
         )
-        _check_lotl_signers(results)
+        _check_lotl_signers(results, reference='pre-reanchor')
 
 
 @pytest.mark.asyncio
@@ -284,19 +307,23 @@ async def test_bootstrap_signers_request_retry(aiohttp_client):
     app = web.Application()
     for pivot in LOTL_PIVOTS:
         app.router.add_get(f"/tools/lotl/{pivot}", serve_after_one_try)
-    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+    with TEST_REAL_LOTL_OLD.open('r', encoding='utf8') as inf:
         client = await aiohttp_client(app)
-        results = await eutl_fetch.bootstrap_lotl_signers(inf.read(), client)
-        _check_lotl_signers(results)
+        results = await eutl_fetch.bootstrap_lotl_signers(
+            inf.read(), client, anchor=0
+        )
+        _check_lotl_signers(results, reference='pre-reanchor')
 
 
 @pytest.mark.asyncio
 async def test_bootstrap_signers_request_fail(aiohttp_client):
     app = web.Application()
-    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+    with TEST_REAL_LOTL_OLD.open('r', encoding='utf8') as inf:
         client = await aiohttp_client(app)
         with pytest.raises(TSPServiceParsingError):
-            await eutl_fetch.bootstrap_lotl_signers(inf.read(), client)
+            await eutl_fetch.bootstrap_lotl_signers(
+                inf.read(), client, anchor=0
+            )
 
 
 @pytest.mark.asyncio
@@ -308,10 +335,12 @@ async def test_bootstrap_signers_request_outage(aiohttp_client):
 
     for pivot in LOTL_PIVOTS:
         app.router.add_get(f"/tools/lotl/{pivot}", serve_fail)
-    with TEST_REAL_LOTL.open('r', encoding='utf8') as inf:
+    with TEST_REAL_LOTL_OLD.open('r', encoding='utf8') as inf:
         client = await aiohttp_client(app)
         with pytest.raises(TSPServiceParsingError):
-            await eutl_fetch.bootstrap_lotl_signers(inf.read(), client)
+            await eutl_fetch.bootstrap_lotl_signers(
+                inf.read(), client, anchor=0
+            )
 
 
 def test_validate_and_parse_lotl_default_certs():
@@ -324,7 +353,7 @@ def test_validate_and_parse_lotl_default_certs():
 async def test_parse_services_from_real_tl_via_lotl(aiohttp_client):
     app = web.Application()
     app.router.add_get("/tools/lotl/eu-lotl.xml", serve_tl_file)
-    app.router.add_get("/tsl-be.xml", serve_tl_file)
+    app.router.add_get("/tsl-be-v6.xml", serve_tl_file)
 
     client = await aiohttp_client(app)
     registry, errors = await eutl_fetch.lotl_to_registry(
@@ -332,15 +361,15 @@ async def test_parse_services_from_real_tl_via_lotl(aiohttp_client):
     )
     # all the others failed to download
     assert len([e for e in errors if "Failed to download" in str(e)]) == 30
-    assert len(list(registry.known_timestamp_authorities)) == 17
-    assert len(list(registry.known_certificate_authorities)) == 20
+    assert len(list(registry.known_timestamp_authorities)) == 19
+    assert len(list(registry.known_certificate_authorities)) == 29
 
 
 @pytest.mark.asyncio
 async def test_parse_services_from_real_tl_via_selective_lotl(aiohttp_client):
     app = web.Application()
     app.router.add_get("/tools/lotl/eu-lotl.xml", serve_tl_file)
-    app.router.add_get("/tsl-be.xml", serve_tl_file)
+    app.router.add_get("/tsl-be-v6.xml", serve_tl_file)
 
     client = await aiohttp_client(app)
     registry, errors = await eutl_fetch.lotl_to_registry(
@@ -348,8 +377,8 @@ async def test_parse_services_from_real_tl_via_selective_lotl(aiohttp_client):
     )
     # no download failures since only the BE one should've been attempted
     assert len(errors) == 0
-    assert len(list(registry.known_timestamp_authorities)) == 17
-    assert len(list(registry.known_certificate_authorities)) == 20
+    assert len(list(registry.known_timestamp_authorities)) == 19
+    assert len(list(registry.known_certificate_authorities)) == 29
 
 
 ETSI_NS = 'http://uri.etsi.org'
@@ -1661,7 +1690,7 @@ def _validation_context_from_file(path: Path):
 async def test_validate_real_qcert_no_revo():
     cert = load_cert_from_pemder(CRYPTO_DIR / 'real-qcert.cer')
 
-    vc, assessor = _validation_context_from_file(TEST_REAL_TL_BE)
+    vc, assessor = _validation_context_from_file(TEST_REAL_TL_BE_OLD)
     cv = CertificateValidator(end_entity_cert=cert, validation_context=vc)
     path = await cv.async_validate_path()
     result = assessor.check_entity_cert_qualified(path)
@@ -1681,7 +1710,7 @@ async def test_validate_real_qcert_no_revo():
 async def test_validate_real_qtst_cert_no_revo():
     cert = load_cert_from_pemder(CRYPTO_DIR / 'real-qtst-cert.cer')
 
-    vc, assessor = _validation_context_from_file(TEST_REAL_TL_BE)
+    vc, assessor = _validation_context_from_file(TEST_REAL_TL_BE_OLD)
     cv = CertificateValidator(end_entity_cert=cert, validation_context=vc)
     path = await cv.async_validate_path()
     result = assessor.check_entity_cert_qualified(path)
