@@ -48,7 +48,6 @@ ignore_missing_imports = true
 
 [tool.uv]
 package = false
-exclude-newer = "P3D"
 
 [dependency-groups]
 mypy = [

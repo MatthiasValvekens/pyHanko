@@ -79,7 +79,7 @@ testing-base = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
-    "certomancer>=0.13.0,<0.16",
+    "certomancer>=0.16.0",
     "pytest-cov>=4.0,<7.2",
     "pytest-asyncio>=1.1.0,<2.0",
 ]
@@ -91,6 +91,9 @@ testing = [
     { include-group = "testing-base" },
     { include-group = "testing-aiohttp" },
     "common-test-utils[csc]",
+]
+testing-pkcs11-setup = [
+    "certomancer[pkcs11]>=0.16.0",
 ]
 
 
@@ -116,6 +119,7 @@ markers = [
     "legacy: tests for legacy APIs",
     "hsm: run test on HSM platform",
     "algo: indicate signing algorithm used in test",  # so far only used in PKCS#11 suite
+    "required_mechanism: require a specific PKCS#11 mechanism"
 ]
 strict = true
 

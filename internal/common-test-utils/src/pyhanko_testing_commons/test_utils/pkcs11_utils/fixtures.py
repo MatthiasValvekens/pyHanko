@@ -21,12 +21,14 @@ __all__ = [
     'p11_session',
 ]
 
-DEFAULT_SUPPORTED_ALGOS = frozenset({'rsa', 'dsa', 'ecdsa', 'ed25519', 'ed448'})
+DEFAULT_SUPPORTED_ALGOS = frozenset(
+    {'rsa', 'dsa', 'ecdsa', 'ed25519', 'ed448', 'mldsa'}
+)
 
 
 @pytest.fixture(
     params=[
-        pytest.param(k, marks=pytest.mark.algo(k))
+        pytest.param(k, marks=pytest.mark.algo(algo=k))
         for k in DEFAULT_SUPPORTED_ALGOS
     ]
 )
@@ -37,8 +39,27 @@ def any_algo(request):
 @pytest.fixture
 def declared_algo(request):
     for mark in request.node.iter_markers(name='algo'):
-        return mark.args[0]
+        return mark.kwargs.get('algo')
     return 'default'
+
+
+@pytest.fixture
+def required_mechanism(request, declared_algo):
+    from pyhanko.sign import pkcs11
+
+    for mark in request.node.iter_markers(name='require_mech'):
+        mech = mark.args[0]
+        assert isinstance(mech, pkcs11.Mechanism)
+        return mech
+    else:
+        return {
+            'rsa': pkcs11.Mechanism.SHA256_RSA_PKCS,
+            'dsa': pkcs11.Mechanism.DSA_SHA256,
+            'ecdsa': pkcs11.Mechanism.ECDSA_SHA256,
+            'ed25519': pkcs11.Mechanism.EDDSA,
+            'ed448': pkcs11.Mechanism.EDDSA,
+            'mldsa': pkcs11.Mechanism.ML_DSA,
+        }.get(declared_algo, None)
 
 
 def _available_platforms():
@@ -136,7 +157,9 @@ def p11_global_test_config(platform):
 
 
 @pytest.fixture(scope='function')
-def p11_config(request, p11_global_test_config, declared_algo, platform):
+def p11_config(
+    request, p11_global_test_config, declared_algo, platform, required_mechanism
+):
     from pkcs11 import Attribute, ObjectClass
 
     try:
@@ -164,6 +187,13 @@ def p11_config(request, p11_global_test_config, declared_algo, platform):
     if not config.cert_chain:
         certs = []
         with config.session as sess:
+            if (
+                required_mechanism is not None
+                and required_mechanism not in sess.token.slot.get_mechanisms()
+            ):
+                pytest.skip(
+                    f"Required mechanism '{required_mechanism}' is not available on token"
+                )
             for lbl in config.cert_chain_labels:
                 params = {
                     Attribute.CLASS: ObjectClass.CERTIFICATE,
@@ -187,7 +217,7 @@ def p11_config(request, p11_global_test_config, declared_algo, platform):
 
 
 @pytest.fixture(scope='function')
-def p11_session(p11_config):
+def p11_session(p11_config, required_mechanism):
     from pyhanko.sign import pkcs11
 
     sess = pkcs11.open_pkcs11_session(
@@ -196,4 +226,12 @@ def p11_session(p11_config):
         token_criteria=TokenCriteria(label=p11_config.token_label),
     )
     with sess:
-        yield sess
+        if (
+            required_mechanism is not None
+            and required_mechanism not in sess.token.slot.get_mechanisms()
+        ):
+            pytest.skip(
+                f"Required mechanism '{required_mechanism}' is not available on token"
+            )
+        else:
+            yield sess

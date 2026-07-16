@@ -10,6 +10,7 @@ cleanup() {
   softhsm2-util --delete-token --token testdsa
   softhsm2-util --delete-token --token tested25519
   softhsm2-util --delete-token --token tested448
+  softhsm2-util --delete-token --token testmldsa
 }
 
 softhsm2-util --init-token --label testecdsa --pin 1234 --so-pin 5678 --free
@@ -17,9 +18,10 @@ softhsm2-util --init-token --label testrsa --pin 1234 --so-pin 5678 --free
 softhsm2-util --init-token --label testdsa --pin 1234 --so-pin 5678 --free
 softhsm2-util --init-token --label tested25519 --pin 1234 --so-pin 5678 --free
 softhsm2-util --init-token --label tested448 --pin 1234 --so-pin 5678 --free
+softhsm2-util --init-token --label testmldsa --pin 1234 --so-pin 5678 --free
 
 alchemise() {
-  uv run --exact --group testing --extra pkcs11 \
+  uv run --exact --group testing-pkcs11-setup \
      certomancer --config "$CERTOMANCER_CONFIG_PATH" alch --cert signer1 \
      --include-chain --pin 1234 --module "$SOFTHSM2_MODULE_PATH" \
      --token-label $1 $2
@@ -30,3 +32,7 @@ alchemise testecdsa testing-ca-ecdsa
 alchemise testdsa testing-ca-dsa
 alchemise tested25519 testing-ca-ed25519
 alchemise tested448 testing-ca-ed448
+
+if [[ "$P11_PQC" = yes ]] ; then
+  alchemise testmldsa testing-ca-mldsa
+fi

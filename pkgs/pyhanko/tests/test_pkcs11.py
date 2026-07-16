@@ -1,7 +1,5 @@
 """
 Tests for PKCS#11 functionality.
-
-NOTE: these are not run in CI, due to lack of testing setup.
 """
 
 import binascii
@@ -61,7 +59,7 @@ def test_simple_sign(bulk_fetch, p11_config, any_algo, platform):
     val_trusted(emb, vc=p11_config.validation_context)
 
 
-@pytest.mark.algo('rsa')
+@pytest.mark.algo(algo='rsa')
 @pytest.mark.hsm(exclude='safenet,nitrokey')
 def test_simple_sign_with_rsassa_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -85,7 +83,7 @@ def test_simple_sign_with_rsassa_pss(p11_config):
     val_trusted(emb, vc=p11_config.validation_context)
 
 
-@pytest.mark.algo('rsa')
+@pytest.mark.algo(algo='rsa')
 @pytest.mark.hsm
 def test_simple_sign_with_rsassa_pss_custom_parameters(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -467,7 +465,7 @@ def test_sign_deferred_auth(p11_config):
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pytest.mark.algo('rsa')
+@pytest.mark.algo(algo='rsa')
 @pytest.mark.hsm(platform='softhsm')
 def test_simple_sign_with_raw_rsa(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -491,7 +489,7 @@ def test_simple_sign_with_raw_rsa(p11_config):
     val_trusted(emb, vc=p11_config.validation_context)
 
 
-@pytest.mark.algo('dsa')
+@pytest.mark.algo(algo='dsa')
 @pytest.mark.hsm(platform='softhsm')
 def test_simple_sign_with_raw_dsa(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -515,7 +513,7 @@ def test_simple_sign_with_raw_dsa(p11_config):
     val_trusted(emb, vc=p11_config.validation_context)
 
 
-@pytest.mark.algo('rsa')
+@pytest.mark.algo(algo='rsa')
 @pytest.mark.hsm(platform='softhsm')
 def test_no_raw_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -629,7 +627,7 @@ async def test_simple_sign_from_config_async(any_algo, p11_config, platform):
 
 
 @pytest.mark.asyncio
-@pytest.mark.algo('rsa')
+@pytest.mark.algo(algo='rsa')
 @pytest.mark.hsm(exclude='safenet,nitrokey')
 async def test_simple_sign_from_config_async_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))

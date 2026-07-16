@@ -51,7 +51,7 @@ jobs:
           uv run --directory pkgs/pyhanko-certvalidator --no-dev --exact --group testing-base \
             pytest $COVERAGE_SCOPE \
             --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml \
-            tests
+            -m "not algo(algo='mldsa')" tests
       - name: Install external tools for pyHanko test suite
         run: |
           sudo apt-get update
@@ -63,6 +63,7 @@ jobs:
           ./internal/common-test-utils/src/pyhanko_testing_commons/test_data/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
         env:
           UV_PROJECT: pkgs/pyhanko
+          P11_PQC: "no"
       - name: Test pyHanko with pytest
         run: |
           uv run --directory pkgs/pyhanko --no-dev --exact --group testing --all-extras \
@@ -83,6 +84,70 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-${{ strategy.job-index }}
+          path: "pkgs/*/*-coverage.xml"
+  pytest-coverage-p11-pqc:
+    runs-on: ubuntu-26.04  # needed to get a sufficiently recent openssl
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.14"]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - name: Disable Python problem matchers
+        shell: bash
+        # we remove setup-python's problem matchers because
+        # they aren't really an asset given the way pyHanko is tested
+        run: echo "::remove-matcher owner=python::"
+      - name: Install SoftHSMv2 development build from source
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev
+          git clone --depth 1 https://github.com/softhsm/SoftHSMv2
+          cd SoftHSMv2
+          ./autogen.sh
+          ./configure --prefix=/usr --disable-gost --enable-mldsa
+          make -j"$(nproc)"
+          sudo make install
+          sudo ldconfig
+          cd ..
+      - name: Initialise SoftHSM tokens
+        run: |
+          mkdir softhsm_tokens
+          echo "directories.tokendir = $(pwd)/softhsm_tokens" > $SOFTHSM2_CONF
+          ./internal/common-test-utils/src/pyhanko_testing_commons/test_data/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
+        env:
+          UV_PROJECT: pkgs/pyhanko
+          P11_PQC: "yes"
+      - name: Test pyHanko with pytest
+        run: |
+          uv run --directory pkgs/pyhanko --no-dev --exact --group testing --all-extras \
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-p11-pqc-${{ matrix.python-version }}-coverage.xml \
+            -m "algo(algo='mldsa')" tests/test_pkcs11.py
+        env:
+          PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
+      - name: Test pyHanko CLI with pytest
+        run: |
+          uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing --all-extras \
+            pytest $COVERAGE_SCOPE \
+            --cov-report=xml:python-cli-p11-pqc-${{ matrix.python-version }}-coverage.xml \
+            -m "algo(algo='mldsa')" tests/test_cli_signing_pkcs11.py
+        env:
+          PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
+      - name: Stash coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-p11-pqc-${{ strategy.job-index }}
           path: "pkgs/*/*-coverage.xml"
   live-integration-tests:
     runs-on: ubuntu-latest
@@ -206,7 +271,7 @@ jobs:
       actions: write
       contents: read
     runs-on: ubuntu-latest
-    needs: [pytest-coverage,live-integration-tests,smoke-tests,hsm-pkcs11-tests]
+    needs: [pytest-coverage,pytest-coverage-p11-pqc,live-integration-tests,smoke-tests,hsm-pkcs11-tests]
     steps:
       # checkout necessary to ensure the uploaded report contains the correct paths
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

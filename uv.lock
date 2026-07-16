@@ -8,10 +8,6 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
-[options]
-exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
-exclude-newer-span = "P3D"
-
 [manifest]
 members = [
     "common-test-utils",
@@ -287,7 +283,7 @@ wheels = [
 
 [[package]]
 name = "certomancer"
-version = "0.15.1"
+version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asn1crypto" },
@@ -295,14 +291,17 @@ dependencies = [
     { name = "cryptography" },
     { name = "python-dateutil" },
     { name = "pyyaml" },
-    { name = "tzlocal" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f0/8e/d2fe034a0dd0acb5b03fc96a4b318074212dd97e67bd1ece33756cbc07fe/certomancer-0.15.1.tar.gz", hash = "sha256:0871b08f21037523bd7fc0f8f8723d2a69fe876b7f70816c1851be7832da38be", size = 293916, upload-time = "2026-06-25T23:09:30.27Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7c/ac/cf3ad931daf3ca515a33cb3609038f0682def085e7a5557f4b8b785c536a/certomancer-0.16.0.tar.gz", hash = "sha256:e7d3e844501062061341b49ae7d708a138b6f52c2ade1970701bf17eb0004a06", size = 295333, upload-time = "2026-07-16T13:35:22.2Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/40/d5/2f9c278b472a0e10479487800bb13bd316f031798e6f22bcaa28429baec8/certomancer-0.15.1-py3-none-any.whl", hash = "sha256:a4c013d4545f752f4314fcd5eb1bd13d4919e919db54473f88a06abfe746b632", size = 80689, upload-time = "2026-06-25T23:09:28.743Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/67/e660dbe94803ed31a556dc7f132932e2c20fb4040a1ce73a611786af33c2/certomancer-0.16.0-py3-none-any.whl", hash = "sha256:1d59cc5ee4ad25ceb8c5192aad21939c734417f48559a3ec2af05b1520c956f6", size = 81426, upload-time = "2026-07-16T13:35:20.633Z" },
 ]
 
 [package.optional-dependencies]
+pkcs11 = [
+    { name = "dilithium-py" },
+    { name = "python-pkcs11" },
+]
 web-api = [
     { name = "jinja2" },
     { name = "werkzeug" },
@@ -727,6 +726,15 @@ wheels = [
 ]
 
 [[package]]
+name = "dilithium-py"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/54/76bcb128610f7587695adb802304710b587ce60b71951b455269b12b8e55/dilithium_py-1.4.0.tar.gz", hash = "sha256:b6d455c6af34012062a0af906ad1617803bf46b37dc54938f68c478b2524252a", size = 6743333, upload-time = "2025-12-17T19:15:08.394Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/68/92/3e242ff1e2d9e459c599caef9127708b1f92606f38a9031a4b45549b427c/dilithium_py-1.4.0-py3-none-any.whl", hash = "sha256:dda3ae43e6e3d212ae1fe1b30d5b6dffe5e25a1f389d1fea26faad4afdc33ff8", size = 39936, upload-time = "2025-12-17T19:15:07.004Z" },
+]
+
+[[package]]
 name = "docutils"
 version = "0.21.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1004,7 +1012,7 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9,<3.15" },
     { name = "certomancer" },
-    { name = "certomancer", extras = ["web-api"], specifier = ">=0.13.0,<0.16" },
+    { name = "certomancer", extras = ["web-api"], specifier = ">=0.16" },
     { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pyhanko", editable = "pkgs/pyhanko" },
@@ -1884,6 +1892,9 @@ testing-base = [
     { name = "pytest-cov" },
     { name = "requests-mock" },
 ]
+testing-pkcs11-setup = [
+    { name = "certomancer", extra = ["pkcs11"] },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1908,7 +1919,7 @@ provides-extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "e
 [package.metadata.requires-dev]
 testing = [
     { name = "aiohttp", specifier = ">=3.9,<3.15" },
-    { name = "certomancer", specifier = ">=0.13.0,<0.16" },
+    { name = "certomancer", specifier = ">=0.16.0" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
@@ -1923,7 +1934,7 @@ testing-aiohttp = [
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
 ]
 testing-base = [
-    { name = "certomancer", specifier = ">=0.13.0,<0.16" },
+    { name = "certomancer", specifier = ">=0.16.0" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
@@ -1931,6 +1942,7 @@ testing-base = [
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
     { name = "requests-mock", specifier = ">=1.8.0" },
 ]
+testing-pkcs11-setup = [{ name = "certomancer", extras = ["pkcs11"], specifier = ">=0.16.0" }]
 
 [[package]]
 name = "pyhanko-certvalidator"
@@ -2017,6 +2029,9 @@ testing-base = [
     { name = "pytest-cov" },
     { name = "requests-mock" },
 ]
+testing-pkcs11-setup = [
+    { name = "certomancer", extra = ["pkcs11"] },
+]
 
 [package.metadata]
 requires-dist = [
@@ -2033,7 +2048,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 testing = [
     { name = "aiohttp", specifier = ">=3.9,<3.15" },
-    { name = "certomancer", specifier = ">=0.13.0,<0.16" },
+    { name = "certomancer", specifier = ">=0.16.0" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pyhanko", extras = ["pkcs11", "opentype", "async-http", "image-support", "qr", "etsi"], editable = "pkgs/pyhanko" },
@@ -2044,7 +2059,7 @@ testing = [
     { name = "requests-mock", specifier = ">=1.8.0" },
 ]
 testing-base = [
-    { name = "certomancer", specifier = ">=0.13.0,<0.16" },
+    { name = "certomancer", specifier = ">=0.16.0" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
@@ -2052,6 +2067,7 @@ testing-base = [
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
     { name = "requests-mock", specifier = ">=1.8.0" },
 ]
+testing-pkcs11-setup = [{ name = "certomancer", extras = ["pkcs11"], specifier = ">=0.16.0" }]
 
 [[package]]
 name = "pyhanko-suite"

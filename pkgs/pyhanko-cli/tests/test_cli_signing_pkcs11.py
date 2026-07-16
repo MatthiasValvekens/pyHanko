@@ -19,8 +19,8 @@ from .conftest import (
 
 @pytest.fixture(
     params=[
-        pytest.param(k, marks=pytest.mark.algo(k))
-        for k in ('rsa', 'ecdsa', 'ed25519', 'ed448')
+        pytest.param(k, marks=pytest.mark.algo(algo=k))
+        for k in ('rsa', 'ecdsa', 'ed25519', 'ed448', 'mldsa')
     ]
 )
 def root_cert_data(p11_config):

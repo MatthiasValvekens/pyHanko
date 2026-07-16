@@ -302,6 +302,11 @@ def select_pkcs11_signing_params(
             raise NotImplementedError("Ed448 not available in raw mode")
         kwargs['mechanism'] = Mechanism.EDDSA
         kwargs['mechanism_param'] = (False, None)
+    elif signature_algo in ('mldsa44', 'mldsa65', 'mldsa87'):
+        if use_raw_mechanism:
+            raise NotImplementedError("ML-DSA not available in raw mode")
+        # the key object's parameter set determines which ML_DSA variant we use
+        kwargs['mechanism'] = Mechanism.ML_DSA
     elif 'mechanism' not in sign_kwargs:
         raise NotImplementedError(
             f"Signature algorithm '{signature_algo}' is not supported."
@@ -591,12 +596,19 @@ class PKCS11Signer(Signer):
             sign_kwargs=sign_kwargs,
         )
 
+    def estimate_raw_signature_size_bytes(self) -> int:
+        algo = self.signing_cert.public_key.algorithm
+        return {
+            'mldsa44': 2420,
+            'mldsa65': 3309,
+            'mldsa87': 4627,
+        }.get(algo, 512)
+
     async def async_sign_raw(
         self, data: bytes, digest_algorithm: str, dry_run=False
     ) -> bytes:
         if dry_run:
-            # allocate 4096 bits for the fake signature
-            return b'0' * 512
+            return self.estimate_raw_signature_size_bytes() * b'0'
 
         await self.ensure_objects_loaded()
         from pkcs11 import SignMixin
