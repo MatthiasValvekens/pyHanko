@@ -248,8 +248,11 @@ async def bootstrap_lotl_signers(
         logger.info(f"Processing LOTL pivot {pivot}...")
         try:
             pivot_xml = await _fetch(cache, pivot, client)
+            claimed_issuance_date = eutl_parse.parse_lotl_unsafe(
+                pivot_xml
+            ).claimed_date_issued
             pivot_parse_result = eutl_parse.validate_and_parse_lotl(
-                pivot_xml, current_certs
+                pivot_xml, current_certs, validation_time=claimed_issuance_date
             )
         except Exception as e:
             raise TSPServiceParsingError(

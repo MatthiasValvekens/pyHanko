@@ -603,13 +603,18 @@ def trust_list_to_registry_unsafe(
             return registry, e.value
 
 
-def _verify_xml(tl_xml: str, tlso_cert: x509.Certificate):
+def _verify_xml(
+    tl_xml: str,
+    tlso_cert: x509.Certificate,
+    validation_time: Optional[datetime],
+):
     tl_xml_bytes = tl_xml.encode('utf8')
     verifier = XAdESVerifier()
     cert_obj = load_der_x509_certificate(tlso_cert.dump())
     config = XAdESSignatureConfiguration(
         require_x509=True,
         expect_references=True,
+        verification_time=validation_time,
     )
     try:
         verify_results = verifier.verify(
@@ -626,9 +631,11 @@ def _verify_xml(tl_xml: str, tlso_cert: x509.Certificate):
 
 
 def _validate_and_extract_tl_data(
-    tl_xml: str, tlso_cert: x509.Certificate
+    tl_xml: str,
+    tlso_cert: x509.Certificate,
+    validation_time: Optional[datetime],
 ) -> str:
-    verify_results = _verify_xml(tl_xml, tlso_cert)
+    verify_results = _verify_xml(tl_xml, tlso_cert, validation_time)
     tl_signed_xml = None
     for result in verify_results:
         if result.signed_xml is None:
@@ -653,7 +660,9 @@ def _validate_and_extract_tl_data(
 
 
 def _validate_and_extract_tl_data_multiple_certs(
-    tl_xml: str, tlso_cert_candidates: List[x509.Certificate]
+    tl_xml: str,
+    tlso_cert_candidates: List[x509.Certificate],
+    validation_time: Optional[datetime],
 ) -> str:
     # sort the issuer certs by newest first
     sorted_candidates = sorted(
@@ -663,7 +672,9 @@ def _validate_and_extract_tl_data_multiple_certs(
     result = None
     for candidate in sorted_candidates:
         try:
-            result = _validate_and_extract_tl_data(tl_xml, candidate)
+            result = _validate_and_extract_tl_data(
+                tl_xml, candidate, validation_time
+            )
             break
         except SignatureValidationError as e:
             errors.append(
@@ -707,7 +718,7 @@ def trust_list_to_registry(
     :return:
     """
     tl_signed_xml = _validate_and_extract_tl_data_multiple_certs(
-        tl_xml, tlso_certs
+        tl_xml, tlso_certs, validation_time=None
     )
     return trust_list_to_registry_unsafe(tl_signed_xml, registry)
 
@@ -763,6 +774,7 @@ class LOTLParseResult:
     references: List[TLReference]
     errors: List[TSPServiceParsingError]
     pivot_urls: List[str]
+    claimed_date_issued: datetime
 
 
 KNOWN_OJEU_REANCHOR_URLS = ('https://eur-lex.europa.eu/eli/C/2026/1944/oj',)
@@ -793,6 +805,9 @@ def parse_lotl_unsafe(
     )
     info_uris = _required(
         scheme_info.scheme_information_uri, "scheme information URIs"
+    )
+    issuance_dt = _required(
+        scheme_info.list_issue_date_time, "LotL issuance date"
     )
 
     references = []
@@ -839,7 +854,10 @@ def parse_lotl_unsafe(
 
     pivots = list(_pivots())
     return LOTLParseResult(
-        references=references, errors=errors, pivot_urls=pivots
+        references=references,
+        errors=errors,
+        pivot_urls=pivots,
+        claimed_date_issued=issuance_dt.to_datetime(),
     )
 
 
@@ -872,6 +890,7 @@ def ojeu_bootstrap_lotl_tlso_certs(anchor=1) -> List[x509.Certificate]:
 def validate_and_parse_lotl(
     lotl_xml: str,
     lotl_tlso_certs: Optional[List[x509.Certificate]] = None,
+    validation_time: Optional[datetime] = None,
 ) -> LOTLParseResult:
     """
     Validate and parse a list-of-the-lists (LOTL).
@@ -885,6 +904,8 @@ def validate_and_parse_lotl(
         library.
 
         See :func:`validate_and_parse_lotl`.
+    :param validation_time:
+        Reference time at which to validate the LotL, if not the current time.
     :return:
         A parse result.
     """
@@ -892,6 +913,6 @@ def validate_and_parse_lotl(
     if not lotl_tlso_certs:
         lotl_tlso_certs = latest_known_lotl_tlso_certs()
     lotl_xml_validated = _validate_and_extract_tl_data_multiple_certs(
-        lotl_xml, lotl_tlso_certs
+        lotl_xml, lotl_tlso_certs, validation_time=validation_time
     )
     return parse_lotl_unsafe(lotl_xml_validated)
