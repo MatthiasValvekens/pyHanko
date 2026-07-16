@@ -7,7 +7,6 @@ from typing import Optional
 
 import pytest
 import tzlocal
-import yaml
 from asn1crypto import algos, cms, core, keys
 from asn1crypto.algos import (
     DigestAlgorithm,
@@ -1952,61 +1951,81 @@ async def test_validate_with_malformed_claimed_attrs(bad_attr, requests_mock):
     assert len(status.cades_signer_attrs.claimed_attrs) == 1
 
 
-BASIC_AC_ISSUER_SETUP = '''
-  ac-issuer:
-    subject: root
-    issuer: root
-    validity:
-      valid-from: "2000-01-01T00:00:00+0000"
-      valid-to: "2500-01-01T00:00:00+0000"
-    extensions:
-      - id: key_usage
-        critical: true
-        smart-value:
-          schema: key-usage
-          params: [digital_signature]
-  signer1:
-    subject: signer1
-    issuer: root
-    validity:
-      valid-from: "2000-01-01T00:00:00+0000"
-      valid-to: "2100-01-01T00:00:00+0000"
-    extensions:
-      - id: key_usage
-        critical: true
-        smart-value:
-          schema: key-usage
-          params: [digital_signature]
-'''
+BASIC_AC_ISSUER_SETUP = {
+    'ac-issuer': {
+        'subject': 'root',
+        'issuer': 'root',
+        'validity': {
+            'valid-from': '2000-01-01T00:00:00+0000',
+            'valid-to': '2500-01-01T00:00:00+0000',
+        },
+        'extensions': [
+            {
+                'id': 'key_usage',
+                'critical': True,
+                'smart-value': {
+                    'schema': 'key-usage',
+                    'params': ['digital_signature'],
+                },
+            }
+        ],
+    },
+    'signer1': {
+        'subject': 'signer1',
+        'issuer': 'root',
+        'validity': {
+            'valid-from': '2000-01-01T00:00:00+0000',
+            'valid-to': '2100-01-01T00:00:00+0000',
+        },
+        'extensions': [
+            {
+                'id': 'key_usage',
+                'critical': True,
+                'smart-value': {
+                    'schema': 'key-usage',
+                    'params': ['digital_signature'],
+                },
+            }
+        ],
+    },
+}
+
+ATTR_CERT_CFG = {
+    'test-ac': {
+        'holder': {
+            'name':
+            # this needs to match against something from a totally different PKI
+            # arch, so make the coupling as loose as possible
+            'signer1',
+            'include-base-cert-id': False,
+            'include-entity-name': True,
+        },
+        'issuer': 'root',
+        'attributes': [
+            {
+                'id': 'charging_identity',
+                'smart-value': {
+                    'schema': 'ietf-attribute',
+                    'params': ['Big Corp Inc.'],
+                },
+            }
+        ],
+        'validity': {
+            'valid-from': '2000-01-01T00:00:00+0000',
+            'valid-to': '2100-01-01T00:00:00+0000',
+        },
+    }
+}
 
 
 @pytest.mark.asyncio
 async def test_parse_ac_with_malformed_attribute(requests_mock):
-    attr_cert_cfg = '''
-    test-ac:
-      holder:
-          name: signer1
-          # this needs to match against something from a totally different PKI
-          # arch, so make the coupling as loose as possible
-          include-base-cert-id: false
-          include-entity-name: true
-      issuer: root
-      attributes:
-          - id: charging_identity
-            smart-value:
-                schema: ietf-attribute
-                params: ["Big Corp Inc."]
-      validity:
-        valid-from: "2000-01-01T00:00:00+0000"
-        valid-to: "2100-01-01T00:00:00+0000"
-    '''
-
     pki_arch = PKIArchitecture(
         arch_label=ArchLabel('test'),
         key_set=TESTING_CA.key_set,
         entities=TESTING_CA.entities,
-        cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
-        ac_spec_config=yaml.safe_load(attr_cert_cfg),
+        cert_spec_config=BASIC_AC_ISSUER_SETUP,
+        ac_spec_config=ATTR_CERT_CFG,
         service_config={},
         external_url_prefix='http://test.test',
     )

@@ -35,6 +35,7 @@ dependencies = [
     "tzlocal>=4.3",
     "pyhanko",
     "pyhanko-certvalidator",
+    "pyyaml>=6.0",
     "certifi>=2023.5.7",
     "click>=8.1.3,!=8.2.0",
     "platformdirs>=4.3.8",
@@ -59,7 +60,7 @@ testing-base = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
-    "certomancer>=0.13.0,<0.15",
+    "certomancer>=0.13.0,<0.16",
     "pytest-cov>=4.0,<7.2",
     "pytest-asyncio>=1.1.0,<2.0",
 ]

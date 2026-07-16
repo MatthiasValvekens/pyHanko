@@ -35,7 +35,6 @@ dependencies = [
     "tzlocal>=4.3",
     "pyhanko-certvalidator",
     "requests>=2.31.0",
-    "pyyaml>=6.0",
     "cryptography>=48.0.0",
     "lxml>=5.4.0",
 ]
@@ -58,7 +57,7 @@ opentype = [
     "fonttools>=4.33.3",
     # uharfbuzz sometimes includes breaking changes, so
     # we set an explicit range
-    "uharfbuzz>=0.25.0,<0.55.0",
+    "uharfbuzz>=0.25.0,<0.56.0",
 ]
 qr = ["qrcode>=7.3.1"]
 image-support = [
@@ -80,7 +79,7 @@ testing-base = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
-    "certomancer>=0.13.0,<0.15",
+    "certomancer>=0.13.0,<0.16",
     "pytest-cov>=4.0,<7.2",
     "pytest-asyncio>=1.1.0,<2.0",
 ]
