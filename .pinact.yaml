@@ -5,7 +5,5 @@ version: 3
 # separator: "  # "
 
 ignore_actions:
-- name: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
-  ref: v\d+\.\d+\.\d+
 - name: MatthiasValvekens/pyHanko/.github/workflows/package.yml
   ref: master

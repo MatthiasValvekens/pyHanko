@@ -131,31 +131,65 @@ jobs:
     permissions:
       actions: write
       contents: read
+      # required for the build provenance attestation minted in package.yml
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     with:
       package: ${{ needs.extract-params.outputs.package }}
       wheel: ${{ needs.extract-params.outputs.wheel }}
       version: ${{ needs.extract-params.outputs.version }}
-  provenance:
-    name: Generate SLSA provenance data
-    needs: [build]
+      environment: build-${{ needs.extract-params.outputs.publish-env }}
+  provenance-sanity-check:
+    name: Provenance sanity check
+    needs: [build, extract-params]
+    runs-on: ubuntu-latest
     permissions:
       actions: read
-      id-token: write
-      contents: write  # https://github.com/slsa-framework/slsa-github-generator/issues/2044 :(
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
-    with:
-      base64-subjects: "${{ needs.build.outputs.hashes }}"
-      upload-assets: false
-      provenance-name: multiple.intoto.jsonl
+      contents: read
+    steps:
+      - name: Check out sources for provenance verification
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Download dist artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pyhanko-release-dist
+          path: dist/
+      - name: Download provenance data
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pyhanko-provenance
+          path: provenance/
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+      - name: Install provenance-check tooling
+        run: uv sync --group provenance-check
+      - name: Verify consistency of build provenance of downloaded artifacts
+        shell: bash
+        env:
+          SOURCE_REF: ${{ github.ref }}
+          BUILD_ENV: build-${{ needs.extract-params.outputs.publish-env }}
+        run: |
+          set -eo pipefail
+          for artifact in dist/*.whl dist/*.tar.gz; do
+            uv run dev/attest_provenance.py "$artifact" \
+              --source-ref "$SOURCE_REF" \
+              --environment "$BUILD_ENV" \
+              --bundle provenance/provenance.sigstore.json
+          done
   publish:
     name: Publish release artifacts
-    needs: [extract-params, build, provenance]
+    needs: [extract-params, build, provenance-sanity-check]
     runs-on: ubuntu-latest
     environment: ${{ needs.extract-params.outputs.publish-env }}
     permissions:
       # we use PyPI's trusted publisher model -> expose identity token
       id-token: write
-      # we want to add sigstore's artifacts to the release on GitHub
+      # we want to add the provenance bundle to the release on GitHub
       contents: write
       discussions: write
     steps:
@@ -167,7 +201,7 @@ jobs:
     - name: Download provenance data
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
-        name: multiple.intoto.jsonl
+        name: pyhanko-provenance
         path: provenance/
     - name: Download release body
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -178,12 +212,6 @@ jobs:
       uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
       with:
         repository-url: ${{ vars.REPOSITORY_URL }}
-    - name: Sign with sigstore
-      uses: sigstore/gh-action-sigstore-python@5b79a39c381910c090341a2c9b0bf022c8b387e1 # v3.4.0
-      with:
-        inputs: ./dist/*
-        # useful to inspect workflow artifacts in test runs
-        upload-signing-artifacts: true
     - name: Create GitHub release
       if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
@@ -191,8 +219,7 @@ jobs:
         files: |
           dist/*.whl
           dist/*.tar.gz
-          dist/*.sigstore.json
-          provenance/multiple.intoto.jsonl
+          provenance/provenance.sigstore.json
         body_path: release-body/release.md
         fail_on_unmatched_files: true
         discussion_category_name: Announcements
