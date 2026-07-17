@@ -184,16 +184,16 @@ def p11_config(
     ):
         pytest.skip(f"Test is not supported on {platform}")
 
-    if not config.cert_chain:
-        certs = []
-        with config.session as sess:
-            if (
-                required_mechanism is not None
-                and required_mechanism not in sess.token.slot.get_mechanisms()
-            ):
-                pytest.skip(
-                    f"Required mechanism '{required_mechanism}' is not available on token"
-                )
+    with config.session as sess:
+        if (
+            required_mechanism is not None
+            and required_mechanism not in sess.token.slot.get_mechanisms()
+        ):
+            pytest.skip(
+                f"Required mechanism '{required_mechanism}' is not available on token"
+            )
+        if not config.cert_chain:
+            certs = []
             for lbl in config.cert_chain_labels:
                 params = {
                     Attribute.CLASS: ObjectClass.CERTIFICATE,
@@ -207,7 +207,7 @@ def p11_config(
                     )
                 cert = x509.Certificate.load(cert_obj[Attribute.VALUE])
                 certs.append(cert)
-        config.cert_chain = certs
+            config.cert_chain = certs
 
     if config.freeze_time_spec:
         with freeze_time(config.freeze_time_spec):

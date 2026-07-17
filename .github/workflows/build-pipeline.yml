@@ -260,6 +260,7 @@ jobs:
           uv run --directory pkgs/pyhanko-cli --no-dev --exact --group testing-base \
             pytest $COVERAGE_SCOPE \
             -m "not nosmoke" --cov-report=xml:python-smoke-test-cli-coverage.xml \
+            --ignore tests/test_cli_signing_pkcs11.py \
             tests
       - name: Stash coverage report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

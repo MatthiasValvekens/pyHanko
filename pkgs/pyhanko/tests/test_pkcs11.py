@@ -47,8 +47,29 @@ def test_simple_sign(bulk_fetch, p11_config, any_algo, platform):
             key_label=p11_config.key_label,
             other_certs_to_pull=p11_config.cert_chain_labels,
             bulk_fetch=bulk_fetch,
-            use_raw_mechanism=platform == "softhsm"
-            and p11_config.algo == "ecdsa",
+            base_sign_kwargs=p11_config.signing_kwargs,
+        )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, vc=p11_config.validation_context)
+
+
+@pytest.mark.algo(algo='ecdsa')
+@pytest.mark.hsm
+@pytest.mark.required_mechanism(pkcs11.Mechanism.ECDSA)
+def test_simple_sign_raw_ecdsa(platform, p11_config):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with p11_config.session as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess,
+            p11_config.cert_label,
+            key_label=p11_config.key_label,
+            other_certs_to_pull=p11_config.cert_chain_labels,
+            use_raw_mechanism=True,
             base_sign_kwargs=p11_config.signing_kwargs,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
@@ -61,6 +82,7 @@ def test_simple_sign(bulk_fetch, p11_config, any_algo, platform):
 
 @pytest.mark.algo(algo='rsa')
 @pytest.mark.hsm(exclude='safenet,nitrokey')
+@pytest.mark.required_mechanism(pkcs11.Mechanism.RSA_PKCS_PSS)
 def test_simple_sign_with_rsassa_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -85,6 +107,7 @@ def test_simple_sign_with_rsassa_pss(p11_config):
 
 @pytest.mark.algo(algo='rsa')
 @pytest.mark.hsm
+@pytest.mark.required_mechanism(pkcs11.Mechanism.RSA_PKCS_PSS)
 def test_simple_sign_with_rsassa_pss_custom_parameters(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -604,7 +627,7 @@ def test_pull_err_fmt(label, cert_id, no_results, exp_err):
 
 @pytest.mark.asyncio
 @pytest.mark.hsm(exclude='safenet')
-async def test_simple_sign_from_config_async(any_algo, p11_config, platform):
+async def test_simple_sign_from_config_async(any_algo, p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
@@ -614,7 +637,32 @@ async def test_simple_sign_from_config_async(any_algo, p11_config, platform):
         cert_label=p11_config.cert_label,
         key_label=p11_config.key_label,
         user_pin=p11_config.user_pin,
-        raw_mechanism=platform == 'softhsm' and p11_config.algo == 'ecdsa',
+    )
+    async with PKCS11SigningContext(config=config) as signer:
+        pdf_signer = signers.PdfSigner(meta, signer)
+        out = await pdf_signer.async_sign_pdf(w)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    await async_val_trusted(emb, vc=p11_config.validation_context)
+
+
+@pytest.mark.asyncio
+@pytest.mark.algo(algo='ecdsa')
+@pytest.mark.hsm(platform='softhsm')
+@pytest.mark.required_mechanism(pkcs11.Mechanism.ECDSA)
+async def test_simple_sign_from_config_async_raw_ecdsa(p11_config):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    config = PKCS11SignatureConfig(
+        module_path=p11_config.module,
+        token_criteria=TokenCriteria(p11_config.token_label),
+        other_certs_to_pull=p11_config.cert_chain_labels,
+        cert_label=p11_config.cert_label,
+        key_label=p11_config.key_label,
+        user_pin=p11_config.user_pin,
+        raw_mechanism=True,
     )
     async with PKCS11SigningContext(config=config) as signer:
         pdf_signer = signers.PdfSigner(meta, signer)
@@ -629,6 +677,7 @@ async def test_simple_sign_from_config_async(any_algo, p11_config, platform):
 @pytest.mark.asyncio
 @pytest.mark.algo(algo='rsa')
 @pytest.mark.hsm(exclude='safenet,nitrokey')
+@pytest.mark.required_mechanism(pkcs11.Mechanism.RSA_PKCS_PSS)
 async def test_simple_sign_from_config_async_pss(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')

@@ -1,5 +1,6 @@
 from typing import Any, Dict
 
+import pkcs11
 import pytest
 from pyhanko.cli import cli_root
 from pyhanko.cli._ctx import CLIContext, PasswordPrompter, UXContext
@@ -144,8 +145,6 @@ def test_cli_addsig_pkcs11_pull_interm(
         '--other-cert',
         p11_config.cert_chain_labels[1],
     ]
-    if platform == "softhsm" and p11_config.algo == 'ecdsa':
-        args += ['--raw-mechanism']
     if p11_config.key_label:
         args += ['--key-label', p11_config.key_label]
     result = cli_runner.invoke(
@@ -185,8 +184,6 @@ def test_cli_addsig_pkcs11_read_interm_from_file(
         '--other-cert-file',
         'interm.crt',
     ]
-    if platform == "softhsm" and p11_config.algo == 'ecdsa':
-        args += ['--raw-mechanism']
     if p11_config.key_label:
         args += ['--key-label', p11_config.key_label]
     result = cli_runner.invoke(
@@ -206,13 +203,53 @@ def test_cli_addsig_pkcs11_read_interm_from_file(
     assert not result.exception, result.output
 
 
+@pytest.mark.hsm(exclude='safenet')
+@pytest.mark.algo(algo='ecdsa')
+@pytest.mark.required_mechanism(pkcs11.Mechanism.ECDSA)
+def test_cli_addsig_raw_ecdsa(
+    cli_runner,
+    post_validate,
+    p11_config,
+    platform,
+    pinentry_context,
+):
+    with open('interm.crt', 'wb') as certf:
+        certf.write(p11_config.cert_chain[1].dump())
+    args = [
+        '--lib',
+        p11_config.module,
+        '--token-label',
+        p11_config.token_label,
+        '--cert-label',
+        p11_config.cert_label,
+        '--other-cert-file',
+        'interm.crt',
+    ]
+    if p11_config.key_label:
+        args += ['--key-label', p11_config.key_label]
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs11',
+            '--raw-mechanism',
+            *args,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+        obj=pinentry_context,
+    )
+    assert not result.exception, result.output
+
+
 @pytest.mark.hsm(exclude='yubikey-nano')
 def test_cli_addsig_pkcs11_with_setup_pull_certs(
     cli_runner, p11_config, post_validate, platform
 ):
     cfg = _pkcs11_setup_config_pull_certs(p11_config)
-    if platform == 'softhsm' and p11_config.algo == 'ecdsa':
-        cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     cfg['pkcs11-setups']['test']['user-pin'] = p11_config.user_pin
     if p11_config.signing_pin is not None:
         cfg['pkcs11-setups']['test']['signing-pin-mode'] = 'reauthenticate'
@@ -240,8 +277,36 @@ def test_cli_addsig_pkcs11_with_setup_read_certs_from_file(
     cli_runner, p11_config, post_validate, platform
 ):
     cfg = _pkcs11_setup_config_read_certs_from_file(p11_config)
-    if platform == 'softhsm' and p11_config.algo == 'ecdsa':
-        cfg['pkcs11-setups']['test']['raw-mechanism'] = True
+    cfg['pkcs11-setups']['test']['user-pin'] = p11_config.user_pin
+    if p11_config.signing_pin is not None:
+        cfg['pkcs11-setups']['test']['signing-pin-mode'] = 'reauthenticate'
+        cfg['pkcs11-setups']['test']['signing-pin'] = p11_config.signing_pin
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs11',
+            '--p11-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+@pytest.mark.hsm
+@pytest.mark.algo(algo='ecdsa')
+@pytest.mark.required_mechanism(pkcs11.Mechanism.ECDSA)
+def test_cli_addsig_pkcs11_with_setup_raw_ecdsa(
+    cli_runner, p11_config, post_validate, platform
+):
+    cfg = _pkcs11_setup_config_read_certs_from_file(p11_config)
+    cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     cfg['pkcs11-setups']['test']['user-pin'] = p11_config.user_pin
     if p11_config.signing_pin is not None:
         cfg['pkcs11-setups']['test']['signing-pin-mode'] = 'reauthenticate'
@@ -302,13 +367,12 @@ def test_cli_addsig_pkcs11_with_setup_and_signing_pin_prompt(
 
 
 @pytest.mark.hsm(platform='softhsm')
+@pytest.mark.algo(algo='ed25519')
 def test_cli_addsig_pkcs11_with_setup_and_env_pin(
     cli_runner, p11_config, post_validate
 ):
     cli_runner.env[P11_PIN_ENV_VAR] = p11_config.user_pin
     cfg = _pkcs11_setup_config_pull_certs(p11_config)
-    if p11_config.algo == 'ecdsa':
-        cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     _write_config(cfg)
     result = cli_runner.invoke(
         cli_root,
@@ -353,6 +417,7 @@ def test_cli_addsig_pkcs11_with_setup_and_env_signing_pin(
 
 
 @pytest.mark.hsm(platform='softhsm')
+@pytest.mark.algo(algo='ed25519')
 def test_cli_addsig_pkcs11_with_setup_and_pin_prompt(
     cli_runner,
     post_validate,
@@ -360,8 +425,6 @@ def test_cli_addsig_pkcs11_with_setup_and_pin_prompt(
     pinentry_context,
 ):
     cfg = _pkcs11_setup_config_pull_certs(p11_config)
-    if p11_config.algo == 'ecdsa':
-        cfg['pkcs11-setups']['test']['raw-mechanism'] = True
     _write_config(cfg)
 
     result = cli_runner.invoke(
