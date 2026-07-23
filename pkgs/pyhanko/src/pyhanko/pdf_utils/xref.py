@@ -110,7 +110,7 @@ class XRefEntry:
     """
 
 
-def parse_xref_table(stream) -> Iterator[XRefEntry]:
+def parse_xref_table(stream, strict: bool) -> Iterator[XRefEntry]:
     """
     Parse a single cross-reference table and yield its entries one by one.
 
@@ -118,6 +118,8 @@ def parse_xref_table(stream) -> Iterator[XRefEntry]:
 
     :param stream:
         A file-like object pointed to the start of the cross-reference table.
+    :param strict:
+        Indicates whether parsing in strict mode.
     :return:
         A generator object yielding :class:`.XRefEntry` objects.
     """
@@ -153,7 +155,11 @@ def parse_xref_table(stream) -> Iterator[XRefEntry]:
             if line[-1] in b"0123456789t":
                 stream.seek(-1, os.SEEK_CUR)
 
-            offset, generation, marker = line[:18].split(b" ")
+            offset, generation, marker = line[:18].split(b" ", maxsplit=2)
+            if not strict and len(marker) > 1:
+                # split on whitespace runs, not single spaces: some malformed PDFs
+                # space-pad the offset/generation instead of zero-padding them
+                offset, generation, marker = line[:18].split(maxsplit=2)
             if marker == b'n':
                 yield XRefEntry(
                     xref_type=XRefType.STANDARD,
@@ -168,6 +174,8 @@ def parse_xref_table(stream) -> Iterator[XRefEntry]:
                     idnum=num,
                     generation=int(generation),
                 )
+            elif strict:
+                raise misc.PdfStrictReadError(f"Unknown marker {marker!r}")
             num += 1
         misc.read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
@@ -684,7 +692,7 @@ class XRefBuilder:
         xref_start = stream.tell()
         xref_section_data = XRefSectionData()
         highest = xref_section_data.process_entries(
-            parse_xref_table(stream), strict=self.strict
+            parse_xref_table(stream, strict=self.strict), strict=self.strict
         )
         xref_end = stream.tell()
 
