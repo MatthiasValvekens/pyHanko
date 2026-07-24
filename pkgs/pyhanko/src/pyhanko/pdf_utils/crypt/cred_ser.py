@@ -1,5 +1,6 @@
 import abc
 from dataclasses import dataclass
+from typing import ClassVar
 
 from pyhanko.pdf_utils import misc
 
@@ -31,7 +32,9 @@ class SerialisableCredential(abc.ABC):
     Class representing a credential that can be serialised.
     """
 
-    __registered_subclasses: dict[str, type['SerialisableCredential']] = {}
+    __registered_subclasses: ClassVar[
+        dict[str, type['SerialisableCredential']]
+    ] = {}
 
     @classmethod
     def get_name(cls) -> str:
@@ -42,18 +45,20 @@ class SerialisableCredential(abc.ABC):
         raise NotImplementedError
 
     @staticmethod
-    def register(cls: type['SerialisableCredential']):
+    def register(cred_cls: type['SerialisableCredential']):
         """
         Register a subclass into the credential serialisation registry, using
         the name returned by :meth:`get_name`. Can be used as a class decorator.
 
-        :param cls:
+        :param cred_cls:
             The subclass.
         :return:
             The subclass.
         """
-        SerialisableCredential.__registered_subclasses[cls.get_name()] = cls
-        return cls
+        SerialisableCredential.__registered_subclasses[cred_cls.get_name()] = (
+            cred_cls
+        )
+        return cred_cls
 
     def _ser_value(self) -> bytes:
         """

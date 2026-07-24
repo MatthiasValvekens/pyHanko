@@ -69,6 +69,8 @@ from .util import (
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_PKIX_PARAMS = PKIXValidationParams()
+
 
 def validate_path(
     validation_context, path, parameters: PKIXValidationParams | None = None
@@ -524,7 +526,7 @@ class ACValidationResult:
 async def async_validate_ac(
     attr_cert: cms.AttributeCertificateV2,
     validation_context: ValidationContext,
-    aa_pkix_params: PKIXValidationParams = PKIXValidationParams(),
+    aa_pkix_params: PKIXValidationParams = DEFAULT_PKIX_PARAMS,
     holder_cert: x509.Certificate | None = None,
 ) -> ACValidationResult:
     """
@@ -1185,9 +1187,11 @@ def _finish_policy_processing(
     if state.explicit_policy != 0:
         state.explicit_policy -= 1
     # Step 4 b
-    if cert.policy_constraints_value:
-        if cert.policy_constraints_value['require_explicit_policy'].native == 0:
-            state.explicit_policy = 0
+    if (
+        cert.policy_constraints_value
+        and cert.policy_constraints_value['require_explicit_policy'].native == 0
+    ):
+        state.explicit_policy = 0
     # Step 4 g
     # Step 4 g i
     intersection: PolicyTreeRoot | None
@@ -1475,10 +1479,13 @@ def _prepare_next_step(
     #  parameters are drawn form the signature parameters, where they
     #  must always be present.
     copy_params = None
-    if cert.public_key.algorithm == 'dsa' and cert.public_key.hash_algo is None:
-        if state.working_public_key.algorithm == 'dsa':
-            key_alg = state.working_public_key['algorithm']
-            copy_params = key_alg['parameters'].copy()
+    if (
+        cert.public_key.algorithm == 'dsa'
+        and cert.public_key.hash_algo is None
+        and state.working_public_key.algorithm == 'dsa'
+    ):
+        key_alg = state.working_public_key['algorithm']
+        copy_params = key_alg['parameters'].copy()
 
     if copy_params:
         working_public_key = cert.public_key.copy()

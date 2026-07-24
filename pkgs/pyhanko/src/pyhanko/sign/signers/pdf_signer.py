@@ -10,7 +10,7 @@ import uuid
 import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import IO, Any
 
 import tzlocal
@@ -544,6 +544,9 @@ def _is_iso32002_curve(pubkey: keys.PublicKeyInfo):
     return kind == 'named' and curve_id in constants.ISO32002_CURVE_NAMES
 
 
+DEFAULT_TIMESTAMP_DSS_CONTENT_SETTINGS = TimestampDSSContentSettings()
+
+
 class PdfTimeStamper:
     """
     Class to encapsulate the process of appending document timestamps to
@@ -554,7 +557,7 @@ class PdfTimeStamper:
         self,
         timestamper: TimeStamper,
         field_name: str | None = None,
-        invis_settings: InvisSigSettings = InvisSigSettings(),
+        invis_settings: InvisSigSettings = InvisSigSettings(),  # noqa: B008
         readable_field_name: str = "Timestamp",
     ):
         self.default_timestamper = timestamper
@@ -589,7 +592,7 @@ class PdfTimeStamper:
         *,
         in_place=False,
         output=None,
-        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),
+        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),  # noqa: B008
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
         tight_size_estimates: bool = False,
     ):
@@ -674,7 +677,7 @@ class PdfTimeStamper:
         *,
         in_place=False,
         output=None,
-        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),
+        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),  # noqa: B008
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
         tight_size_estimates: bool = False,
         embed_roots: bool = True,
@@ -741,7 +744,6 @@ class PdfTimeStamper:
         :return:
             The output stream containing the signed output.
         """
-
         _ensure_esic_ext(pdf_out)
         need_mac = (
             pdf_out.security_handler is not None
@@ -1174,7 +1176,7 @@ class PdfSigner:
             else None
         )
         if algorithm_policy is not None:
-            now = datetime.now()
+            now = datetime.now(tz=timezone.utc)
             md_algo_obj = algos.DigestAlgorithm({'algorithm': md_algorithm})
             if not algorithm_policy.digest_algorithm_allowed(md_algo_obj, now):
                 raise SigningError(

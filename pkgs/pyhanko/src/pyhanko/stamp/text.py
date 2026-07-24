@@ -9,7 +9,10 @@ from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 from .base import BaseStamp, BaseStampStyle
 
-__all__ = ['TextStamp', 'TextStampStyle']
+__all__ = ['DEFAULT_TEXT_BOX_STYLE', 'TextStamp', 'TextStampStyle']
+
+
+DEFAULT_TEXT_BOX_STYLE = TextBoxStyle()
 
 
 @dataclass(frozen=True)
@@ -21,7 +24,7 @@ class TextStampStyle(BaseStampStyle):
     piece of text inside a text box, and possibly applies a background to it.
     """
 
-    text_box_style: TextBoxStyle = TextBoxStyle()
+    text_box_style: TextBoxStyle = DEFAULT_TEXT_BOX_STYLE
     """
     The text box style for the internal text box used.
     """

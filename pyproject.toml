@@ -57,6 +57,7 @@ mypy = [
     "types-PyYAML",
     "types-tzlocal",
     "lxml-stubs",
+    "typing_extensions;python_version<'3.11'",
 ]
 docs = [
     "sphinx",
@@ -95,6 +96,22 @@ extend-select = [
     "F",  # pyflakes
     "I",  # isort
 ]
+ignore = [
+    # We deliberately raise ValueError (not TypeError) for invalid input
+    # types; switching would be a behaviour change for existing callers.
+    "TRY004",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/*test*/**/*.py" = [
+    "B018",
+    "DTZ",
+    "B008",
+    "RUF012",
+    "ASYNC230",
+    "LOG015",
+]
+"asn1_types.py" = ["RUF012"]
 
 
 [tool.uv.sources]

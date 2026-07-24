@@ -29,7 +29,8 @@ with_layout_comparison = pytest.mark.skipif(
 def _render_pdf(pdf_file, out_file_prefix):
     # render the first page of a PDF to PNG file using pdftoppm
     result = subprocess.run(
-        [pdftoppm_path, '-singlefile', '-png', pdf_file, out_file_prefix]
+        [pdftoppm_path, '-singlefile', '-png', pdf_file, out_file_prefix],
+        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -72,6 +73,7 @@ def compare_output(writer: BasePdfFileWriter, expected_output_path):
                 os.path.join(working_dir, 'diff.png'),
             ],
             capture_output=True,
+            check=False,
         )
         if result.stderr != b'0' and result.stderr != b'0 (0)':
             dest_dir = _ensure_path("failed_layout_tests", expected_output_path)

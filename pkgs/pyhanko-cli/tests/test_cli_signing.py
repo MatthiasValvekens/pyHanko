@@ -495,29 +495,31 @@ def test_cli_addsig_pemder_detached(
         ],
     )
     assert not result.exception, result.output
-    with open(INPUT_PATH, 'rb') as in_data:
-        with open('output.sig.pem', 'rb') as sig_data:
-            sig_data_bytes = sig_data.read()
-            if fmt == 'pem':
-                cms_der = pem.unarmor(sig_data_bytes)[2]
-            else:
-                cms_der = sig_data_bytes
-            sd = ContentInfo.load(cms_der)['content']
-            status = asyncio.run(
-                async_validate_detached_cms(
-                    in_data,
-                    sd,
-                    signer_validation_context=ValidationContext(
-                        trust_roots=[pki_arch.get_cert(CertLabel('root'))],
-                        allow_fetching=True,
-                    ),
-                )
+    with (
+        open(INPUT_PATH, 'rb') as in_data,
+        open('output.sig.pem', 'rb') as sig_data,
+    ):
+        sig_data_bytes = sig_data.read()
+        if fmt == 'pem':
+            cms_der = pem.unarmor(sig_data_bytes)[2]
+        else:
+            cms_der = sig_data_bytes
+        sd = ContentInfo.load(cms_der)['content']
+        status = asyncio.run(
+            async_validate_detached_cms(
+                in_data,
+                sd,
+                signer_validation_context=ValidationContext(
+                    trust_roots=[pki_arch.get_cert(CertLabel('root'))],
+                    allow_fetching=True,
+                ),
             )
-            assert status.bottom_line, status.pretty_print_details()
-            if with_timestamp == 'tsa':
-                assert status.timestamp_validity is not None
-            else:
-                assert status.timestamp_validity is None
+        )
+        assert status.bottom_line, status.pretty_print_details()
+        if with_timestamp == 'tsa':
+            assert status.timestamp_validity is not None
+        else:
+            assert status.timestamp_validity is None
 
 
 def test_cli_addsig_pemder_detached_no_field_arg(

@@ -129,7 +129,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-StatusType = TypeVar('StatusType', bound=SignatureStatus, covariant=True)
+StatusType_co = TypeVar('StatusType_co', bound=SignatureStatus, covariant=True)
 
 
 def derive_validation_object_binary_data(
@@ -198,7 +198,7 @@ class _QualificationData:
 
 
 @dataclass(frozen=True)
-class AdESBasicValidationResult(Generic[StatusType]):
+class AdESBasicValidationResult(Generic[StatusType_co]):
     """
     Result of validation of basic signatures.
 
@@ -210,7 +210,7 @@ class AdESBasicValidationResult(Generic[StatusType]):
     AdES subindication.
     """
 
-    api_status: StatusType | None
+    api_status: StatusType_co | None
     """
     A status descriptor object from pyHanko's own validation API.
     Will be an instance of :class:`.SignatureStatus` or a subclass
@@ -272,7 +272,7 @@ async def ades_timestamp_validation(
     validation_spec: SignatureValidationSpec,
     expected_tst_imprint: Callable[[str], bytes],
     *,
-    status_cls: type[StatusType],
+    status_cls: type[StatusType_co],
     timing_info: ValidationTimingInfo | None = None,
     validation_data_handlers: ValidationDataHandlers | None = None,
     extra_status_kwargs: dict[str, Any] | None = None,
@@ -676,7 +676,7 @@ async def ades_basic_validation(
     signed_data: cms.SignedData,
     validation_spec: SignatureValidationSpec,
     *,
-    status_cls: type[StatusType],
+    status_cls: type[StatusType_co],
     timing_info: ValidationTimingInfo | None = None,
     raw_digest: bytes | None = None,
     validation_data_handlers: ValidationDataHandlers | None = None,
@@ -821,7 +821,7 @@ async def _ades_basic_validation(
     signature_not_before_time: datetime | None,
     extra_status_kwargs: dict[str, Any] | None,
     algorithm_policy: CMSAlgorithmUsagePolicy | None,
-    status_cls: type[StatusType],
+    status_cls: type[StatusType_co],
     ts_qualification_requirements: QualificationRequirements | None,
 ) -> AdESBasicValidationResult | _InternalBasicValidationResult:
     status_kwargs = dict(extra_status_kwargs or {})
@@ -912,7 +912,7 @@ async def ades_with_time_validation(
     signed_data: cms.SignedData,
     validation_spec: SignatureValidationSpec,
     *,
-    status_cls: type[StatusType],
+    status_cls: type[StatusType_co],
     timing_info: ValidationTimingInfo | None = None,
     raw_digest: bytes | None = None,
     validation_data_handlers: ValidationDataHandlers | None = None,
@@ -1820,7 +1820,7 @@ async def _validate_prima_facie_poe(
             poe_manager_override=temporary_poes,
         )
 
-        def _mi_check(mi_hash_algo: str) -> bytes:
+        def _mi_check(mi_hash_algo: str, poe=poe) -> bytes:
             if mi_hash_algo == poe.doc_hash_algo:
                 return poe.doc_digest
             else:

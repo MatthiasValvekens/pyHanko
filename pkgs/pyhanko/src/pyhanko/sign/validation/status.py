@@ -257,7 +257,7 @@ class TimestampSignatureStatus(SignatureStatus):
     There are no (non-extended) key usage requirements for TSA certificates.
     """
 
-    extd_key_usage = {'time_stamping'}
+    extd_key_usage: ClassVar[set[str]] = {'time_stamping'}
     """
     TSA certificates must have the ``time_stamping`` extended key usage
     extension (OID 1.3.6.1.5.5.7.3.8).

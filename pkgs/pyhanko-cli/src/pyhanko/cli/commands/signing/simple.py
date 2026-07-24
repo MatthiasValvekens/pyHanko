@@ -1,5 +1,5 @@
 import contextlib
-from typing import ContextManager
+from contextlib import AbstractContextManager
 
 import click
 from pyhanko.cli._ctx import CLIContext
@@ -96,7 +96,7 @@ class PemderPlugin(SigningCommandPlugin):
 
     def create_signer(
         self, context: CLIContext, **kwargs
-    ) -> ContextManager[Signer]:
+    ) -> AbstractContextManager[Signer]:
         @contextlib.contextmanager
         def _m():
             yield _pemder_signer(context, **kwargs)
@@ -203,7 +203,7 @@ class PKCS12Plugin(SigningCommandPlugin):
 
     def create_signer(
         self, context: CLIContext, **kwargs
-    ) -> ContextManager[Signer]:
+    ) -> AbstractContextManager[Signer]:
         @contextlib.contextmanager
         def _m():
             yield _pkcs12_signer(context, **kwargs)

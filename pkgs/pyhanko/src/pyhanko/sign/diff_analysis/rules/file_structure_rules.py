@@ -58,7 +58,8 @@ class CatalogModificationRule(QualifiedWhitelistRule):
                 transform=lambda ref: ReferenceUpdate(
                     ref,
                     context_checked=Context.from_absolute(
-                        old, RawPdfPath('/Root', key)
+                        old,
+                        RawPdfPath('/Root', key),  # noqa: B023
                     ),
                 ),
             )

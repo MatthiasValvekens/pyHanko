@@ -1063,13 +1063,14 @@ class NoSha512AfterSomeTime(AlgorithmUsagePolicy):
     def digest_algorithm_allowed(
         self, algo: algos.DigestAlgorithm, moment: datetime.datetime | None
     ) -> AlgorithmUsageConstraint:
-        if algo['algorithm'].native == 'sha512':
-            if moment is None or moment > self.cutoff:
-                return AlgorithmUsageConstraint(
-                    allowed=False,
-                    not_allowed_after=self.cutoff,
-                    failure_reason='just because',
-                )
+        if algo['algorithm'].native == 'sha512' and (
+            moment is None or moment > self.cutoff
+        ):
+            return AlgorithmUsageConstraint(
+                allowed=False,
+                not_allowed_after=self.cutoff,
+                failure_reason='just because',
+            )
         return AlgorithmUsageConstraint(allowed=True)
 
 

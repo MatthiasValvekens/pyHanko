@@ -69,9 +69,11 @@ def test_mildly_malformed_xref_read(fname):
 
 def test_hopelessly_malformed_xref_read():
     fname = 'minimal-startxref-hopeless.pdf'
-    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
-        with pytest.raises(misc.PdfReadError, match='Could not find xref'):
-            PdfFileReader(inf, strict=False)
+    with (
+        open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf,
+        pytest.raises(misc.PdfReadError, match='Could not find xref'),
+    ):
+        PdfFileReader(inf, strict=False)
 
 
 @pytest.mark.parametrize(
@@ -92,9 +94,11 @@ def test_hopelessly_malformed_xref_read():
     ],
 )
 def test_xref_locate_fail_strict(fname):
-    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
-        with pytest.raises(misc.PdfReadError, match='Failed to locate xref'):
-            PdfFileReader(inf, strict=True)
+    with (
+        open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf,
+        pytest.raises(misc.PdfReadError, match='Failed to locate xref'),
+    ):
+        PdfFileReader(inf, strict=True)
 
 
 @pytest.mark.parametrize(
@@ -116,10 +120,12 @@ def test_xref_locate_fail_strict(fname):
     ],
 )
 def test_broken_objstream(fname, err, obj_to_get):
-    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
-        with pytest.raises(misc.PdfReadError, match=err):
-            r = PdfFileReader(inf, strict=True)
-            r.get_object(generic.Reference(idnum=obj_to_get))
+    with (
+        open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf,
+        pytest.raises(misc.PdfReadError, match=err),
+    ):
+        r = PdfFileReader(inf, strict=True)
+        r.get_object(generic.Reference(idnum=obj_to_get))
 
 
 @pytest.mark.parametrize(
@@ -837,9 +843,11 @@ def test_hybrid_xref(fname):
 
 def test_xref_size_nondecreasing():
     fname = 'minimal-broken-xref-size.pdf'
-    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
-        with pytest.raises(misc.PdfReadError, match='nondecreasing'):
-            PdfFileReader(inf, strict=True)
+    with (
+        open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf,
+        pytest.raises(misc.PdfReadError, match='nondecreasing'),
+    ):
+        PdfFileReader(inf, strict=True)
 
 
 @pytest.mark.parametrize(

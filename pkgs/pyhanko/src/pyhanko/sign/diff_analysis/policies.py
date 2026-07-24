@@ -125,13 +125,11 @@ def _is_id(old_object: generic.PdfObject, new_object: generic.PdfObject):
             and all(_is_id(x, y) for x, y in zip(old_object, new_object))
         )
 
-    if isinstance(old_object, generic.StreamObject):
-        # fallthrough to dict case if this check passes
-        if not (
-            isinstance(new_object, generic.StreamObject)
-            and new_object.encoded_data == old_object.encoded_data
-        ):
-            return False
+    if isinstance(old_object, generic.StreamObject) and not (
+        isinstance(new_object, generic.StreamObject)
+        and new_object.encoded_data == old_object.encoded_data
+    ):
+        return False
     if isinstance(old_object, generic.DictionaryObject):
         if not (
             isinstance(new_object, generic.DictionaryObject)

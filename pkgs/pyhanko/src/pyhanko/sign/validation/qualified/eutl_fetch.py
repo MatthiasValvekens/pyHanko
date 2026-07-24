@@ -360,7 +360,7 @@ async def lotl_to_registry(
         )
         try:
             tl_xml = await _fetch(cache, ref.location_uri, client)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             errors.append(
                 TSPServiceParsingError(
                     f"Failed to download trusted list for {ref.territory} "
@@ -373,7 +373,7 @@ async def lotl_to_registry(
                 tl_xml, ref.tlso_certs, registry
             )
             errors.extend(tl_errors)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             errors.append(
                 TSPServiceParsingError(
                     f"Failed to parse trusted list for {ref.territory} "

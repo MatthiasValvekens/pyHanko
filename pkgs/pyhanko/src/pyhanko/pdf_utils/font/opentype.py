@@ -866,7 +866,7 @@ class GlyphAccumulatorFactory(FontEngineFactory):
     def create_font_engine(
         self, writer: 'BasePdfFileWriter', obj_stream=None
     ) -> GlyphAccumulator:
-        fh = open(self.font_file, 'rb')
+        fh = open(self.font_file, 'rb')  # noqa: SIM115
         if (
             obj_stream is None
             and writer.stream_xrefs

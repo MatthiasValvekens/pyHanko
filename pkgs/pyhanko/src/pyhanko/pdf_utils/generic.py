@@ -1196,6 +1196,9 @@ class NameObject(str, PdfObject):
         return _decode_name(name_bytes)
 
 
+IDENTITY: NameObject = NameObject('/Identity')
+
+
 def _normalise_key(key):
     if not isinstance(key, NameObject):
         if isinstance(key, str):
@@ -1524,7 +1527,7 @@ class StreamObject(DictionaryObject):
 
     def add_crypt_filter(
         self,
-        name=NameObject('/Identity'),
+        name: NameObject = IDENTITY,
         params=None,
         handler: Optional['SecurityHandler'] = None,
     ):
@@ -2233,7 +2236,7 @@ def pdf_date(dt: datetime) -> TextStringObject:
             #  what's in the spec, but Adobe Reader DC refuses to validate
             #  signatures with a date string that doesn't contain it.
             #  No idea why.
-            utc_offset_string = sign + ("%02d'%02d'" % (hrs, mins))
+            utc_offset_string = sign + f"{int(hrs):02d}'{int(mins):02d}'"
 
     return TextStringObject(base_dt + utc_offset_string)
 

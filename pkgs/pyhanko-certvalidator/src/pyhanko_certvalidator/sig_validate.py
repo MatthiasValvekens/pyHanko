@@ -27,6 +27,8 @@ from pyhanko_certvalidator.util import (
 )
 
 __all__ = [
+    'DEFAULT_SIGNATURE_VALIDATOR',
+    'DEFAULT_VALIDATION_CONTEXT',
     'DefaultSignatureValidator',
     'SignatureValidationContext',
     'SignatureValidator',
@@ -54,6 +56,9 @@ class SignatureValidationContext:
     """
 
 
+DEFAULT_VALIDATION_CONTEXT = SignatureValidationContext()
+
+
 class SignatureValidator(abc.ABC):
     """
     Abstracts away cryptographic validation primitives.
@@ -65,7 +70,7 @@ class SignatureValidator(abc.ABC):
         signed_data: bytes,
         public_key_info: PublicKeyInfo,
         signature_algorithm: algos.SignedDigestAlgorithm,
-        context: SignatureValidationContext = SignatureValidationContext(),
+        context: SignatureValidationContext = DEFAULT_VALIDATION_CONTEXT,
     ):
         """
         Validate a cryptographic signature over a piece of data.
@@ -94,7 +99,7 @@ class DefaultSignatureValidator(SignatureValidator):
         signed_data: bytes,
         public_key_info: PublicKeyInfo,
         signature_algorithm: algos.SignedDigestAlgorithm,
-        context: SignatureValidationContext = SignatureValidationContext(),
+        context: SignatureValidationContext = DEFAULT_VALIDATION_CONTEXT,
     ):
         _validate_raw(
             signature,
@@ -110,7 +115,7 @@ def _validate_raw(
     signed_data: bytes,
     public_key_info: PublicKeyInfo,
     signature_algorithm: algos.SignedDigestAlgorithm,
-    context: SignatureValidationContext = SignatureValidationContext(),
+    context: SignatureValidationContext = DEFAULT_VALIDATION_CONTEXT,
 ):
     """
     Validate a raw signature. Internal API.
@@ -191,3 +196,6 @@ def _validate_raw(
         raise AlgorithmNotSupported(
             f"Signature mechanism {sig_algo} is not supported."
         )
+
+
+DEFAULT_SIGNATURE_VALIDATOR = DefaultSignatureValidator()

@@ -1188,16 +1188,16 @@ async def async_validate_detached_cms(
     return StandardCMSSignatureStatus(**status_kwargs)
 
 
-ResultType = TypeVar('ResultType', covariant=True)
+ResultType_co = TypeVar('ResultType_co', covariant=True)
 
 
 @dataclass(frozen=True)
-class CertvalidatorOperationResult(Generic[ResultType]):
+class CertvalidatorOperationResult(Generic[ResultType_co]):
     """
     Internal class to inspect error data from certvalidator.
     """
 
-    success_result: ResultType | None
+    success_result: ResultType_co | None
     revo_details: RevocationDetails | None = None
     error_time_horizon: datetime | None = None
     error_path: ValidationPath | None = None
@@ -1206,8 +1206,8 @@ class CertvalidatorOperationResult(Generic[ResultType]):
 
 async def handle_certvalidator_errors(
     cert: x509.Certificate,
-    coro: Awaitable[ResultType],
-) -> CertvalidatorOperationResult[ResultType]:
+    coro: Awaitable[ResultType_co],
+) -> CertvalidatorOperationResult[ResultType_co]:
     """
     Internal error handling function that maps certvalidator errors
     to AdES status indications.

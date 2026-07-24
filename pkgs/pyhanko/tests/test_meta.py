@@ -1031,6 +1031,8 @@ def test_bogus_metadata_key_value():
 )
 def test_xmp_with_dangerous_xml(bad_file):
     xml_file = f"{TEST_DIR}/data/xml/bad-xml/{bad_file}"
-    with open(xml_file, 'rb') as f:
-        with pytest.raises(xmp_xml.XmpXmlProcessingError):
-            xmp_xml.parse_xmp(f)
+    with (
+        open(xml_file, 'rb') as f,
+        pytest.raises(xmp_xml.XmpXmlProcessingError),
+    ):
+        xmp_xml.parse_xmp(f)

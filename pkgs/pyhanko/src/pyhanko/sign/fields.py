@@ -3,7 +3,7 @@ Utilities to deal with signature form fields and their properties in PDF files.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, Flag, unique
 
 from asn1crypto import x509
@@ -28,6 +28,8 @@ from pyhanko_certvalidator.errors import InvalidCertificateError
 from pyhanko_certvalidator.path import ValidationPath
 
 __all__ = [
+    'DEFAULT_INVIS_SIG_SETTINGS',
+    'DEFAULT_VISIBLE_SIG_SETTINGS',
     'FieldMDPAction',
     'FieldMDPSpec',
     'InvisSigSettings',
@@ -412,7 +414,9 @@ class SigCertConstraints:
     See Table 235 in ISO 32000-1.
     """
 
-    flags: SigCertConstraintFlags = SigCertConstraintFlags(0)
+    flags: SigCertConstraintFlags = field(
+        default_factory=lambda: SigCertConstraintFlags(0)
+    )
     """
     Enforcement flags. By default, all entries are optional.
     """
@@ -444,7 +448,9 @@ class SigCertConstraints:
         PyHanko ignores this value, but we include it for compatibility.
     """
 
-    url_type: generic.NameObject = pdf_name('/Browser')
+    url_type: generic.NameObject = field(
+        default_factory=lambda: pdf_name('/Browser')
+    )
     """
     Handler that should be used to open :attr:`info_url`.
     ``/Browser`` is the only implementation-independent value.
@@ -742,7 +748,7 @@ class SigSeedValueSpec:
     Python representation of a PDF seed value dictionary.
     """
 
-    flags: SigSeedValFlags = SigSeedValFlags(0)
+    flags: SigSeedValFlags = field(default_factory=lambda: SigSeedValFlags(0))
     """
     Enforcement flags. By default, all entries are optional.
     """
@@ -1659,6 +1665,10 @@ def apply_sig_field_spec_properties(
         sig_field[pdf_name('/Lock')] = pdf_out.add_object(lock)
 
 
+DEFAULT_INVIS_SIG_SETTINGS = InvisSigSettings()
+DEFAULT_VISIBLE_SIG_SETTINGS = VisibleSigSettings()
+
+
 class SignatureFormField(generic.DictionaryObject):
     def __init__(
         self,
@@ -1667,8 +1677,8 @@ class SignatureFormField(generic.DictionaryObject):
         box=None,
         include_on_page=None,
         combine_annotation=True,
-        invis_settings: InvisSigSettings = InvisSigSettings(),
-        visible_settings: VisibleSigSettings = VisibleSigSettings(),
+        invis_settings: InvisSigSettings = DEFAULT_INVIS_SIG_SETTINGS,
+        visible_settings: VisibleSigSettings = DEFAULT_VISIBLE_SIG_SETTINGS,
         annot_flags=None,
     ):
         if box is not None:

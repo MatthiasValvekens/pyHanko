@@ -3,7 +3,7 @@ import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Union
+from typing import Any, TypeAlias
 
 from asn1crypto import core, x509
 
@@ -38,7 +38,9 @@ class ValidationObjectType(enum.Enum):
         return f'urn:etsi:019102:validationObject:{self.value}'
 
 
-KnownObjectType = Union[bytes, CRLContainer, OCSPContainer, x509.Certificate]
+KnownObjectType: TypeAlias = (
+    bytes | CRLContainer | OCSPContainer | x509.Certificate
+)
 
 
 def guess_validation_object_type(

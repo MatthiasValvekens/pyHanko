@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from asn1crypto import algos, cms, core
 
 from .asn1_util import register_cms_attribute
@@ -42,7 +44,7 @@ __all__ = [
 
 
 class CommitmentTypeIdentifier(core.ObjectIdentifier):
-    _map = {
+    _map: ClassVar[dict] = {
         # from ETSI TS 119 172-1 Annex B, RFC 5126
         '1.2.840.113549.1.9.16.6.1': 'proof_of_origin',
         '1.2.840.113549.1.9.16.6.2': 'proof_of_receipt',
@@ -54,7 +56,7 @@ class CommitmentTypeIdentifier(core.ObjectIdentifier):
 
 
 class CommitmentTypeQualifier(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('commitment_type_identifier', CommitmentTypeIdentifier),
         ('qualifier', core.Any),
     ]
@@ -62,7 +64,7 @@ class CommitmentTypeQualifier(core.Sequence):
     _oid_pair = ('commitment_type_identifier', 'qualifier')
     # CAdES generic commitment types don't use qualifiers, so this is reserved
     # for more advanced uses
-    _oid_specs = {}
+    _oid_specs: ClassVar[dict] = {}
 
 
 class CommitmentTypeQualifiers(core.SequenceOf):
@@ -70,7 +72,7 @@ class CommitmentTypeQualifiers(core.SequenceOf):
 
 
 class CommitmentTypeIndication(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('commitment_type_id', CommitmentTypeIdentifier),
         (
             'commitment_type_qualifier',
@@ -81,7 +83,7 @@ class CommitmentTypeIndication(core.Sequence):
 
 
 class SigPolicyQualifierId(core.ObjectIdentifier):
-    _map = {
+    _map: ClassVar[dict] = {
         # RFC 5126
         '1.2.840.113549.1.9.16.5.1': 'sp_uri',
         '1.2.840.113549.1.9.16.5.2': 'sp_unotice',
@@ -93,7 +95,7 @@ class SigPolicyQualifierId(core.ObjectIdentifier):
 class DisplayText(core.Choice):
     # TODO does asn1crypto support length limitations?
     #  These strings have a length limit of 200 characters
-    _alternatives = [
+    _alternatives: ClassVar[list] = [
         ('visible_string', core.VisibleString),
         ('bmp_string', core.BMPString),
         ('utf8_string', core.UTF8String),
@@ -105,28 +107,34 @@ class NoticeNumbers(core.SequenceOf):
 
 
 class NoticeReference(core.Sequence):
-    _fields = [('organization', DisplayText), ('notice_numbers', NoticeNumbers)]
+    _fields: ClassVar[list] = [
+        ('organization', DisplayText),
+        ('notice_numbers', NoticeNumbers),
+    ]
 
 
 class SPUserNotice(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('notice_ref', NoticeReference, {'optional': True}),
         ('explicit_text', DisplayText, {'optional': True}),
     ]
 
 
 class SPDocSpecification(core.Sequence):
-    _fields = [('oid', core.ObjectIdentifier), ('uri', core.IA5String)]
+    _fields: ClassVar[list] = [
+        ('oid', core.ObjectIdentifier),
+        ('uri', core.IA5String),
+    ]
 
 
 class SigPolicyQualifierInfo(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('sig_policy_qualifier_id', SigPolicyQualifierId),
         ('sig_qualifier', core.Any),
     ]
 
     _oid_pair = ('sig_policy_qualifier_id', 'sig_qualifier')
-    _oid_specs = {
+    _oid_specs: ClassVar[dict] = {
         # RFC 5126
         'sp_uri': core.IA5String,
         'sp_unotice': SPUserNotice,
@@ -140,7 +148,7 @@ class SigPolicyQualifierInfos(core.SequenceOf):
 
 
 class SignaturePolicyId(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('sig_policy_id', core.ObjectIdentifier),
         ('sig_policy_hash', algos.DigestInfo),
         ('sig_policy_qualifiers', SigPolicyQualifierInfos, {'optional': True}),
@@ -148,14 +156,14 @@ class SignaturePolicyId(core.Sequence):
 
 
 class SignaturePolicyIdentifier(core.Choice):
-    _alternatives = [
+    _alternatives: ClassVar[list] = [
         ('signature_policy_id', SignaturePolicyId),
         ('signature_policy_implied', core.Null),
     ]
 
 
 class SignaturePolicyDocument(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         # TODO make this ParsableOctetString as soon as we have support for
         #  signature policies
         ('sig_policy_encoded', core.OctetString),
@@ -164,28 +172,28 @@ class SignaturePolicyDocument(core.Sequence):
 
 
 class SignaturePolicyStore(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('sp_doc_spec', SPDocSpecification),
         ('sp_document', SignaturePolicyDocument),
     ]
 
 
 class OtherAttrCertId(core.ObjectIdentifier):
-    _map = {}  # empty map
+    _map: ClassVar[dict] = {}  # empty map
 
 
 class OtherAttrCert(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('other_attr_cert_id', OtherAttrCertId),
         ('other_attr_cert', core.Any),
     ]
 
     _oid_pair = ('other_attr_cert_id', 'other_attr_cert')
-    _oid_specs = {}  # empty map
+    _oid_specs: ClassVar[dict] = {}  # empty map
 
 
 class CertifiedAttributeChoices(core.Choice):
-    _alternatives = [
+    _alternatives: ClassVar[list] = [
         ('attr_cert', cms.AttributeCertificateV2, {'explicit': 0}),
         ('other_attr_cert', OtherAttrCert, {'explicit': 1}),
     ]
@@ -196,17 +204,17 @@ class CertifiedAttributesV2(core.SequenceOf):
 
 
 class SignedAssertionId(core.ObjectIdentifier):
-    _map = {}  # empty map
+    _map: ClassVar[dict] = {}  # empty map
 
 
 class SignedAssertion(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('signed_assertion_id', SignedAssertionId),
         ('signed_assertion', core.Any),
     ]
 
     _oid_pair = ('signed_assertion_id', 'signed_assertion')
-    _oid_specs = {}  # empty map
+    _oid_specs: ClassVar[dict] = {}  # empty map
 
 
 class SignedAssertions(core.SequenceOf):
@@ -214,7 +222,7 @@ class SignedAssertions(core.SequenceOf):
 
 
 class SignerAttributesV2(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         # CAdES says that the definition of Attribute is as in X.509.
         # asn1crypto defines this in two different places, but the "canonical"
         # one in x509.Attribute doesn't supply any concrete attribute

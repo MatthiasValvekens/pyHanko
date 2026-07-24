@@ -3,7 +3,7 @@ import enum
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TypeVar, Union
+from typing import TypeAlias, TypeVar
 
 from asn1crypto import algos, crl, ocsp
 
@@ -159,9 +159,12 @@ def sort_freshest_first(lst: Iterable[RevInfoType]) -> list[RevInfoType]:
 
 def _freshness_delta(policy, this_update, next_update, time_tolerance):
     freshness_delta = policy.freshness
-    if freshness_delta is None:
-        if next_update is not None and next_update >= this_update:
-            freshness_delta = next_update - this_update
+    if (
+        freshness_delta is None
+        and next_update is not None
+        and next_update >= this_update
+    ):
+        freshness_delta = next_update - this_update
     if freshness_delta is not None:
         freshness_delta = abs(freshness_delta) + time_tolerance
     return freshness_delta
@@ -395,8 +398,8 @@ class CRLContainer(RevinfoContainer):
         return self.crl_data['signature_algorithm']
 
 
-LegacyCompatCRL = Union[bytes, crl.CertificateList, CRLContainer]
-LegacyCompatOCSP = Union[bytes, ocsp.OCSPResponse, OCSPContainer]
+LegacyCompatCRL: TypeAlias = bytes | crl.CertificateList | CRLContainer
+LegacyCompatOCSP: TypeAlias = bytes | ocsp.OCSPResponse | OCSPContainer
 
 
 def process_legacy_crl_input(

@@ -212,6 +212,9 @@ class PreparedByteRangeDigest:
         return content_bytes + padding
 
 
+CONTENTS = pdf_name('/Contents')
+
+
 class PdfByteRangeDigest(generic.DictionaryObject):
     """
     General class to model a PDF Dictionary that has a ``/ByteRange`` entry
@@ -231,7 +234,9 @@ class PdfByteRangeDigest(generic.DictionaryObject):
         estimate the size as accurately as possible.
     """
 
-    def __init__(self, data_key=pdf_name('/Contents'), *, bytes_reserved=None):
+    def __init__(
+        self, data_key: generic.NameObject = CONTENTS, *, bytes_reserved=None
+    ):
         super().__init__()
         if bytes_reserved is not None and bytes_reserved % 2 == 1:
             raise ValueError('bytes_reserved must be even')

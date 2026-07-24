@@ -84,29 +84,28 @@ decrypt_force_flag = click.option(
 )
 @decrypt_force_flag
 def decrypt_with_password(infile, outfile, password, force):
-    with pyhanko_exception_manager():
-        with open(infile, 'rb') as inf:
-            r = PdfFileReader(inf)
-            if r.security_handler is None:
-                raise click.ClickException("File is not encrypted.")
-            elif not isinstance(r.security_handler, StandardSecurityHandler):
-                raise click.ClickException(
-                    "File is not encrypted with the standard (password-based) security handler"
-                )
-            if not password:
-                password = prompt_for_password(prompt='File password: ')
-            auth_result = r.decrypt(password)
-            if auth_result.status == crypt.AuthStatus.USER and not force:
-                raise click.ClickException(
-                    "Password specified was the user password, not "
-                    "the owner password. Pass --force to decrypt the "
-                    "file anyway."
-                )
-            elif auth_result.status == crypt.AuthStatus.FAILED:
-                raise click.ClickException("Password didn't match.")
-            w = copy_into_new_writer(r)
-            with open(outfile, 'wb') as outf:
-                w.write(outf)
+    with pyhanko_exception_manager(), open(infile, 'rb') as inf:
+        r = PdfFileReader(inf)
+        if r.security_handler is None:
+            raise click.ClickException("File is not encrypted.")
+        elif not isinstance(r.security_handler, StandardSecurityHandler):
+            raise click.ClickException(
+                "File is not encrypted with the standard (password-based) security handler"
+            )
+        if not password:
+            password = prompt_for_password(prompt='File password: ')
+        auth_result = r.decrypt(password)
+        if auth_result.status == crypt.AuthStatus.USER and not force:
+            raise click.ClickException(
+                "Password specified was the user password, not "
+                "the owner password. Pass --force to decrypt the "
+                "file anyway."
+            )
+        elif auth_result.status == crypt.AuthStatus.FAILED:
+            raise click.ClickException("Password didn't match.")
+        w = copy_into_new_writer(r)
+        with open(outfile, 'wb') as outf:
+            w.write(outf)
 
 
 @decrypt.command(help='decrypt using private key (PEM/DER)', name='pemder')

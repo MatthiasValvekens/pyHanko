@@ -143,10 +143,11 @@ class Authority(abc.ABC):
         """
         if cert.issuer != self.name:
             return False
-        if cert.authority_key_identifier and self.key_id:
-            if cert.authority_key_identifier != self.key_id:
-                return False
-        return True
+        return not (
+            cert.authority_key_identifier
+            and self.key_id
+            and cert.authority_key_identifier != self.key_id
+        )
 
 
 class TrustAnchor:
@@ -288,10 +289,10 @@ class AuthorityWithCert(Authority):
     def is_potential_issuer_of(self, cert: x509.Certificate):
         if not super().is_potential_issuer_of(cert):
             return False
-        if cert.authority_issuer_serial:
-            if cert.authority_issuer_serial != self._cert.issuer_serial:
-                return False
-        return True
+        return not (
+            cert.authority_issuer_serial
+            and cert.authority_issuer_serial != self._cert.issuer_serial
+        )
 
 
 class CertTrustAnchor(TrustAnchor):

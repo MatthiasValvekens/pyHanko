@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 import click
 from pyhanko.cli._root import cli_root
 from pyhanko.cli._trust import (

@@ -1,5 +1,6 @@
 import abc
-from typing import ClassVar, ContextManager
+from contextlib import AbstractContextManager
+from typing import ClassVar
 
 import click
 from pyhanko.cli._ctx import CLIContext
@@ -85,7 +86,7 @@ class SigningCommandPlugin(abc.ABC):
 
     def create_signer(
         self, context: CLIContext, **kwargs
-    ) -> ContextManager[Signer]:
+    ) -> AbstractContextManager[Signer]:
         """
         Instantiate a context manager that creates and potentially
         also implements a deallocator for a

@@ -1,6 +1,6 @@
 import uuid
 from binascii import hexlify
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from pyhanko.config.api import ConfigurableMixin
@@ -59,10 +59,12 @@ class BaseStampStyle(ConfigurableMixin):
     the stamp's background.
     """
 
-    background_layout: layout.SimpleBoxLayoutRule = layout.SimpleBoxLayoutRule(
-        x_align=layout.AxisAlignment.ALIGN_MID,
-        y_align=layout.AxisAlignment.ALIGN_MID,
-        margins=layout.Margins.uniform(5),
+    background_layout: layout.SimpleBoxLayoutRule = field(
+        default_factory=lambda: layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MID,
+            y_align=layout.AxisAlignment.ALIGN_MID,
+            margins=layout.Margins.uniform(5),
+        )
     )
     """
     Layout rule to render the background inside the stamp's bounding box.

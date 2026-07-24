@@ -54,7 +54,7 @@ VENDOR = 'pyHanko ' + __version__
 pyHanko version identifier in textual form
 """
 
-MetaString = Union[StringWithLanguage, str, None]
+MetaString = StringWithLanguage | str | None
 """
 A regular string, a string with a language code, or nothing at all.
 """

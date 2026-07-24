@@ -45,6 +45,8 @@ from pyhanko_certvalidator.util import (
     extract_ac_issuer_dir_name,
 )
 
+logger = logging.getLogger(__name__)
+
 OCSP_PROVENANCE_ERR = (
     "Unable to verify OCSP response since response signing "
     "certificate could not be validated"
@@ -564,7 +566,7 @@ async def verify_ocsp_response(
                 return
         except ValueError as e:
             msg = "Generic processing error while validating OCSP response."
-            logging.debug(msg, exc_info=e)
+            logger.debug(msg, exc_info=e)
             errs.append(msg, ocsp_response)
 
     if errs.mismatch_failures == len(ocsp_responses):
@@ -677,7 +679,7 @@ async def collect_relevant_responses_with_paths(
             relevant.append(result)
         except ValueError as e:
             msg = "Generic processing error while validating OCSP response."
-            logging.debug(msg, exc_info=e)
+            logger.debug(msg, exc_info=e)
             errs.append(msg, ocsp_response_cont)
     return OCSPCollectionResult(
         responses=relevant,

@@ -435,12 +435,17 @@ class CertificateRegistry(SimpleCertificateStore):
         for issuer in self._subject_map[issuer_hashable]:
             if trust_manager.is_root(issuer):
                 continue  # skip, we've had these in the previous step
-            if cert.authority_key_identifier and issuer.key_identifier:
-                if cert.authority_key_identifier != issuer.key_identifier:
-                    continue
-            if cert.authority_issuer_serial:
-                if cert.authority_issuer_serial != issuer.issuer_serial:
-                    continue
+            if (
+                cert.authority_key_identifier
+                and issuer.key_identifier
+                and cert.authority_key_identifier != issuer.key_identifier
+            ):
+                continue
+            if (
+                cert.authority_issuer_serial
+                and cert.authority_issuer_serial != issuer.issuer_serial
+            ):
+                continue
 
             yield issuer
 

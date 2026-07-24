@@ -410,7 +410,7 @@ def test_validation_time_syntax_error(cli_runner, cli_context):
             obj=cli_context,
         )
         assert result.exit_code == 1
-        assert 'could not be parsed'
+        assert 'could not be parsed' in result.output
 
 
 def test_basic_validate_with_claimed_time(

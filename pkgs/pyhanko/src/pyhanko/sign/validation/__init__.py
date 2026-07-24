@@ -1,6 +1,6 @@
 import asyncio
 import warnings
-from typing import IO, Optional, TypeVar, Union
+from typing import IO, TypeVar
 
 from asn1crypto import cms
 from pyhanko.pdf_utils import misc

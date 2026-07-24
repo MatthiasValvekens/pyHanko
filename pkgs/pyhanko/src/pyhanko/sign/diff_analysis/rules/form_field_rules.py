@@ -359,7 +359,7 @@ class SigFieldCreationRule(FieldMDPRule):
             # checked by field listing routine already
             assert isinstance(sigfield, generic.DictionaryObject)
 
-            def _handle_deps(pdf_dict, _key):
+            def _handle_deps(pdf_dict, _key, fq_name=fq_name):
                 try:
                     raw_value = pdf_dict.raw_get(_key)
 
@@ -821,25 +821,26 @@ def _allow_appearance_update(
         yield from new.collect_dependencies(
             new_ap_stm_ref, since_revision=old.revision + 1
         )
-        if isinstance(old_ap_val, generic.DictionaryObject):
-            if not checked_ap_references:
-                # We verify that the value of /AP, if indirect, is only
-                # used once
-                old_ap_raw = old_field.raw_get('/AP')
-                if isinstance(old_ap_raw, generic.IndirectObject):
-                    # reference count
-                    contexts = {
-                        Context.from_absolute(old, path).relative_view
-                        for path in old._get_usages_of_ref(old_ap_raw.reference)
-                    }
-                    if len(contexts) > 1:
-                        raise SuspiciousModification(
-                            "Attempted to update an appearance "
-                            "stream in an annotation appearance dictionary, "
-                            "but that appearance dictionary is used in "
-                            f"multiple contexts: {contexts}."
-                        )
-                checked_ap_references = True
+        if isinstance(old_ap_val, generic.DictionaryObject) and not (
+            checked_ap_references
+        ):
+            # We verify that the value of /AP, if indirect, is only
+            # used once
+            old_ap_raw = old_field.raw_get('/AP')
+            if isinstance(old_ap_raw, generic.IndirectObject):
+                # reference count
+                contexts = {
+                    Context.from_absolute(old, path).relative_view
+                    for path in old._get_usages_of_ref(old_ap_raw.reference)
+                }
+                if len(contexts) > 1:
+                    raise SuspiciousModification(
+                        "Attempted to update an appearance "
+                        "stream in an annotation appearance dictionary, "
+                        "but that appearance dictionary is used in "
+                        f"multiple contexts: {contexts}."
+                    )
+            checked_ap_references = True
 
 
 def _allow_in_place_appearance_update(
@@ -939,19 +940,14 @@ def _arr_to_refs(arr_obj, exc, collector: Callable = list):
 def _extract_annots_from_page(page, exc):
     if not isinstance(page, generic.DictionaryObject):
         raise exc("Page objects should be dictionaries")
-    try:
-        annots_value = page.raw_get('/Annots')
-        annots_ref = (
-            annots_value.reference
-            if isinstance(annots_value, generic.IndirectObject)
-            else None
-        )
-        annots = _arr_to_refs(
-            annots_value, SuspiciousModification, collector=set
-        )
-        return annots, annots_ref
-    except KeyError:
-        raise
+    annots_value = page.raw_get('/Annots')
+    annots_ref = (
+        annots_value.reference
+        if isinstance(annots_value, generic.IndirectObject)
+        else None
+    )
+    annots = _arr_to_refs(annots_value, SuspiciousModification, collector=set)
+    return annots, annots_ref
 
 
 def _walk_page_tree_annots(
@@ -1058,7 +1054,10 @@ def _walk_page_tree_annots(
                 valid_when_locked=valid_when_locked and field_name is not None,
                 context_checked=None,
             )
-            if new_annots_ref:
+            if new_annots_ref and (
+                old_annots_ref == new_annots_ref
+                or old.is_ref_available(new_annots_ref)
+            ):
                 # current /Annots entry is an indirect reference
 
                 # If the equality check fails,
@@ -1067,16 +1066,13 @@ def _walk_page_tree_annots(
                 # indirect one, or the /Annots entry was newly created.
                 # This is all fine, provided that the new  object
                 # ID doesn't clobber an existing one.
-                if old_annots_ref == new_annots_ref or old.is_ref_available(
-                    new_annots_ref
-                ):
-                    yield FormUpdate(
-                        updated_ref=new_annots_ref,
-                        field_name=field_name,
-                        valid_when_locked=(
-                            valid_when_locked and field_name is not None
-                        ),
-                        context_checked=RelativeContext(
-                            old_kid_ref, RawPdfPath('/Annots')
-                        ),
-                    )
+                yield FormUpdate(
+                    updated_ref=new_annots_ref,
+                    field_name=field_name,
+                    valid_when_locked=(
+                        valid_when_locked and field_name is not None
+                    ),
+                    context_checked=RelativeContext(
+                        old_kid_ref, RawPdfPath('/Annots')
+                    ),
+                )

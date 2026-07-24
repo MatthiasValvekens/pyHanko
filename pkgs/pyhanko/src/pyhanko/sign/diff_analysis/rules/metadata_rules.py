@@ -95,7 +95,7 @@ class MetadataUpdateRule(WhitelistRule):
 
             parser = etree.XMLParser(resolve_entities=False, encoding='utf-8')
             root = etree.fromstring(metadata_stream.data, parser=parser)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise SuspiciousModification(
                 "/Metadata XML syntax could not be validated", e
             )

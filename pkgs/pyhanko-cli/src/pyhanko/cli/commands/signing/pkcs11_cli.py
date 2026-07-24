@@ -1,7 +1,7 @@
 import contextlib
 import dataclasses
 import os
-from typing import ContextManager
+from contextlib import AbstractContextManager
 
 import click
 from pyhanko.cli._ctx import CLIContext
@@ -114,7 +114,7 @@ class PKCS11Plugin(SigningCommandPlugin):
 
     def create_signer(
         self, context: CLIContext, **kwargs
-    ) -> ContextManager[Signer]:
+    ) -> AbstractContextManager[Signer]:
         return _pkcs11_signer_context(context, **kwargs)
 
 

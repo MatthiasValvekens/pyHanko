@@ -6,7 +6,7 @@ import secrets
 import struct
 from dataclasses import dataclass
 from hashlib import sha1, sha256
-from typing import Optional
+from typing import ClassVar, Optional
 
 from asn1crypto import algos, cms, core, x509
 from asn1crypto.algos import RSAESOAEPParams
@@ -90,6 +90,10 @@ class RecipientEncryptionPolicy:
     """
 
 
+PERMS_ALLOW_EVERYTHING = PubKeyPermissions.allow_everything()
+DEFAULT_RECIPIENT_ENCRYPTION_POLICY = RecipientEncryptionPolicy()
+
+
 class PubKeyCryptFilter(CryptFilter, abc.ABC):
     """
     Crypt filter for use with public key security handler.
@@ -142,7 +146,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         self,
         certs: list[x509.Certificate],
         policy: RecipientEncryptionPolicy,
-        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
+        perms: PubKeyPermissions = PERMS_ALLOW_EVERYTHING,
     ):
         """
         Add recipients to this crypt filter.
@@ -698,11 +702,14 @@ class EnvelopeKeyDecrypter:
 
 
 class _PrivKeyAndCert(core.Sequence):
-    _fields = [('key', PrivateKeyInfo), ('cert', x509.Certificate)]
+    _fields = [  # noqa: RUF012
+        ('key', PrivateKeyInfo),
+        ('cert', x509.Certificate),
+    ]
 
 
 class ECCCMSSharedInfo(core.Sequence):
-    _fields = [
+    _fields = [  # noqa: RUF012
         ('key_info', KeyEncryptionAlgorithm),
         (
             'entityUInfo',
@@ -1190,7 +1197,9 @@ class PubKeySecurityHandler(SecurityHandler):
     have to instantiate these yourself (see :meth:`build_from_certs`).
     """
 
-    _known_crypt_filters: dict[generic.NameObject, CryptFilterBuilder] = {
+    _known_crypt_filters: ClassVar[
+        dict[generic.NameObject, CryptFilterBuilder]
+    ] = {
         generic.NameObject('/V2'): _build_legacy_pubkey_cf,
         generic.NameObject('/AESV2'): _build_aes128_pubkey_cf,
         generic.NameObject('/AESV3'): _build_aes256_pubkey_cf,
@@ -1206,9 +1215,9 @@ class PubKeySecurityHandler(SecurityHandler):
         version=SecurityHandlerVersion.AES256,
         use_aes=True,
         use_crypt_filters=True,
-        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
+        perms: PubKeyPermissions = PERMS_ALLOW_EVERYTHING,
         encrypt_metadata=True,
-        policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
+        policy: RecipientEncryptionPolicy = DEFAULT_RECIPIENT_ENCRYPTION_POLICY,
         pdf_mac: bool = True,
         **kwargs,
     ) -> 'PubKeySecurityHandler':
@@ -1252,6 +1261,7 @@ class PubKeySecurityHandler(SecurityHandler):
         :return:
             An instance of :class:`.PubKeySecurityHandler`.
         """
+
         subfilter = (
             PubKeyAdbeSubFilter.S5
             if use_crypt_filters
@@ -1495,8 +1505,8 @@ class PubKeySecurityHandler(SecurityHandler):
     def add_recipients(
         self,
         certs: list[x509.Certificate],
-        perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
-        policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
+        perms: PubKeyPermissions = PERMS_ALLOW_EVERYTHING,
+        policy: RecipientEncryptionPolicy = DEFAULT_RECIPIENT_ENCRYPTION_POLICY,
     ):
         # add recipients to all *default* crypt filters
         # callers that want to do this more granularly are welcome to, but

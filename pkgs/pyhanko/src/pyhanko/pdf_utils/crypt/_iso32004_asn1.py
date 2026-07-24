@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from asn1crypto.algos import KdfAlgorithmId
 from asn1crypto.cms import (
     CMSAttribute,
@@ -11,7 +13,7 @@ from asn1crypto.core import Integer, OctetString, Sequence
 
 
 class PdfMacIntegrityInfo(Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('version', Integer),
         ('data_digest', OctetString),
         ('signature_digest', OctetString, {'implicit': 0, 'optional': True}),

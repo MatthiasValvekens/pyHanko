@@ -1,7 +1,7 @@
 import enum
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Optional
+from typing import ClassVar, Optional
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt.cred_ser import SerialisableCredential
@@ -151,8 +151,10 @@ class SecurityHandler:
         compatibility with certain implementations.
     """
 
-    __registered_subclasses: dict[str, type['SecurityHandler']] = {}
-    _known_crypt_filters: dict[generic.NameObject, 'CryptFilterBuilder'] = {}
+    __registered_subclasses: ClassVar[dict[str, type['SecurityHandler']]] = {}
+    _known_crypt_filters: ClassVar[
+        dict[generic.NameObject, 'CryptFilterBuilder']
+    ] = {}
 
     def __init__(
         self,
@@ -181,20 +183,22 @@ class SecurityHandler:
             cls._known_crypt_filters = dict(cls._known_crypt_filters)
 
     @staticmethod
-    def register(cls: type['SecurityHandler']):
+    def register(handler_cls: type['SecurityHandler']):
         """
         Register a security handler class.
         Intended to be used as a decorator on subclasses.
 
         See :meth:`build` for further information.
 
-        :param cls:
+        :param handler_cls:
             A subclass of :class:`.SecurityHandler`.
         """
         # don't put this in __init_subclass__, so that people can inherit from
         # security handlers if they want
-        SecurityHandler.__registered_subclasses[cls.get_name()] = cls
-        return cls
+        SecurityHandler.__registered_subclasses[handler_cls.get_name()] = (
+            handler_cls
+        )
+        return handler_cls
 
     @staticmethod
     def build(encrypt_dict: generic.DictionaryObject) -> 'SecurityHandler':
@@ -738,7 +742,7 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
         return ciphertext
 
 
-IDENTITY = generic.NameObject('/Identity')
+IDENTITY: generic.NameObject = generic.NameObject('/Identity')
 
 
 class CryptFilterConfiguration:

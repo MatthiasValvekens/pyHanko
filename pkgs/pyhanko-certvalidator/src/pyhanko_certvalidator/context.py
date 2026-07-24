@@ -34,7 +34,11 @@ from .revinfo.archival import (
     process_legacy_ocsp_input,
 )
 from .revinfo.manager import RevinfoManager
-from .sig_validate import DefaultSignatureValidator, SignatureValidator
+from .sig_validate import (
+    DEFAULT_SIGNATURE_VALIDATOR,
+    DefaultSignatureValidator,
+    SignatureValidator,
+)
 
 
 @dataclass(frozen=True)
@@ -461,8 +465,11 @@ class ValidationDataHandlers:
     """
 
 
+DEFAULT_FETCHER_BACKEND = RequestsFetcherBackend()
+
+
 def bootstrap_validation_data_handlers(
-    fetchers: Fetchers | FetcherBackend | None = RequestsFetcherBackend(),
+    fetchers: Fetchers | FetcherBackend | None = DEFAULT_FETCHER_BACKEND,
     crls: Iterable[CRLContainer] = (),
     ocsps: Iterable[OCSPContainer] = (),
     certs: Iterable[x509.Certificate] = (),
@@ -574,7 +581,9 @@ class CertValidationPolicySpec:
     The PKIX validation parameters to use, as defined in :rfc:`5280`.
     """
 
-    signature_validator: SignatureValidator = DefaultSignatureValidator()
+    signature_validator: SignatureValidator = field(
+        default=DEFAULT_SIGNATURE_VALIDATOR
+    )
     """
     Validator implementing the necessary cryptographic operations to validate
     signatures.

@@ -4,7 +4,7 @@ import secrets
 import struct
 from dataclasses import dataclass
 from hashlib import sha256, sha384, sha512
-from typing import Optional
+from typing import ClassVar, Optional
 
 from asn1crypto import core
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -36,6 +36,8 @@ from .filter_mixins import (
     RC4CryptFilterMixin,
 )
 from .permissions import StandardPermissions
+
+PERMS_ALLOW_EVERYTHING = StandardPermissions.allow_everything()
 
 
 @dataclass
@@ -148,7 +150,7 @@ class StandardSecuritySettingsRevision(misc.VersionEnum):
 
 
 class _PasswordCredential(core.Sequence, SerialisableCredential):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('pwd_bytes', core.OctetString),
         ('id1', core.OctetString, {'optional': True}),
     ]
@@ -264,7 +266,9 @@ class StandardSecurityHandler(SecurityHandler):
     security handlers through :meth:`.SecurityHandler.build`.
     """
 
-    _known_crypt_filters: dict[generic.NameObject, CryptFilterBuilder] = {
+    _known_crypt_filters: ClassVar[
+        dict[generic.NameObject, CryptFilterBuilder]
+    ] = {
         generic.NameObject('/V2'): _build_legacy_standard_crypt_filter,
         generic.NameObject('/AESV2'): lambda _, __: StandardAESCryptFilter(
             keylen=16
@@ -289,7 +293,7 @@ class StandardSecurityHandler(SecurityHandler):
         desired_user_pass=None,
         keylen_bytes=16,
         use_aes128=True,
-        perms: StandardPermissions = StandardPermissions.allow_everything(),
+        perms: StandardPermissions = PERMS_ALLOW_EVERYTHING,
         crypt_filter_config=None,
         encrypt_metadata=True,
         **kwargs,
@@ -325,6 +329,7 @@ class StandardSecurityHandler(SecurityHandler):
         :return:
             A :class:`StandardSecurityHandler` instance.
         """
+
         desired_owner_pass = legacy_normalise_pw(desired_owner_pass)
         desired_user_pass = (
             legacy_normalise_pw(desired_user_pass)
@@ -408,7 +413,7 @@ class StandardSecurityHandler(SecurityHandler):
         cls,
         desired_owner_pass,
         desired_user_pass=None,
-        perms: StandardPermissions = StandardPermissions.allow_everything(),
+        perms: StandardPermissions = PERMS_ALLOW_EVERYTHING,
         encrypt_metadata=True,
         pdf_mac: bool = True,
         use_gcm: bool = False,
@@ -449,6 +454,7 @@ class StandardSecurityHandler(SecurityHandler):
         :return:
             A :class:`StandardSecurityHandler` instance.
         """
+
         owner_pw_bytes = _r6_normalise_pw(desired_owner_pass)
         user_pw_bytes = (
             _r6_normalise_pw(desired_user_pass)

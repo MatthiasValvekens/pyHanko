@@ -763,13 +763,15 @@ class RawPdfPath:
                             f"from {from_obj}."
                         )
             elif isinstance(entry, int):
+                if isinstance(current_obj, generic.ArrayObject) and not (
+                    0 <= entry <= len(current_obj)
+                ):
+                    raise misc.PdfReadError(
+                        f"Encountered out-of-range array index "
+                        f"{entry} at position {ix} in path {self} "
+                        f"from {from_obj}."
+                    )
                 if isinstance(current_obj, generic.ArrayObject):
-                    if not (0 <= entry <= len(current_obj)):
-                        raise misc.PdfReadError(
-                            f"Encountered out-of-range array index "
-                            f"{entry} at position {ix} in path {self} "
-                            f"from {from_obj}."
-                        )
                     current_obj = current_obj.raw_get(entry)
                     elem = entry
                     continue
@@ -808,7 +810,7 @@ class RawPdfPath:
     @staticmethod
     def _fmt_node(node):
         if isinstance(node, int):
-            return '[%d]' % node
+            return f'[{node}]'
         else:
             return '.' + node[1:]
 

@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from io import BytesIO
 from itertools import chain
+from typing import ClassVar
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import EncryptedObjAccess, pdf_name
@@ -877,7 +878,7 @@ class TrailerDictionary(generic.PdfObject):
 
     # These keys shouldn't really be considered part of the trailer dictionary,
     # and in particular are not subject to inheritance rules.
-    non_trailer_keys = {
+    non_trailer_keys: ClassVar[set] = {
         '/Length',
         '/Filter',
         '/DecodeParms',
@@ -923,9 +924,9 @@ class TrailerDictionary(generic.PdfObject):
             # only look in the most recent revision
             return revisions[0].raw_get(key, decrypt)
 
-        for revision in revisions:
+        for rev in revisions:
             try:
-                return revision.raw_get(key, decrypt)
+                return rev.raw_get(key, decrypt)
             except KeyError:
                 continue
         raise KeyError(key)
@@ -1326,12 +1327,12 @@ def write_xref_table(stream, position_dict: dict[tuple[int, int], int]):
     subsections = _contiguous_xref_chunks(position_dict)
 
     def write_header(idnum, length):
-        header = '%d %d\n' % (idnum, length)
+        header = f'{idnum} {length}\n'
         stream.write(header.encode('ascii'))
 
     def write_subsection(chunk):
         for position, generation in chunk:
-            entry = "%010d %05d n \n" % (position, generation)
+            entry = f'{position:010d} {generation:05d} n \n'
             stream.write(entry.encode('ascii'))
 
     try:

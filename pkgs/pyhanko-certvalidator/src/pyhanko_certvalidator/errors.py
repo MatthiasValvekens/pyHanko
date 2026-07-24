@@ -1,12 +1,19 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import TypeVar
+from typing import TYPE_CHECKING
 
 from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
-from typing_extensions import Self
 
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.path import ValidationPath
+
+if TYPE_CHECKING:
+    # typing.Self is only available on Python 3.11+; fall back to the
+    # typing_extensions backport for 3.10. Guarded by TYPE_CHECKING so that
+    # neither is required at runtime (all annotations are lazy strings here).
+    from typing_extensions import Self
 
 
 class PathError(Exception):
@@ -75,9 +82,6 @@ class ValidationError(Exception):
     def __init__(self, message: str):
         self.failure_msg = message
         super().__init__(message)
-
-
-TPathErr = TypeVar('TPathErr', bound='PathValidationError')
 
 
 class PathValidationError(ValidationError):
@@ -206,7 +210,7 @@ class DisallowedAlgorithmError(PathValidationError):
         msg: str,
         proc_state: ValProcState,
         banned_since: datetime | None = None,
-    ) -> 'DisallowedAlgorithmError':
+    ) -> DisallowedAlgorithmError:
         return cls(msg, banned_since=banned_since, proc_state=proc_state)
 
 

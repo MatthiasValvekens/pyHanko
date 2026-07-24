@@ -501,7 +501,7 @@ class BasePdfFileWriter(PdfHandler):
             generation, idnum = ix
             obj = self.objects[ix]
             object_position_dict[ix] = stream.tell()
-            stream.write(('%d %d obj\n' % (idnum, generation)).encode('ascii'))
+            stream.write(f'{idnum} {generation} obj\n'.encode('ascii'))
             handler: SecurityHandler | None = None
             if self.security_handler is not None:
                 assert self._encrypt is not None
@@ -658,7 +658,7 @@ class BasePdfFileWriter(PdfHandler):
             object_positions[(0, xrefs_id)] = xref_location
             trailer[pdf_name('/Size')] = generic.NumberObject(xrefs_id + 1)
             # write XRef stream
-            stream.write(('%d %d obj\n' % (xrefs_id, 0)).encode('ascii'))
+            stream.write(f'{xrefs_id} 0 obj\n'.encode('ascii'))
             trailer.write_to_stream(stream, None)
             stream.write(b'\nendobj\n')
         else:

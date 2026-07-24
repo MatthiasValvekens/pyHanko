@@ -127,16 +127,16 @@ def compare_key_refs(
     return old_value, new_value
 
 
-R = TypeVar('R', covariant=True)
-QualifyIn = TypeVar('QualifyIn', contravariant=True)
+R_co = TypeVar('R_co', covariant=True)
+QualifyIn_contra = TypeVar('QualifyIn_contra', contravariant=True)
 RefToUpd = TypeVar('RefToUpd', bound=ReferenceUpdate)
-OutRefUpd = TypeVar('OutRefUpd', bound=ReferenceUpdate, covariant=True)
+OutRefUpd_co = TypeVar('OutRefUpd_co', bound=ReferenceUpdate, covariant=True)
 
 
 def qualify(
     level: ModificationLevel,
-    rule_result: Generator[RefToUpd, None, R],
-) -> Generator[tuple[ModificationLevel, RefToUpd], None, R]:
+    rule_result: Generator[RefToUpd, None, R_co],
+) -> Generator[tuple[ModificationLevel, RefToUpd], None, R_co]:
     """
     This is a helper function for rule implementors.
     It attaches a fixed modification level to an existing reference update
@@ -180,9 +180,9 @@ def qualify(
 
 def qualify_transforming(
     level: ModificationLevel,
-    rule_result: Generator[QualifyIn, None, R],
-    transform: Callable[[QualifyIn], OutRefUpd],
-) -> Generator[tuple[ModificationLevel, OutRefUpd], None, R]:
+    rule_result: Generator[QualifyIn_contra, None, R_co],
+    transform: Callable[[QualifyIn_contra], OutRefUpd_co],
+) -> Generator[tuple[ModificationLevel, OutRefUpd_co], None, R_co]:
     """
     This is a version of :func:`.qualify` that additionally allows
     a transformation to be applied to the output of the rule.

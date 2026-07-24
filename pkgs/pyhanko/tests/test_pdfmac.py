@@ -791,6 +791,7 @@ def test_wrong_recipient_type():
             self, recipient_info, *args, **kwargs
         ) -> cms.AuthenticatedData:
             return super()._format_auth_data(
+                *args,
                 recipient_info=cms.RecipientInfo(
                     {
                         'ori': cms.OtherRecipientInfo(
@@ -803,7 +804,6 @@ def test_wrong_recipient_type():
                         )
                     }
                 ),
-                *args,
                 **kwargs,
             )
 

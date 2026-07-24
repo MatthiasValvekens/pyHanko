@@ -319,7 +319,7 @@ def build_cert_validation_policy_and_extract_extra_certs(
         msg = "I/O problem while reading validation config"
         logger.error(msg, exc_info=e)
         raise click.ClickException(msg)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         msg = "Generic processing problem while reading validation config"
         logger.error(msg, exc_info=e)
         raise click.ClickException(msg)

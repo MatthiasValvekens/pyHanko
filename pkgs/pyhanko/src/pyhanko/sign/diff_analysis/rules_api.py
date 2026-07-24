@@ -4,11 +4,13 @@ Module defining common API types for use by rules and policies.
 In principle, these aren't relevant to the high-level validation API.
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import TypeVar
+from typing import TYPE_CHECKING
 
 from pyhanko.pdf_utils.generic import (
     ArrayObject,
@@ -19,12 +21,17 @@ from pyhanko.pdf_utils.generic import (
     TrailerReference,
 )
 from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
-from typing_extensions import Self
 
 from ...pdf_utils import misc
 from ...pdf_utils.rw_common import PdfHandler
 from ...pdf_utils.xref import TrailerDictionary
 from .policy_api import ModificationLevel
+
+if TYPE_CHECKING:
+    # typing.Self is only available on Python 3.11+; fall back to the
+    # typing_extensions backport for 3.10. Guarded by TYPE_CHECKING so that
+    # neither is required at runtime (all annotations are lazy strings here).
+    from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +68,7 @@ class Context:
     @classmethod
     def from_absolute(
         cls, pdf_handler: PdfHandler, absolute_path: RawPdfPath
-    ) -> 'AbsoluteContext':
+    ) -> AbsoluteContext:
         return AbsoluteContext(pdf_handler=pdf_handler, path=absolute_path)
 
     @classmethod
@@ -69,7 +76,7 @@ class Context:
         cls,
         start: DictionaryObject | ArrayObject | TrailerDictionary,
         path: RawPdfPath | int | str,
-    ) -> 'RelativeContext':
+    ) -> RelativeContext:
         container_ref: Dereferenceable | None = start.container_ref
         assert container_ref is not None
         cur_ref: Dereferenceable = container_ref
@@ -87,7 +94,7 @@ class Context:
                 rel_path += node
         return RelativeContext(cur_ref, rel_path)
 
-    def descend(self, path: RawPdfPath | int | str) -> 'Context':
+    def descend(self, path: RawPdfPath | int | str) -> Context:
         raise NotImplementedError
 
 
@@ -104,7 +111,7 @@ class RelativeContext(Context):
     Path to the object from the container.
     """
 
-    def descend(self, path: RawPdfPath | int | str) -> 'RelativeContext':
+    def descend(self, path: RawPdfPath | int | str) -> RelativeContext:
         root = self.anchor.get_object()
         containers = (DictionaryObject, ArrayObject, TrailerDictionary)
         if not isinstance(root, containers):
@@ -144,7 +151,7 @@ class AbsoluteContext(Context):
             self.pdf_handler.trailer_view, self.path
         )
 
-    def descend(self, path: RawPdfPath | int | str) -> 'AbsoluteContext':
+    def descend(self, path: RawPdfPath | int | str) -> AbsoluteContext:
         return AbsoluteContext(self.path + path, self.pdf_handler)
 
 
@@ -152,9 +159,6 @@ class ApprovalType(misc.OrderedEnum):
     BLANKET_APPROVE = 0
     APPROVE_RELATIVE_CONTEXT = 1
     APPROVE_PATH = 2
-
-
-RefUpdateType = TypeVar('RefUpdateType', bound='ReferenceUpdate')
 
 
 @dataclass(frozen=True)

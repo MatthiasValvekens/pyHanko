@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from asn1crypto import core, x509
 from pyhanko.sign.ades.asn1_util import register_x509_extension
 
@@ -20,7 +22,7 @@ __all__ = [
 
 
 class QcStatementId(core.ObjectIdentifier):
-    _map = {
+    _map: ClassVar[dict] = {
         # ETSI EN 319 412-5
         '0.4.0.1862.1.1': 'qc_compliance',
         '0.4.0.1862.1.2': 'qc_limit_value',
@@ -33,14 +35,14 @@ class QcStatementId(core.ObjectIdentifier):
 
 
 class Iso4217CurrencyCode(core.Choice):
-    _alternatives = [
+    _alternatives: ClassVar[list] = [
         ('alphabetic', core.PrintableString),
         ('numeric', core.Integer),
     ]
 
 
 class MonetaryValue(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('currency', Iso4217CurrencyCode),
         ('amount', core.Integer),
         ('exponent', core.Integer),
@@ -48,7 +50,10 @@ class MonetaryValue(core.Sequence):
 
 
 class PKIDisclosureStatement(core.Sequence):
-    _fields = [('url', core.IA5String), ('language', core.PrintableString)]
+    _fields: ClassVar[list] = [
+        ('url', core.IA5String),
+        ('language', core.PrintableString),
+    ]
 
 
 class PKIDisclosureStatements(core.SequenceOf):
@@ -56,7 +61,7 @@ class PKIDisclosureStatements(core.SequenceOf):
 
 
 class QcCertificateTypeId(core.ObjectIdentifier):
-    _map = {
+    _map: ClassVar[dict] = {
         '0.4.0.1862.1.6.1': 'qct_esign',
         '0.4.0.1862.1.6.2': 'qct_eseal',
         '0.4.0.1862.1.6.3': 'qct_web',
@@ -72,12 +77,12 @@ class QcCCLegislationCountryCodes(core.SequenceOf):
 
 
 class QcStatement(core.Sequence):
-    _fields = [
+    _fields: ClassVar[list] = [
         ('statement_id', QcStatementId),
         ('statement_info', core.Any, {'optional': True}),
     ]
     _oid_pair = ('statement_id', 'statement_info')
-    _oid_specs = {
+    _oid_specs: ClassVar[dict] = {
         'qc_compliance': core.Void,
         'qc_limit_value': MonetaryValue,
         'qc_retention_period': core.Integer,

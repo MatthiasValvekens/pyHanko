@@ -825,7 +825,7 @@ def parse_lotl_unsafe(
                         tl_issuer_certs.append(
                             x509.Certificate.load(cert_bytes)
                         )
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         errors.append(
                             TSPServiceParsingError(
                                 f"Failed to load certificate for {territory} ({location}): {e}"

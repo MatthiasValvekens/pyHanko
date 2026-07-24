@@ -1,5 +1,3 @@
-from typing import Optional
-
 import aiohttp
 
 from ..api import FetcherBackend, Fetchers

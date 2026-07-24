@@ -17,6 +17,7 @@ from pyhanko.version import __version__ as lib_version
 
 __all__ = ['cli_root']
 
+logger = logging.getLogger(__name__)
 
 full_version = f"{lib_version} (CLI {cli_version})"
 
@@ -101,11 +102,11 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
     logging_setup(log_config, verbose)
 
     if verbose:
-        logging.debug("Running with --verbose")
+        logger.debug("Running with --verbose")
     if config_text is not None:
-        logging.debug(f'Finished reading configuration from {config}.')
+        logger.debug(f'Finished reading configuration from {config}.')
     else:
-        logging.debug('There was no configuration to parse.')
+        logger.debug('There was no configuration to parse.')
 
 
 def load_root_config(config_dict, only_default_plugins=False) -> CLIRootConfig:

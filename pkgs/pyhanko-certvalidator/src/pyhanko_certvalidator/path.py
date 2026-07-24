@@ -1,7 +1,7 @@
 import itertools
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Union
+from typing import TypeAlias
 
 from asn1crypto import cms, x509
 
@@ -32,7 +32,7 @@ class QualifiedPolicy:
     """
 
 
-Leaf = Union[x509.Certificate, cms.AttributeCertificateV2]
+Leaf: TypeAlias = x509.Certificate | cms.AttributeCertificateV2
 
 
 class ValidationPath:
@@ -201,9 +201,11 @@ class ValidationPath:
         """
 
         root_authority = self._root.authority
-        if isinstance(root_authority, AuthorityWithCert):
-            if root_authority.certificate.issuer_serial == cert.issuer_serial:
-                return ValidationPath(self._root, interm=[], leaf=new_leaf)
+        if (
+            isinstance(root_authority, AuthorityWithCert)
+            and root_authority.certificate.issuer_serial == cert.issuer_serial
+        ):
+            return ValidationPath(self._root, interm=[], leaf=new_leaf)
 
         certs = self._interm
         cert_index = None

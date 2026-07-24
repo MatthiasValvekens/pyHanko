@@ -179,7 +179,9 @@ class SignatureValidationSpec:
     ts_cert_validation_policy: CertValidationPolicySpec | None = None
     ac_validation_policy: CertValidationPolicySpec | None = None
     local_knowledge: LocalKnowledge = LocalKnowledge()
-    key_usage_settings: KeyUsageConstraints = KeyUsageConstraints()
+    key_usage_settings: KeyUsageConstraints = field(
+        default_factory=KeyUsageConstraints
+    )
     signature_algorithm_policy: CMSAlgorithmUsagePolicy | None = None
     qualification_requirements: QualificationRequirements | None = None
     ts_qualification_requirements: QualificationRequirements | None = None

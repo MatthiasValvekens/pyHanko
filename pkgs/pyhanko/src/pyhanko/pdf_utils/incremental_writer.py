@@ -95,7 +95,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
                 return
         except (KeyError, ValueError, TypeError):
             pass
-        version_str = pdf_name('/%d.%d' % version)
+        version_str = pdf_name(f'/{version[0]}.{version[1]}')
         root[pdf_name('/Version')] = version_str
         self.update_root()
         self.output_version = version

@@ -360,8 +360,7 @@ def _match_dps_idp_names(
     if idp_dp_name:
         has_idp_name = True
         if idp_dp_name.name == 'full_name':
-            for general_name in idp_dp_name.chosen:
-                idp_general_names.append(general_name)
+            idp_general_names.extend(idp_dp_name.chosen)
         else:
             inner_extended_issuer_name = crl_issuer.subject.copy()
             inner_extended_issuer_name.chosen.append(idp_dp_name.chosen.untag())
@@ -922,7 +921,7 @@ def _classify_relevant_crls(
                 )
         except ValueError as e:
             msg = "Generic processing error while classifying CRL."
-            logging.debug(msg, exc_info=e)
+            logger.debug(msg, exc_info=e)
             errs.append(msg, certificate_list)
     return complete_lists_by_issuer, delta_lists_by_issuer
 
@@ -1055,7 +1054,7 @@ async def verify_crl(
             errs.append(e.msg, certificate_list_cont)
         except ValueError as e:
             msg = "Generic processing error while validating CRL."
-            logging.debug(msg, exc_info=e)
+            logger.debug(msg, exc_info=e)
             errs.append(msg, certificate_list_cont)
 
     for certificate_list_cont in crls_to_process:
@@ -1311,7 +1310,7 @@ async def collect_relevant_crls_with_paths(
                 relevant_crls.append(result)
         except ValueError as e:
             msg = "Generic processing error while validating CRL."
-            logging.debug(msg, exc_info=e)
+            logger.debug(msg, exc_info=e)
             errs.append(msg, certificate_list_cont)
 
     return CRLCollectionResult(
@@ -1408,9 +1407,11 @@ def find_cert_in_list(
         # we guard it with a dumb heuristic check: does the binary encoding
         # of that extension's OID appear anywhere in the entry's payload?
         # If not, we move on. If it does appear, we parse the extensions.
-        if cert_issuer_extension_id in revoked_cert.dump():
-            if revoked_cert.issuer_name:
-                last_issuer_name = revoked_cert.issuer_name
+        if (
+            cert_issuer_extension_id in revoked_cert.dump()
+            and revoked_cert.issuer_name
+        ):
+            last_issuer_name = revoked_cert.issuer_name
         if revoked_cert['user_certificate'].dump() != cert_serial:
             continue
         if last_issuer_name != cert_issuer_name:

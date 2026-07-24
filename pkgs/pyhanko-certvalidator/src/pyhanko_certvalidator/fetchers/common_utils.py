@@ -258,7 +258,7 @@ async def queue_fetch_task(
         running_jobs[tag] = wait_event = asyncio.Event()
         try:
             result = await async_fun()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.debug(
                 f"New fetch job with tag {tag!r} threw an exception: {e}"
             )

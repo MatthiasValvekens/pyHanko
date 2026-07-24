@@ -346,11 +346,14 @@ def _list_fields(
             new_field_type = new_field_ref = None
             new_kids = generic.ArrayObject()
 
-        if old_field_ref and new_field_ref:
-            if new_field_type != old_field_type:
-                raise SuspiciousModification(
-                    f"Update changed field type of {field_name}"
-                )
+        if (
+            old_field_ref
+            and new_field_ref
+            and (new_field_type != old_field_type)
+        ):
+            raise SuspiciousModification(
+                f"Update changed field type of {field_name}"
+            )
         common_ft = old_field_type or new_field_type
         if field_index is not None and old_path is not None:
             field_path = old_path + field_index

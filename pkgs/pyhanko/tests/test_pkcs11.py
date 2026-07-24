@@ -362,10 +362,12 @@ def test_signer_pulled_others_provided(bulk_fetch, p11_config):
 def test_unclear_key_label_and_cert(p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
-    with p11_config.session as sess:
-        with pytest.raises(PKCS11Error, match='Found more than one'):
-            signer = pkcs11.PKCS11Signer(sess)
-            signers.sign_pdf(w, meta, signer=signer)
+    with (
+        p11_config.session as sess,
+        pytest.raises(PKCS11Error, match='Found more than one'),
+    ):
+        signer = pkcs11.PKCS11Signer(sess)
+        signers.sign_pdf(w, meta, signer=signer)
 
 
 @pytest.mark.hsm(platform='softhsm')
@@ -445,9 +447,11 @@ def test_config_init_failure_signing_error(p11_config):
         other_certs_to_pull=None,
     )
 
-    with pytest.raises(SigningError, match='error while opening session'):
-        with PKCS11SigningContext(config):
-            pass
+    with (
+        pytest.raises(SigningError, match='error while opening session'),
+        PKCS11SigningContext(config),
+    ):
+        pass
 
 
 @pytest.mark.hsm(platform='softhsm')
@@ -462,9 +466,11 @@ def test_sign_skip_login_fail(p11_config):
     )
 
     # no key will be found, since we didn't bother logging in
-    with pytest.raises(PKCS11Error, match="Could not find private key"):
-        with PKCS11SigningContext(config) as signer:
-            signers.sign_pdf(w, meta, signer=signer)
+    with (
+        pytest.raises(PKCS11Error, match="Could not find private key"),
+        PKCS11SigningContext(config) as signer,
+    ):
+        signers.sign_pdf(w, meta, signer=signer)
 
 
 # this test relies on SoftHSM not supporting the

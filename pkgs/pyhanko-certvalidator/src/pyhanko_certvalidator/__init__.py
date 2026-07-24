@@ -1,5 +1,4 @@
 from collections.abc import Iterable
-from typing import Optional
 
 from asn1crypto import x509
 

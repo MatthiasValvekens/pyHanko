@@ -65,7 +65,7 @@ def pyhanko_exception_manager():
     except LayoutError as e:
         exception = e
         msg = f"Error raised while producing signature layout: {e.msg}"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         exception = e
         msg = "Generic processing error."
 

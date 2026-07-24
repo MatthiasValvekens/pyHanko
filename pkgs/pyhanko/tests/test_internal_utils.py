@@ -2109,15 +2109,19 @@ def test_tolerate_startxref_on_same_line():
     ['minimal-startxref-hopeless2.pdf', 'minimal-startxref-hopeless3.pdf'],
 )
 def test_startxref_parse_failure(fname):
-    with open(f"{PDF_DATA_DIR}/{fname}", 'rb') as inf:
-        with pytest.raises(misc.PdfReadError, match="startxref not found"):
-            PdfFileReader(inf)
+    with (
+        open(f"{PDF_DATA_DIR}/{fname}", 'rb') as inf,
+        pytest.raises(misc.PdfReadError, match="startxref not found"),
+    ):
+        PdfFileReader(inf)
 
 
 def test_illegal_header():
-    with open(f"{PDF_DATA_DIR}/minimal-illegal-header.pdf", 'rb') as inf:
-        with pytest.raises(misc.PdfReadError, match="Illegal PDF header"):
-            PdfFileReader(inf)
+    with (
+        open(f"{PDF_DATA_DIR}/minimal-illegal-header.pdf", 'rb') as inf,
+        pytest.raises(misc.PdfReadError, match="Illegal PDF header"),
+    ):
+        PdfFileReader(inf)
 
 
 def test_ignore_illegal_version_in_catalog():
