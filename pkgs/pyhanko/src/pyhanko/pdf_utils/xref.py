@@ -110,6 +110,16 @@ class XRefEntry:
     """
 
 
+def _xref_parse_decimal(raw: bytes, context: str) -> int:
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    raise misc.PdfReadError(
+        f"{context}: expected decimal string, but got {raw!r}"
+    )
+
+
 def parse_xref_table(stream, strict: bool) -> Iterator[XRefEntry]:
     """
     Parse a single cross-reference table and yield its entries one by one.
@@ -163,16 +173,23 @@ def parse_xref_table(stream, strict: bool) -> Iterator[XRefEntry]:
             if marker == b'n':
                 yield XRefEntry(
                     xref_type=XRefType.STANDARD,
-                    location=int(offset),
+                    location=_xref_parse_decimal(
+                        offset, "XRef line parsing error (location)"
+                    ),
                     idnum=num,
-                    generation=int(generation),
+                    generation=_xref_parse_decimal(
+                        generation, "XRef line parsing error (generation)"
+                    ),
                 )
             elif marker == b'f':
                 yield XRefEntry(
                     xref_type=XRefType.FREE,
                     location=None,
                     idnum=num,
-                    generation=int(generation),
+                    generation=_xref_parse_decimal(
+                        generation,
+                        "XRef line parsing error (generation to free)",
+                    ),
                 )
             elif strict:
                 raise misc.PdfStrictReadError(f"Unknown marker {marker!r}")

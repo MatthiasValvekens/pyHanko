@@ -214,6 +214,33 @@ def test_illegal_generation_nonstrict():
     assert not r.xrefs.get_xref_data(0).explicit_refs_in_revision
 
 
+def test_unparseable_idnum():
+    xrefs = [
+        [b'0 2', b'0000000000 65535 f', b'000000010a 00000 n'],
+    ]
+
+    with pytest.raises(misc.PdfReadError, match='location.*decimal string'):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_unparseable_generation():
+    xrefs = [
+        [b'0 2', b'0000000000 65535 f', b'0000000100 aaaaa n'],
+    ]
+
+    with pytest.raises(misc.PdfReadError, match='generation.*decimal string'):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_unparseable_generation_free():
+    xrefs = [
+        [b'0 2', b'0000000000 65535 f', b'0000000100 aaaaa f'],
+    ]
+
+    with pytest.raises(misc.PdfReadError, match='to free.*decimal string'):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
 def test_unparseable_marker():
     xrefs = [
         [b'0 2', b'0000000000 65535 f', b'0000000100 00000 z'],
