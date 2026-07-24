@@ -9,7 +9,7 @@ user-provided configuration (e.g. from a Yaml file).
 
 import dataclasses
 import re
-from typing import Optional, Set, Type, Union
+from typing import Optional, Set, Type
 
 from asn1crypto.core import BitString, ObjectIdentifier
 
@@ -29,22 +29,19 @@ _noneType = type(None)
 
 def _unwrap_type_annot(thing) -> Optional[type]:
     if isinstance(thing, type):
-        the_type = thing
-    else:
-        from typing import get_args, get_origin
+        return thing
 
-        # is it an optional? (i.e. Union[X, None])
-        # if so, retrieve the wrapped type
-        if get_origin(thing) is not Union:
-            return None
-        try:
-            type1, type2 = get_args(thing)
-            if type2 is not _noneType:
-                return None
-        except (ValueError, TypeError):
-            return None
-        the_type = type1
-    return the_type if isinstance(the_type, type) else None
+    # get_args() treats old-style Optional[X]/Union[X, None] and new-style
+    # X | None uniformly, so there's no need to special-case either spelling.
+    # An "optional of a single concrete type" always yields exactly two
+    # args, one of which is NoneType.
+    from typing import get_args
+
+    args = get_args(thing)
+    if len(args) == 2 and _noneType in args:
+        (the_type,) = (arg for arg in args if arg is not _noneType)
+        return the_type if isinstance(the_type, type) else None
+    return None
 
 
 def _has_default(f: dataclasses.Field):

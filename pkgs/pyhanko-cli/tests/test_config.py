@@ -1,6 +1,7 @@
 import dataclasses
 import hashlib
 import os
+import typing
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -1274,6 +1275,40 @@ def test_enforce_required_recursive():
         ConfigurationError, match="Error while processing configurable field"
     ):
         DemoConfigurableB.from_config(config_dict)
+
+
+@dataclass(frozen=True)
+class DemoConfigurableOldStyleOptional(ConfigurableMixin):
+    # old-style annotation kept intentionally to test backwards compat;
+    # do not let ruff upgrade this to `X | None`
+    some_field: typing.Optional[DemoConfigurableA] = None  # noqa: UP045
+
+
+@dataclass(frozen=True)
+class DemoConfigurableOldStyleUnion(ConfigurableMixin):
+    # old-style annotation kept intentionally to test backwards compat;
+    # do not let ruff upgrade this to `X | None`
+    some_field: typing.Union[DemoConfigurableA, None] = None  # noqa: UP007
+
+
+@pytest.mark.parametrize(
+    'configurable_cls',
+    [
+        DemoConfigurableOldStyleOptional,
+        DemoConfigurableOldStyleUnion,
+        DemoConfigurableB,  # new-style `DemoConfigurableA | None`
+    ],
+)
+def test_configurable_recurse_optional_styles(configurable_cls):
+    config_dict = yaml.safe_load(
+        """
+        some_field:
+            field1: 1
+            field2: [1,2]
+        """
+    )
+    result = configurable_cls.from_config(config_dict)
+    assert result.some_field == DemoConfigurableA(field1=1, field2=[1, 2])
 
 
 def test_default_stamp_style_fetch():
