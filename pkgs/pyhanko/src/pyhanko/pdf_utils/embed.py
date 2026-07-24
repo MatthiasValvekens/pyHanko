@@ -7,7 +7,6 @@ Utility classes for handling embedded files in PDFs.
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
 
 from asn1crypto import x509
 
@@ -48,12 +47,12 @@ class EmbeddedFileParams:
         file stream contents are presented in pre-encoded form.
     """
 
-    creation_date: Optional[datetime] = None
+    creation_date: datetime | None = None
     """
     Record the creation date of the embedded file.
     """
 
-    modification_date: Optional[datetime] = None
+    modification_date: datetime | None = None
     """
     Record the modification date of the embedded file.
     """
@@ -66,8 +65,8 @@ class EmbeddedFileObject(generic.StreamObject):
         pdf_writer: writer.BasePdfFileWriter,
         data: bytes,
         compress=True,
-        params: Optional[EmbeddedFileParams] = None,
-        mime_type: Optional[str] = None,
+        params: EmbeddedFileParams | None = None,
+        mime_type: str | None = None,
     ) -> 'EmbeddedFileObject':
         """
         Construct an embedded file object from file data.
@@ -110,8 +109,8 @@ class EmbeddedFileObject(generic.StreamObject):
         dict_data=None,
         stream_data=None,
         encoded_data=None,
-        params: Optional[EmbeddedFileParams] = None,
-        mime_type: Optional[str] = None,
+        params: EmbeddedFileParams | None = None,
+        mime_type: str | None = None,
     ):
         super().__init__(
             dict_data=dict_data,
@@ -184,7 +183,7 @@ class RelatedFileSpec:
     """
 
     @classmethod
-    def fmt_related_files(cls, lst: List['RelatedFileSpec']):
+    def fmt_related_files(cls, lst: list['RelatedFileSpec']):
         def _gen():
             for rfs in lst:
                 yield generic.pdf_string(rfs.name)
@@ -215,33 +214,33 @@ class FileSpec:
         to :class:`file_name`.
     """
 
-    file_name: Optional[str] = None
+    file_name: str | None = None
     """
     A path-like Unicode file name.
     """
 
-    embedded_data: Optional[EmbeddedFileObject] = None
+    embedded_data: EmbeddedFileObject | None = None
     """
     Reference to a stream object containing the file's data, as embedded
     in the PDF file.
     """
 
-    description: Optional[str] = None
+    description: str | None = None
     """
     Textual description of the file.
     """
 
-    af_relationship: Optional[generic.NameObject] = None
+    af_relationship: generic.NameObject | None = None
     """
     Associated file relationship specifier.
     """
 
-    f_related_files: Optional[List[RelatedFileSpec]] = None
+    f_related_files: list[RelatedFileSpec] | None = None
     """
     Related files with PDFDocEncoded names.
     """
 
-    uf_related_files: Optional[List[RelatedFileSpec]] = None
+    uf_related_files: list[RelatedFileSpec] | None = None
     """
     Related files with Unicode-encoded names.
     """
@@ -359,12 +358,12 @@ def embed_file(pdf_writer: writer.BasePdfFileWriter, spec: FileSpec):
 def wrap_encrypted_payload(
     plaintext_payload: bytes,
     *,
-    password: Optional[str] = None,
-    certs: Optional[List[x509.Certificate]] = None,
-    security_handler: Optional[crypt.SecurityHandler] = None,
+    password: str | None = None,
+    certs: list[x509.Certificate] | None = None,
+    security_handler: crypt.SecurityHandler | None = None,
     file_spec_string: str = 'attachment.pdf',
-    params: Optional[EmbeddedFileParams] = None,
-    file_name: Optional[str] = None,
+    params: EmbeddedFileParams | None = None,
+    file_name: str | None = None,
     description='Wrapped document',
     include_explanation_page=True,
 ) -> writer.PdfFileWriter:

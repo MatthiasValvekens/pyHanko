@@ -4,7 +4,6 @@ import enum
 import logging
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Optional, Union
 
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
@@ -34,7 +33,7 @@ class LayoutError(ValueError):
 class BoxSpecificationError(LayoutError):
     """Raised when a box constraint is over/underspecified."""
 
-    def __init__(self, msg: Optional[str] = None):
+    def __init__(self, msg: str | None = None):
         super().__init__(msg=msg or "box constraint is over/underspecified")
 
 
@@ -47,16 +46,16 @@ class BoxConstraints:
     :attr:`width` and :attr:`height` attributes.
     """
 
-    _width: Optional[int]
-    _height: Optional[int]
-    _ar: Optional[Fraction]
+    _width: int | None
+    _height: int | None
+    _ar: Fraction | None
     _fully_specified: bool
 
     def __init__(
         self,
-        width: Union[int, float, None] = None,
-        height: Union[int, float, None] = None,
-        aspect_ratio: Optional[Fraction] = None,
+        width: float | None = None,
+        height: float | None = None,
+        aspect_ratio: Fraction | None = None,
     ):
         int_width = int(width) if width is not None else None
         int_height = int(height) if height is not None else None

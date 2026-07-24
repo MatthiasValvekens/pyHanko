@@ -6,7 +6,7 @@ import secrets
 import struct
 from dataclasses import dataclass
 from hashlib import sha1, sha256
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Optional
 
 from asn1crypto import algos, cms, core, x509
 from asn1crypto.algos import RSAESOAEPParams
@@ -140,7 +140,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
 
     def add_recipients(
         self,
-        certs: List[x509.Certificate],
+        certs: list[x509.Certificate],
         policy: RecipientEncryptionPolicy,
         perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
     ):
@@ -237,23 +237,17 @@ class PubKeyAESCryptFilter(PubKeyCryptFilter, AESCryptFilterMixin):
     AES crypt filter for public key security handlers.
     """
 
-    pass
-
 
 class PubKeyAESGCMCryptFilter(PubKeyCryptFilter, AESGCMCryptFilterMixin):
     """
     AES-GCM crypt filter for public key security handlers.
     """
 
-    pass
-
 
 class PubKeyRC4CryptFilter(PubKeyCryptFilter, RC4CryptFilterMixin):
     """
     RC4 crypt filter for public key security handlers.
     """
-
-    pass
 
 
 """
@@ -411,7 +405,7 @@ def _format_ktri(
 
 def _choose_ecdh_settings(
     pub_key_info: PublicKeyInfo,
-) -> Tuple[
+) -> tuple[
     hashes.HashAlgorithm, KeyEncryptionAlgorithmId, KeyEncryptionAlgorithmId
 ]:
     algo_name = pub_key_info.algorithm
@@ -454,9 +448,7 @@ def _ecdh_recipient(
     key_wrap_algo = KeyEncryptionAlgorithm({'algorithm': key_wrap_algo_id})
     pub_key = serialization.load_der_public_key(pub_key_info.dump())
 
-    originator_key: Union[
-        X25519PrivateKey, X448PrivateKey, EllipticCurvePrivateKey
-    ]
+    originator_key: X25519PrivateKey | X448PrivateKey | EllipticCurvePrivateKey
     if isinstance(pub_key, EllipticCurvePublicKey):
         originator_key = generate_ec_private_key(pub_key.curve)
         ecdh_value = originator_key.exchange(ECDH(), pub_key)
@@ -571,7 +563,7 @@ def _recipient_info(
 
 
 def construct_recipient_cms(
-    certificates: List[x509.Certificate],
+    certificates: list[x509.Certificate],
     seed: bytes,
     perms: PubKeyPermissions,
     policy: RecipientEncryptionPolicy,
@@ -728,7 +720,7 @@ def _kdf_for_exchange(
     *,
     kdf_digest: hashes.HashAlgorithm,
     key_wrap_algo: cms.KeyEncryptionAlgorithm,
-    user_keying_material: Optional[bytes],
+    user_keying_material: bytes | None,
 ) -> KeyDerivationFunction:
     key_wrap_algo_id: str = key_wrap_algo['algorithm'].native
     wrap_match = AES_WRAP_PATTERN.fullmatch(key_wrap_algo_id)
@@ -815,7 +807,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
             from ...keys import load_cert_from_pemder
 
             cert = load_cert_from_pemder(cert_file)
-        except (IOError, ValueError, TypeError) as e:  # pragma: nocover
+        except (OSError, ValueError, TypeError) as e:  # pragma: nocover
             logger.error('Could not load cryptographic material', exc_info=e)
             return None
         return SimpleEnvelopeKeyDecrypter(cert=cert, private_key=private_key)
@@ -836,8 +828,8 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         try:
             with open(pfx_file, 'rb') as f:
                 pfx_bytes = f.read()
-            (private_key, cert, other_certs) = pkcs12.load_key_and_certificates(
-                pfx_bytes, passphrase
+            (private_key, cert, _other_certs) = (
+                pkcs12.load_key_and_certificates(pfx_bytes, passphrase)
             )
 
             from ...keys.internal import (
@@ -847,7 +839,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
 
             cert = translate_pyca_cryptography_cert_to_asn1(cert)
             private_key = translate_pyca_cryptography_key_to_asn1(private_key)
-        except (IOError, ValueError, TypeError) as e:  # pragma: nocover
+        except (OSError, ValueError, TypeError) as e:  # pragma: nocover
             logger.error(f'Could not open PKCS#12 file {pfx_file}.', exc_info=e)
             return None
 
@@ -910,7 +902,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         encrypted_key: bytes,
         algo_params: cms.KeyEncryptionAlgorithm,
         originator_identifier: cms.OriginatorIdentifierOrKey,
-        user_keying_material: Optional[bytes],
+        user_keying_material: bytes | None,
     ) -> bytes:
         """
         Decrypt the payload using a key agreed via ephemeral-static
@@ -933,7 +925,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         oid = algo_params['algorithm']
 
         match = self.dhsinglepass_stddh_arc_pattern.fullmatch(oid.dotted)
-        kdf_digest: Optional[hashes.HashAlgorithm] = None
+        kdf_digest: hashes.HashAlgorithm | None = None
         if match:
             kdf_digest = {
                 '0': hashes.SHA224(),
@@ -1015,7 +1007,7 @@ SerialisableCredential.register(SimpleEnvelopeKeyDecrypter)
 
 def read_envelope_key(
     ed: cms.EnvelopedData, decrypter: EnvelopeKeyDecrypter
-) -> Optional[bytes]:
+) -> bytes | None:
     rec_info: cms.RecipientInfo
     for rec_info in ed['recipient_infos']:
         if rec_info.name == 'ktri':
@@ -1036,8 +1028,8 @@ def read_envelope_key(
                         ktri['encrypted_key'].native,
                         ktri['key_encryption_algorithm'],
                     )
-                except InappropriateCredentialError as e:
-                    raise e
+                except InappropriateCredentialError:
+                    raise
                 except Exception as e:
                     raise misc.PdfReadError(
                         "Failed to decrypt envelope key"
@@ -1064,8 +1056,8 @@ def read_envelope_key(
                             originator_identifier=kari['originator'],
                             user_keying_material=kari['ukm'].native,
                         )
-                    except InappropriateCredentialError as e:
-                        raise e
+                    except InappropriateCredentialError:
+                        raise
                     except Exception as e:
                         raise misc.PdfReadError(
                             "Failed to decrypt envelope key"
@@ -1081,7 +1073,7 @@ def read_envelope_key(
 
 def read_seed_from_recipient_cms(
     recipient_cms: cms.ContentInfo, decrypter: EnvelopeKeyDecrypter
-) -> Tuple[Optional[bytes], Optional[PubKeyPermissions]]:
+) -> tuple[bytes | None, PubKeyPermissions | None]:
     content_type = recipient_cms['content_type'].native
     if content_type != 'enveloped_data':
         raise misc.PdfReadError(
@@ -1135,7 +1127,7 @@ def read_seed_from_recipient_cms(
         )
 
     seed = content[:20]
-    perms: Optional[PubKeyPermissions] = None
+    perms: PubKeyPermissions | None = None
     if len(content) == 24:
         # permissions are included
         perms = PubKeyPermissions.from_bytes(content[20:])
@@ -1198,7 +1190,7 @@ class PubKeySecurityHandler(SecurityHandler):
     have to instantiate these yourself (see :meth:`build_from_certs`).
     """
 
-    _known_crypt_filters: Dict[generic.NameObject, CryptFilterBuilder] = {
+    _known_crypt_filters: dict[generic.NameObject, CryptFilterBuilder] = {
         generic.NameObject('/V2'): _build_legacy_pubkey_cf,
         generic.NameObject('/AESV2'): _build_aes128_pubkey_cf,
         generic.NameObject('/AESV3'): _build_aes256_pubkey_cf,
@@ -1209,7 +1201,7 @@ class PubKeySecurityHandler(SecurityHandler):
     @classmethod
     def build_from_certs(
         cls,
-        certs: List[x509.Certificate],
+        certs: list[x509.Certificate],
         keylen_bytes=16,
         version=SecurityHandlerVersion.AES256,
         use_aes=True,
@@ -1305,9 +1297,9 @@ class PubKeySecurityHandler(SecurityHandler):
         legacy_keylen,
         encrypt_metadata=True,
         crypt_filter_config: Optional['CryptFilterConfiguration'] = None,
-        recipient_objs: Optional[list] = None,
+        recipient_objs: list | None = None,
         compat_entries=True,
-        kdf_salt: Optional[bytes] = None,
+        kdf_salt: bytes | None = None,
     ):
         # I don't see how it would be possible to handle V4 without
         # crypt filters in an unambiguous way. V5 should be possible in
@@ -1370,7 +1362,7 @@ class PubKeySecurityHandler(SecurityHandler):
         return generic.NameObject('/Adobe.PubSec')
 
     @classmethod
-    def support_generic_subfilters(cls) -> Set[str]:
+    def support_generic_subfilters(cls) -> set[str]:
         return {x.value for x in PubKeyAdbeSubFilter}
 
     @classmethod
@@ -1422,11 +1414,11 @@ class PubKeySecurityHandler(SecurityHandler):
         encrypt_metadata = encrypt_dict.get_and_apply(
             '/EncryptMetadata', bool, default=True
         )
-        return dict(
-            legacy_keylen=keylen,
-            recipient_objs=recipients,
-            encrypt_metadata=encrypt_metadata,
-            kdf_salt=encrypt_dict.get_and_apply(
+        return {
+            'legacy_keylen': keylen,
+            'recipient_objs': recipients,
+            'encrypt_metadata': encrypt_metadata,
+            'kdf_salt': encrypt_dict.get_and_apply(
                 '/KDFSalt',
                 lambda x: (
                     x.original_bytes
@@ -1436,7 +1428,7 @@ class PubKeySecurityHandler(SecurityHandler):
                     else None
                 ),
             ),
-        )
+        }
 
     @classmethod
     def _determine_subfilter(cls, encrypt_dict: generic.DictionaryObject):
@@ -1502,7 +1494,7 @@ class PubKeySecurityHandler(SecurityHandler):
 
     def add_recipients(
         self,
-        certs: List[x509.Certificate],
+        certs: list[x509.Certificate],
         perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
         policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
     ):
@@ -1517,7 +1509,7 @@ class PubKeySecurityHandler(SecurityHandler):
 
     def authenticate(
         self,
-        credential: Union[EnvelopeKeyDecrypter, SerialisedCredential],
+        credential: EnvelopeKeyDecrypter | SerialisedCredential,
         id1=None,
     ) -> AuthResult:
         """

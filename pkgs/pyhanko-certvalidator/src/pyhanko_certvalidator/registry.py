@@ -1,9 +1,7 @@
-# coding: utf-8
-
 import abc
 import asyncio
 from collections import defaultdict
-from typing import AsyncGenerator, Iterable, Iterator, List, Optional, Union
+from collections.abc import AsyncGenerator, Iterable, Iterator
 
 from asn1crypto import x509
 from oscrypto import trust_list
@@ -206,7 +204,7 @@ class SimpleCertificateStore(CertificateStore):
             return None
 
 
-TrustRootList = Iterable[Union[x509.Certificate, TrustAnchor]]
+TrustRootList = Iterable[x509.Certificate | TrustAnchor]
 
 
 class TrustManager:
@@ -226,7 +224,7 @@ class TrustManager:
         """
         return self.as_trust_anchor(AuthorityWithCert(cert)) is not None
 
-    def as_trust_anchor(self, authority: Authority) -> Optional[TrustAnchor]:
+    def as_trust_anchor(self, authority: Authority) -> TrustAnchor | None:
         """
         If the authority is a trust anchor, return its identity as such
         (with qualifications as applicable).
@@ -267,8 +265,8 @@ class SimpleTrustManager(TrustManager):
     @classmethod
     def build(
         cls,
-        trust_roots: Optional[TrustRootList] = None,
-        extra_trust_roots: Optional[TrustRootList] = None,
+        trust_roots: TrustRootList | None = None,
+        extra_trust_roots: TrustRootList | None = None,
     ) -> 'SimpleTrustManager':
         """
         :param trust_roots:
@@ -296,7 +294,7 @@ class SimpleTrustManager(TrustManager):
             manager._register_root(trust_root)
         return manager
 
-    def _register_root(self, trust_root: Union[TrustAnchor, x509.Certificate]):
+    def _register_root(self, trust_root: TrustAnchor | x509.Certificate):
         if isinstance(trust_root, TrustAnchor):
             anchor = trust_root
         else:
@@ -361,7 +359,7 @@ class CertificateRegistry(SimpleCertificateStore):
     fetcher is supplied.
     """
 
-    def __init__(self, *, cert_fetcher: Optional[CertificateFetcher] = None):
+    def __init__(self, *, cert_fetcher: CertificateFetcher | None = None):
         super().__init__()
         self.fetcher = cert_fetcher
 
@@ -370,7 +368,7 @@ class CertificateRegistry(SimpleCertificateStore):
         cls,
         certs: Iterable[x509.Certificate] = (),
         *,
-        cert_fetcher: Optional[CertificateFetcher] = None,
+        cert_fetcher: CertificateFetcher | None = None,
     ):
         """
         Convenience method to set up a certificate registry and import
@@ -395,7 +393,7 @@ class CertificateRegistry(SimpleCertificateStore):
     def retrieve_by_name(
         self,
         name: x509.Name,
-        first_certificate: Optional[x509.Certificate] = None,
+        first_certificate: x509.Certificate | None = None,
     ):
         """
         Retrieves a list certs via their subject name
@@ -424,7 +422,7 @@ class CertificateRegistry(SimpleCertificateStore):
 
     def find_potential_issuers(
         self, cert: x509.Certificate, trust_manager: TrustManager
-    ) -> Iterator[Union[TrustAnchor, x509.Certificate]]:
+    ) -> Iterator[TrustAnchor | x509.Certificate]:
         issuer_hashable = cert.issuer.hashable
 
         # Info from the authority key identifier extension can be used to
@@ -507,7 +505,7 @@ class PathBuilder:
             of the CA certs.
         """
 
-        paths: List[ValidationPath] = []
+        paths: list[ValidationPath] = []
         async for result in self.async_build_paths_lazy(end_entity_cert):
             paths.append(result)
 
@@ -558,9 +556,7 @@ class _IssuerFetcher:
         self.local_iss_iter = iter(local_issuers)
         self.local_issuers_found = 0
         self.fetched_issuers_found = 0
-        self._fetched_cas: Optional[AsyncGenerator[x509.Certificate, None]] = (
-            None
-        )
+        self._fetched_cas: AsyncGenerator[x509.Certificate, None] | None = None
         self._fetching_done = False
 
     @property
@@ -573,7 +569,7 @@ class _IssuerFetcher:
     def __iter__(self):
         return self
 
-    def __next__(self) -> Union[TrustAnchor, x509.Certificate]:
+    def __next__(self) -> TrustAnchor | x509.Certificate:
         for issuer in self.local_iss_iter:
             if isinstance(issuer, x509.Certificate):
                 cert_id = issuer.issuer_serial
@@ -583,7 +579,7 @@ class _IssuerFetcher:
             return issuer
         raise StopIteration
 
-    async def __anext__(self) -> Union[TrustAnchor, x509.Certificate]:
+    async def __anext__(self) -> TrustAnchor | x509.Certificate:
         try:
             return next(self)
         except StopIteration:
@@ -624,7 +620,7 @@ class _PathWalker:
         path_builder: 'PathBuilder',
         path: ConsList[x509.Certificate],
         certs_seen: ConsList[bytes],
-        failed_paths: List[ConsList[x509.Certificate]],
+        failed_paths: list[ConsList[x509.Certificate]],
     ):
         self.path = path
         self.path_builder = path_builder
@@ -633,7 +629,7 @@ class _PathWalker:
         assert isinstance(cert, x509.Certificate)
         self._issuer_fetcher = _IssuerFetcher(path_builder, cert, certs_seen)
         self.failed_paths = failed_paths
-        self._next_level: Optional[_PathWalker] = None
+        self._next_level: _PathWalker | None = None
 
     async def cancel(self):
         if self._issuer_fetcher is not None:
@@ -655,11 +651,11 @@ class _PathWalker:
                 # Fetch the next candidate issuer in the list
                 try:
                     next_issuer = await self._issuer_fetcher.__anext__()
-                except StopAsyncIteration as e:
+                except StopAsyncIteration:
                     if not self._issuer_fetcher.issuers_found:
                         self.failed_paths.append(self.path)
                     self._issuer_fetcher = None
-                    raise e
+                    raise
                 if isinstance(next_issuer, TrustAnchor):
                     # We've reached a trust root -> emit path and stop
                     certs = list(self.path)
@@ -682,7 +678,7 @@ class _PathWalker:
 
 
 class LazyPathIterator(CancelableAsyncIterator[ValidationPath]):
-    _as_root: Optional[ValidationPath] = None
+    _as_root: ValidationPath | None = None
 
     def __init__(self, walker: _PathWalker, cert: x509.Certificate):
         # special case for root certs
@@ -691,7 +687,7 @@ class LazyPathIterator(CancelableAsyncIterator[ValidationPath]):
         )
         if maybe_trust_anchor:
             self._as_root = ValidationPath(maybe_trust_anchor, [], None)
-        self._walker: Optional[_PathWalker] = walker
+        self._walker: _PathWalker | None = walker
         self.emitted_count = 0
         self._name = cert.subject.human_friendly
 
@@ -736,7 +732,7 @@ class LayeredCertificateStore(CertificateCollection):
     in a specific order.
     """
 
-    def __init__(self, stores: List[CertificateCollection]):
+    def __init__(self, stores: list[CertificateCollection]):
         self._stores = stores
 
     def _forall(self, method_name, search_term):

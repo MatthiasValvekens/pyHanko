@@ -15,10 +15,10 @@ __all__ = [
     'DEFAULT_SUPPORTED_ALGOS',
     'any_algo',
     'declared_algo',
-    'platform',
-    'p11_global_test_config',
     'p11_config',
+    'p11_global_test_config',
     'p11_session',
+    'platform',
 ]
 
 DEFAULT_SUPPORTED_ALGOS = frozenset(
@@ -51,15 +51,14 @@ def required_mechanism(request, declared_algo):
         mech = mark.args[0]
         assert isinstance(mech, pkcs11.Mechanism)
         return mech
-    else:
-        return {
-            'rsa': pkcs11.Mechanism.SHA256_RSA_PKCS,
-            'dsa': pkcs11.Mechanism.DSA_SHA256,
-            'ecdsa': pkcs11.Mechanism.ECDSA_SHA256,
-            'ed25519': pkcs11.Mechanism.EDDSA,
-            'ed448': pkcs11.Mechanism.EDDSA,
-            'mldsa': pkcs11.Mechanism.ML_DSA,
-        }.get(declared_algo, None)
+    return {
+        'rsa': pkcs11.Mechanism.SHA256_RSA_PKCS,
+        'dsa': pkcs11.Mechanism.DSA_SHA256,
+        'ecdsa': pkcs11.Mechanism.ECDSA_SHA256,
+        'ed25519': pkcs11.Mechanism.EDDSA,
+        'ed448': pkcs11.Mechanism.EDDSA,
+        'mldsa': pkcs11.Mechanism.ML_DSA,
+    }.get(declared_algo, None)
 
 
 def _available_platforms():
@@ -200,7 +199,7 @@ def p11_config(
                     Attribute.LABEL: lbl,
                 }
                 try:
-                    cert_obj = list(sess.get_objects(params))[0]
+                    cert_obj = next(iter(sess.get_objects(params)))
                 except IndexError:
                     raise RuntimeError(
                         f"Failed to retrieve certificate with label {lbl}"

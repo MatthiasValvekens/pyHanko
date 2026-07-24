@@ -1,6 +1,7 @@
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any
 
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
@@ -47,7 +48,7 @@ class ACTargetDescription:
     at least one ``Target`` in the AC's target information extension.
     """
 
-    validator_names: List[x509.GeneralName] = field(default_factory=list)
+    validator_names: list[x509.GeneralName] = field(default_factory=list)
     """
     The validating entity's names.
 
@@ -55,7 +56,7 @@ class ACTargetDescription:
     ``targetName`` alternative.
     """
 
-    group_memberships: List[x509.GeneralName] = field(default_factory=list)
+    group_memberships: list[x509.GeneralName] = field(default_factory=list)
     """
     The validating entity's group memberships.
 
@@ -67,28 +68,28 @@ class ACTargetDescription:
 class ValidationContext:
     def __init__(
         self,
-        trust_roots: Optional[TrustRootList] = None,
-        extra_trust_roots: Optional[TrustRootList] = None,
-        other_certs: Optional[Iterable[x509.Certificate]] = None,
-        moment: Optional[datetime] = None,
-        best_signature_time: Optional[datetime] = None,
+        trust_roots: TrustRootList | None = None,
+        extra_trust_roots: TrustRootList | None = None,
+        other_certs: Iterable[x509.Certificate] | None = None,
+        moment: datetime | None = None,
+        best_signature_time: datetime | None = None,
         allow_fetching: bool = False,
-        crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
-        ocsps: Optional[Iterable[Union[bytes, ocsp.OCSPResponse]]] = None,
+        crls: Iterable[bytes | crl.CertificateList] | None = None,
+        ocsps: Iterable[bytes | ocsp.OCSPResponse] | None = None,
         revocation_mode: str = "soft-fail",
-        revinfo_policy: Optional[CertRevTrustPolicy] = None,
-        weak_hash_algos: Optional[Iterable[str]] = None,
+        revinfo_policy: CertRevTrustPolicy | None = None,
+        weak_hash_algos: Iterable[str] | None = None,
         time_tolerance: timedelta = timedelta(seconds=1),
         retroactive_revinfo: bool = False,
-        fetcher_backend: Optional[FetcherBackend] = None,
-        acceptable_ac_targets: Optional[ACTargetDescription] = None,
-        poe_manager: Optional[POEManager] = None,
-        revinfo_manager: Optional[RevinfoManager] = None,
-        certificate_registry: Optional[CertificateRegistry] = None,
-        trust_manager: Optional[TrustManager] = None,
-        algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = None,
-        fetchers: Optional[Fetchers] = None,
-        signature_validator: Optional[SignatureValidator] = None,
+        fetcher_backend: FetcherBackend | None = None,
+        acceptable_ac_targets: ACTargetDescription | None = None,
+        poe_manager: POEManager | None = None,
+        revinfo_manager: RevinfoManager | None = None,
+        certificate_registry: CertificateRegistry | None = None,
+        trust_manager: TrustManager | None = None,
+        algorithm_usage_policy: AlgorithmUsagePolicy | None = None,
+        fetchers: Fetchers | None = None,
+        signature_validator: SignatureValidator | None = None,
     ):
         """
         :param trust_roots:
@@ -278,9 +279,9 @@ class ValidationContext:
             )
         self._revinfo_manager = revinfo_manager
 
-        self._validate_map: Dict[bytes, ValidationPath] = {}
+        self._validate_map: dict[bytes, ValidationPath] = {}
 
-        self._soft_fail_exceptions: List[Exception] = []
+        self._soft_fail_exceptions: list[Exception] = []
         time_tolerance = abs(time_tolerance) if time_tolerance else timedelta(0)
         self.timing_params = ValidationTimingParams(
             ValidationTimingInfo(
@@ -323,14 +324,14 @@ class ValidationContext:
         return self.revinfo_manager.fetching_allowed
 
     @property
-    def crls(self) -> List[crl.CertificateList]:
+    def crls(self) -> list[crl.CertificateList]:
         """
         A list of all cached :class:`crl.CertificateList` objects
         """
         return self._revinfo_manager.crls
 
     @property
-    def ocsps(self) -> List[ocsp.OCSPResponse]:
+    def ocsps(self) -> list[ocsp.OCSPResponse]:
         """
         A list of all cached :class:`ocsp.OCSPResponse` objects
         """
@@ -427,7 +428,7 @@ class ValidationContext:
             del self._validate_map[cert.signature]
 
     @property
-    def acceptable_ac_targets(self) -> Optional[ACTargetDescription]:
+    def acceptable_ac_targets(self) -> ACTargetDescription | None:
         return self._acceptable_ac_targets
 
 
@@ -461,11 +462,11 @@ class ValidationDataHandlers:
 
 
 def bootstrap_validation_data_handlers(
-    fetchers: Union[Fetchers, FetcherBackend, None] = RequestsFetcherBackend(),
+    fetchers: Fetchers | FetcherBackend | None = RequestsFetcherBackend(),
     crls: Iterable[CRLContainer] = (),
     ocsps: Iterable[OCSPContainer] = (),
     certs: Iterable[x509.Certificate] = (),
-    poe_manager: Optional[POEManager] = None,
+    poe_manager: POEManager | None = None,
     nonrevoked_assertions: Iterable[NonRevokedStatusAssertion] = (),
 ) -> ValidationDataHandlers:
     """
@@ -492,7 +493,7 @@ def bootstrap_validation_data_handlers(
         A :class:`.ValidationDataHandlers` object.
     """
 
-    _fetchers: Optional[Fetchers]
+    _fetchers: Fetchers | None
     if isinstance(fetchers, FetcherBackend):
         _fetchers = fetchers.get_fetchers()
     elif isinstance(fetchers, Fetchers):
@@ -555,12 +556,12 @@ class CertValidationPolicySpec:
     The time drift tolerated during validation. Defaults to one second.
     """
 
-    acceptable_ac_targets: Optional[ACTargetDescription] = None
+    acceptable_ac_targets: ACTargetDescription | None = None
     """
     Targets to accept when evaluating the scope of an attribute certificate.
     """
 
-    algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = field(
+    algorithm_usage_policy: AlgorithmUsagePolicy | None = field(
         default=DisallowWeakAlgorithmsPolicy()
     )
     """
@@ -568,7 +569,7 @@ class CertValidationPolicySpec:
     default will be used.
     """
 
-    pkix_validation_params: Optional[PKIXValidationParams] = None
+    pkix_validation_params: PKIXValidationParams | None = None
     """
     The PKIX validation parameters to use, as defined in :rfc:`5280`.
     """
@@ -582,8 +583,8 @@ class CertValidationPolicySpec:
     def build_validation_context_kwargs(
         self,
         timing_info: ValidationTimingInfo,
-        handlers: Optional[ValidationDataHandlers],
-    ) -> Dict[str, Any]:
+        handlers: ValidationDataHandlers | None,
+    ) -> dict[str, Any]:
         """
         Internal API to build the keyword arguments to pass to a
         :class:`ValidationContext` instance constructed from this policy,
@@ -612,25 +613,25 @@ class CertValidationPolicySpec:
             poe_manager = handlers.poe_manager
             revinfo_manager = handlers.revinfo_manager
 
-        return dict(
-            trust_manager=self.trust_manager,
-            revinfo_policy=self.revinfo_policy,
-            revinfo_manager=revinfo_manager,
-            certificate_registry=cert_registry,
-            poe_manager=poe_manager,
-            algorithm_usage_policy=self.algorithm_usage_policy,
-            moment=timing_info.validation_time,
-            best_signature_time=timing_info.best_signature_time,
-            time_tolerance=self.time_tolerance,
-            acceptable_ac_targets=self.acceptable_ac_targets,
-            allow_fetching=revinfo_manager.fetching_allowed,
-            signature_validator=self.signature_validator,
-        )
+        return {
+            "trust_manager": self.trust_manager,
+            "revinfo_policy": self.revinfo_policy,
+            "revinfo_manager": revinfo_manager,
+            "certificate_registry": cert_registry,
+            "poe_manager": poe_manager,
+            "algorithm_usage_policy": self.algorithm_usage_policy,
+            "moment": timing_info.validation_time,
+            "best_signature_time": timing_info.best_signature_time,
+            "time_tolerance": self.time_tolerance,
+            "acceptable_ac_targets": self.acceptable_ac_targets,
+            "allow_fetching": revinfo_manager.fetching_allowed,
+            "signature_validator": self.signature_validator,
+        }
 
     def build_validation_context(
         self,
         timing_info: ValidationTimingInfo,
-        handlers: Optional[ValidationDataHandlers],
+        handlers: ValidationDataHandlers | None,
     ) -> ValidationContext:
         """
         Build a validation context from this policy, validation timing info

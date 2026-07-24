@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Iterable, List, Union
+from collections.abc import Iterable
 
 import aiohttp
 from asn1crypto import cms, crl, pem, x509
@@ -19,16 +19,16 @@ logger = logging.getLogger(__name__)
 class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
     def __init__(
         self,
-        session: Union[aiohttp.ClientSession, LazySession],
+        session: aiohttp.ClientSession | LazySession,
         user_agent=None,
         per_request_timeout=10,
     ):
         super().__init__(session, user_agent, per_request_timeout)
-        self._by_cert: Dict[bytes, List[crl.CertificateList]] = {}
+        self._by_cert: dict[bytes, list[crl.CertificateList]] = {}
 
     async def fetch(
         self,
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert: x509.Certificate | cms.AttributeCertificateV2,
         *,
         use_deltas=True,
     ):

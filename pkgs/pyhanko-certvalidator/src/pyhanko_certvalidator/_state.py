@@ -1,5 +1,3 @@
-from typing import Optional
-
 from asn1crypto import x509
 
 from pyhanko_certvalidator.path import ValidationPath
@@ -11,7 +9,7 @@ class ValProcState:
         self,
         *,
         cert_path_stack: ConsList[ValidationPath],
-        ee_name_override: Optional[str] = None,
+        ee_name_override: str | None = None,
         is_side_validation: bool = False,
         init_index: int = 0,
     ):

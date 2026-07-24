@@ -6,7 +6,8 @@ and OCSP responses.
 import asyncio
 import logging
 import os
-from typing import Awaitable, Callable, Dict, Optional, TypeVar, Union
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 from asn1crypto import algos, cms, core, ocsp, pem, x509
 from asn1crypto.x509 import DistributionPoint
@@ -73,7 +74,7 @@ ACCEPTABLE_PKCS7_DER_ALIASES = frozenset(
 
 def unpack_cert_content(
     response_data: bytes,
-    content_type: Optional[str],
+    content_type: str | None,
     url: str,
     permit_pem: bool,
 ):
@@ -131,7 +132,7 @@ def _unpack_der_pkcs7(pkcs7_data: bytes, pkcs7_url: str):
 
 
 def get_certid(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     authority: Authority,
     *,
     certid_hash_algo,
@@ -200,8 +201,7 @@ def process_ocsp_response_data(
     status = ocsp_response['response_status'].native
     if status != 'successful':
         raise errors.OCSPValidationError(
-            'OCSP server at %s returned an error. Status was \'%s\'.'
-            % (ocsp_url, status)
+            f'OCSP server at {ocsp_url} returned an error. Status was \'{status}\'.'
         )
 
     request_nonce = ocsp_request.nonce_value
@@ -225,11 +225,11 @@ R = TypeVar('R')
 
 
 async def queue_fetch_task(
-    results: Dict[T, Union[R, Exception]],
-    running_jobs: Dict[T, asyncio.Event],
+    results: dict[T, R | Exception],
+    running_jobs: dict[T, asyncio.Event],
     tag: T,
     async_fun: Callable[[], Awaitable[R]],
-) -> Union[R, Exception]:
+) -> R | Exception:
     # use an asyncio events to make sure that we don't attempt to re-fetch
     # the same tag while the job is running
     # Note: this uses asyncio locking, so we only transfer control
@@ -322,7 +322,7 @@ async def ocsp_job_get_earliest(jobs):
 
 
 def gather_aia_issuer_urls(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
 ):
     if isinstance(cert, x509.Certificate):
         aia_value = cert.authority_information_access_value

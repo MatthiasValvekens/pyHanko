@@ -173,7 +173,7 @@ def dummy_ocsp_vc():
         trust_roots=TRUST_ROOTS,
         crls=[],
         ocsps=[FIXED_OCSP],
-        other_certs=list(),
+        other_certs=[],
         allow_fetching=False,
         weak_hash_algos=set(),
     )

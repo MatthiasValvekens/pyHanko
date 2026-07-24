@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List, Tuple
 
 from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.generic import (
@@ -17,15 +16,15 @@ from pyhanko.pdf_utils.misc import skip_over_comments, skip_over_whitespace
 @dataclass(frozen=True)
 class GraphicsOperator:
     op: str
-    args: List[PdfObject]
-    start: Tuple[Reference, int]
-    end: Tuple[Reference, int]
+    args: list[PdfObject]
+    start: tuple[Reference, int]
+    end: tuple[Reference, int]
 
 
-def parse_content_stream(stream_parts: List[StreamObject]):
+def parse_content_stream(stream_parts: list[StreamObject]):
     start_ref = None
     start_pos = 0
-    args_collected: List[PdfObject] = []
+    args_collected: list[PdfObject] = []
     for pdf_stream in stream_parts:
         current_ref = pdf_stream.container_ref
         assert isinstance(current_ref, Reference)

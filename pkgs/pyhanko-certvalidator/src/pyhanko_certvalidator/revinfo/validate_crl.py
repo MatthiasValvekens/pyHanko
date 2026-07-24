@@ -3,7 +3,6 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Tuple, Union
 
 from asn1crypto import cms, crl, keys, x509
 from asn1crypto.crl import CRLEntryExtensionId
@@ -54,7 +53,7 @@ class CRLWithPaths:
     """
 
     crl: CRLContainer
-    paths: List[ValidationPath]
+    paths: list[ValidationPath]
 
 
 async def _find_candidate_crl_issuer_certs(
@@ -62,7 +61,7 @@ async def _find_candidate_crl_issuer_certs(
     *,
     cert_issuer_auth: Authority,
     cert_registry: CertificateRegistry,
-) -> List[x509.Certificate]:
+) -> list[x509.Certificate]:
     # first, look for certs issued to the issuer named as the entity
     # that signed the CRL.
     # We prioritise the next-level issuer in the main path
@@ -94,7 +93,7 @@ class _CRLIssuerSearchErrs:
     signatures_failed: int = 0
     unauthorized_certs: int = 0
     path_building_failures: int = 0
-    explicit_errors: List[CRLValidationError] = field(default_factory=list)
+    explicit_errors: list[CRLValidationError] = field(default_factory=list)
 
     def get_exc(self):
         plural = self.candidate_issuers > 1
@@ -175,13 +174,13 @@ async def _validate_crl_issuer_path(
 async def _find_candidate_crl_paths(
     certificate_list: crl.CertificateList,
     *,
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     cert_issuer_auth: Authority,
     cert_path: ValidationPath,
     certificate_registry: CertificateRegistry,
     is_indirect: bool,
     proc_state: ValProcState,
-) -> Tuple[List[ValidationPath], _CRLIssuerSearchErrs]:
+) -> tuple[list[ValidationPath], _CRLIssuerSearchErrs]:
     cert_sha256 = hashlib.sha256(cert.dump()).digest()
 
     candidate_crl_issuers = await _find_candidate_crl_issuer_certs(
@@ -231,7 +230,7 @@ async def _find_candidate_crl_paths(
 async def _find_crl_issuer(
     certificate_list: crl.CertificateList,
     *,
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     cert_issuer_auth: Authority,
     cert_path: ValidationPath,
     validation_context: ValidationContext,
@@ -316,11 +315,11 @@ class _CRLErrs(Errors):
 
 
 def _find_matching_delta_crl(
-    delta_lists: List[CRLContainer],
+    delta_lists: list[CRLContainer],
     crl_authority_name: x509.Name,
     crl_idp: crl.IssuingDistributionPoint,
-    parent_crl_aki: Optional[bytes],
-) -> Optional[CRLContainer]:
+    parent_crl_aki: bytes | None,
+) -> CRLContainer | None:
     for candidate_delta_cl_cont in delta_lists:
         candidate_delta_cl = candidate_delta_cl_cont.crl_data
         # Step c 1
@@ -347,7 +346,7 @@ def _find_matching_delta_crl(
 
 def _match_dps_idp_names(
     crl_idp: crl.IssuingDistributionPoint,
-    crl_dps: Optional[x509.CRLDistributionPoints],
+    crl_dps: x509.CRLDistributionPoints | None,
     crl_issuer: x509.Certificate,
     crl_authority_name: x509.Name,
 ) -> bool:
@@ -439,30 +438,28 @@ def _handle_crl_idp_ext_constraints(
         return False
 
     # Step b 2 ii
-    if crl_idp['only_contains_user_certs'].native:
-        if (
-            cert.basic_constraints_value
-            and cert.basic_constraints_value['ca'].native
-        ):
-            errs.append(
-                "CRL only contains end-entity certificates and "
-                "certificate is a CA certificate",
-                certificate_list,
-            )
-            return False
+    if crl_idp['only_contains_user_certs'].native and (
+        cert.basic_constraints_value
+        and cert.basic_constraints_value['ca'].native
+    ):
+        errs.append(
+            "CRL only contains end-entity certificates and "
+            "certificate is a CA certificate",
+            certificate_list,
+        )
+        return False
 
     # Step b 2 iii
-    if crl_idp['only_contains_ca_certs'].native:
-        if (
-            not cert.basic_constraints_value
-            or cert.basic_constraints_value['ca'].native is False
-        ):
-            errs.append(
-                "CRL only contains CA certificates and certificate "
-                "is an end-entity certificate",
-                certificate_list,
-            )
-            return False
+    if crl_idp['only_contains_ca_certs'].native and (
+        not cert.basic_constraints_value
+        or cert.basic_constraints_value['ca'].native is False
+    ):
+        errs.append(
+            "CRL only contains CA certificates and certificate "
+            "is an end-entity certificate",
+            certificate_list,
+        )
+        return False
 
     # Step b 2 iv
     if crl_idp['only_contains_attribute_certs'].native:
@@ -476,7 +473,7 @@ def _handle_crl_idp_ext_constraints(
 
 def _handle_attr_cert_crl_idp_ext_constraints(
     certificate_list: crl.CertificateList,
-    crl_dps: Optional[x509.CRLDistributionPoints],
+    crl_dps: x509.CRLDistributionPoints | None,
     crl_issuer: x509.Certificate,
     crl_idp: crl.IssuingDistributionPoint,
     crl_authority_name: x509.Name,
@@ -545,16 +542,16 @@ def _check_crl_freshness(
 
 
 async def _handle_single_crl(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     cert_issuer_auth: Authority,
     certificate_list_cont: CRLContainer,
     path: ValidationPath,
     validation_context: ValidationContext,
-    delta_lists_by_issuer: Dict[str, List[CRLContainer]],
+    delta_lists_by_issuer: dict[str, list[CRLContainer]],
     use_deltas: bool,
     errs: _CRLErrs,
     proc_state: ValProcState,
-) -> Optional[Set[str]]:
+) -> set[str] | None:
     certificate_list = certificate_list_cont.crl_data
 
     is_indirect = _is_indirect(
@@ -674,11 +671,11 @@ def _is_indirect(
 def _maybe_get_delta_crl(
     certificate_list: crl.CertificateList,
     crl_issuer: x509.Certificate,
-    delta_lists_by_issuer: Dict[str, List[CRLContainer]],
+    delta_lists_by_issuer: dict[str, list[CRLContainer]],
     errs: _CRLErrs,
-    timing_params: Optional[ValidationTimingParams] = None,
-    policy: Optional[CertRevTrustPolicy] = None,
-) -> Optional[CRLContainer]:
+    timing_params: ValidationTimingParams | None = None,
+    policy: CertRevTrustPolicy | None = None,
+) -> CRLContainer | None:
     if (
         not certificate_list.freshest_crl_value
         or len(certificate_list.freshest_crl_value) == 0
@@ -712,15 +709,18 @@ def _maybe_get_delta_crl(
     ):
         return None
 
-    if policy and timing_params:
-        if _check_crl_freshness(
+    if (
+        policy
+        and timing_params
+        and _check_crl_freshness(
             delta_certificate_list_cont,
             policy,
             timing_params,
             errs,
             is_delta=True,
-        ):
-            return delta_certificate_list_cont
+        )
+    ):
+        return delta_certificate_list_cont
     return None
 
 
@@ -740,11 +740,11 @@ def _verify_no_unknown_critical_extensions(
 
 def _get_crl_scope_assuming_authority(
     crl_issuer: x509.Certificate,
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     certificate_list_cont: CRLContainer,
     is_indirect: bool,
     errs: _CRLErrs,
-) -> Optional[Set[str]]:
+) -> set[str] | None:
     certificate_list = certificate_list_cont.crl_data
     crl_idp: crl.IssuingDistributionPoint = (
         certificate_list.issuing_distribution_point_value
@@ -836,9 +836,9 @@ def _get_crl_scope_assuming_authority(
 
 def _check_cert_on_crl_and_delta(
     crl_issuer: x509.Certificate,
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     certificate_list_cont: CRLContainer,
-    delta_certificate_list_cont: Optional[CRLContainer],
+    delta_certificate_list_cont: CRLContainer | None,
     errs: _CRLErrs,
 ):
     certificate_list = certificate_list_cont.crl_data
@@ -888,10 +888,10 @@ def _check_cert_on_crl_and_delta(
 
 
 def _classify_relevant_crls(
-    certificate_lists: List[CRLContainer],
+    certificate_lists: list[CRLContainer],
     poe_manager: POEManager,
     errs: _CRLErrs,
-    control_time: Optional[datetime] = None,
+    control_time: datetime | None = None,
 ):
     # NOTE: the control_time parameter is only used in the time sliding
     # algorithm code path for AdES validation
@@ -928,7 +928,7 @@ def _classify_relevant_crls(
 
 
 def _process_crl_completeness(
-    checked_reasons: Set[str],
+    checked_reasons: set[str],
     total_crls: int,
     errs: _CRLErrs,
     proc_state: ValProcState,
@@ -963,11 +963,11 @@ def _process_crl_completeness(
 
 
 async def verify_crl(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     path: ValidationPath,
     validation_context: ValidationContext,
     use_deltas=True,
-    proc_state: Optional[ValProcState] = None,
+    proc_state: ValProcState | None = None,
 ):
     """
     Verifies a certificate against a list of CRLs, checking to make sure the
@@ -1120,7 +1120,7 @@ class ProvisionalCRLTrust:
     A provisional validation path for the CRL. Requires path validation.
     """
 
-    delta: Optional[CRLContainer]
+    delta: CRLContainer | None
     """
     A delta CRL that may be relevant to the parent CRL for which the path was
     put together.
@@ -1138,7 +1138,7 @@ class CRLOfInterest:
     The CRL data, packaged in a revocation info container.
     """
 
-    prov_paths: List[ProvisionalCRLTrust]
+    prov_paths: list[ProvisionalCRLTrust]
     """
     Candidate validation paths for the CRL, together with relevant delta CRLs,
     if appropriate.
@@ -1157,28 +1157,28 @@ class CRLCollectionResult:
     validation purposes.
     """
 
-    crls: List[CRLOfInterest]
+    crls: list[CRLOfInterest]
     """
     List of potentially relevant CRLs.
     """
 
-    failure_msgs: List[str]
+    failure_msgs: list[str]
     """
     List of failure messages, for error reporting purposes.
     """
 
 
 async def _assess_crl_relevance(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     cert_issuer_auth: Authority,
     certificate_list_cont: CRLContainer,
     path: ValidationPath,
     revinfo_manager: RevinfoManager,
-    delta_lists_by_issuer: Dict[str, List[CRLContainer]],
+    delta_lists_by_issuer: dict[str, list[CRLContainer]],
     use_deltas: bool,
     errs: _CRLErrs,
     proc_state: ValProcState,
-) -> Optional[CRLOfInterest]:
+) -> CRLOfInterest | None:
     certificate_list = certificate_list_cont.crl_data
     registry = revinfo_manager.certificate_registry
     is_indirect = _is_indirect(certificate_list_cont)
@@ -1240,12 +1240,12 @@ async def _assess_crl_relevance(
 
 
 async def collect_relevant_crls_with_paths(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     path: ValidationPath,
     revinfo_manager: RevinfoManager,
     control_time: datetime,
     use_deltas=True,
-    proc_state: Optional[ValProcState] = None,
+    proc_state: ValProcState | None = None,
 ) -> CRLCollectionResult:
     """
     Collect potentially relevant CRLs with the associated validation
@@ -1358,7 +1358,7 @@ def _verify_crl_signature(
 
 
 def find_cert_in_list(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     cert_issuer_name: x509.Name,
     certificate_list: crl.CertificateList,
     crl_authority_name: x509.Name,

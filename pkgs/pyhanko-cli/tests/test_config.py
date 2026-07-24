@@ -2,10 +2,10 @@ import dataclasses
 import hashlib
 import os
 import typing
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import Iterable, Optional, Union
 
 import pytest
 import yaml
@@ -1170,15 +1170,15 @@ def test_read_simple_layout_config_failures(cfg_str, error):
 class DemoConfigurableA(ConfigurableMixin):
     field1: int
     field2: Iterable[int]
-    field3: Optional[int] = None
-    field4: Optional[Iterable[int]] = None
-    field5: Union[str, int] = 'abc'
-    field6: Union[str, int, None] = None
+    field3: int | None = None
+    field4: Iterable[int] | None = None
+    field5: str | int = 'abc'
+    field6: str | int | None = None
 
 
 @dataclass(frozen=True)
 class DemoConfigurableB(ConfigurableMixin):
-    some_field: Optional[DemoConfigurableA] = None
+    some_field: DemoConfigurableA | None = None
 
 
 @pytest.mark.parametrize(

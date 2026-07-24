@@ -2,7 +2,6 @@ import logging
 import os
 from collections import namedtuple
 from datetime import datetime
-from typing import Dict, List, Optional, Union
 
 from asn1crypto import cms, x509
 from pyhanko.pdf_utils import generic, misc
@@ -53,10 +52,10 @@ __all__ = [
     'EmbeddedPdfSignature',
     'async_validate_pdf_signature',
     'async_validate_pdf_timestamp',
+    'collect_embedded_signatures',
     'extract_contents',
     'read_certification_data',
     'report_seed_value_validation',
-    'collect_embedded_signatures',
 ]
 
 
@@ -65,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 def _extract_reference_dict(
     signature_obj, method
-) -> Optional[generic.DictionaryObject]:
+) -> generic.DictionaryObject | None:
     try:
         sig_refs = signature_obj['/Reference']
     except KeyError:
@@ -77,7 +76,7 @@ def _extract_reference_dict(
     return None
 
 
-def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
+def _extract_docmdp_for_sig(signature_obj) -> MDPPerm | None:
     ref = _extract_reference_dict(signature_obj, '/DocMDP')
     if ref is None:
         return None
@@ -164,7 +163,7 @@ class EmbeddedPdfSignature:
         self.signed_data: cms.SignedData = signed_data
 
         self.signer_info = extract_signer_info(signed_data)
-        self._sd_cert_info: Optional[SignedDataCerts] = None
+        self._sd_cert_info: SignedDataCerts | None = None
 
         # The PDF standard does not define a way to specify the digest algorithm
         # used other than this one.
@@ -203,11 +202,11 @@ class EmbeddedPdfSignature:
             sig_object_ref.reference
         )
         self.coverage = None
-        self.external_digests: Dict[str, bytes] = {}
-        self._docmdp: Optional[MDPPerm] = None
-        self._fieldmdp: Optional[FieldMDPSpec] = None
+        self.external_digests: dict[str, bytes] = {}
+        self._docmdp: MDPPerm | None = None
+        self._fieldmdp: FieldMDPSpec | None = None
         self._docmdp_queried = self._fieldmdp_queried = False
-        self.tst_signature_digest: Optional[bytes] = None
+        self.tst_signature_digest: bytes | None = None
 
         self.diff_result = None
         self._integrity_checked = False
@@ -221,14 +220,14 @@ class EmbeddedPdfSignature:
         return self._sd_cert_info
 
     @property
-    def embedded_attr_certs(self) -> List[cms.AttributeCertificateV2]:
+    def embedded_attr_certs(self) -> list[cms.AttributeCertificateV2]:
         """
         Embedded attribute certificates.
         """
         return list(self._init_cert_info().attribute_certs)
 
     @property
-    def other_embedded_certs(self) -> List[x509.Certificate]:
+    def other_embedded_certs(self) -> list[x509.Certificate]:
         """
         Embedded X.509 certificates, excluding than that of the signer.
         """
@@ -262,7 +261,7 @@ class EmbeddedPdfSignature:
         return self.fq_name
 
     @property
-    def self_reported_timestamp(self) -> Optional[datetime]:
+    def self_reported_timestamp(self) -> datetime | None:
         """
         :return:
             The signing time as reported by the signer, if embedded in the
@@ -351,7 +350,7 @@ class EmbeddedPdfSignature:
         return status_kwargs
 
     @property
-    def seed_value_spec(self) -> Optional[SigSeedValueSpec]:
+    def seed_value_spec(self) -> SigSeedValueSpec | None:
         try:
             sig_sv_dict = self.sig_field['/SV']
         except KeyError:
@@ -359,7 +358,7 @@ class EmbeddedPdfSignature:
         return SigSeedValueSpec.from_pdf_object(sig_sv_dict)
 
     @property
-    def docmdp_level(self) -> Optional[MDPPerm]:
+    def docmdp_level(self) -> MDPPerm | None:
         """
         :return:
             The document modification policy required by this signature or
@@ -391,7 +390,7 @@ class EmbeddedPdfSignature:
         return docmdp
 
     @property
-    def fieldmdp(self) -> Optional[FieldMDPSpec]:
+    def fieldmdp(self) -> FieldMDPSpec | None:
         """
         :return:
             Read the field locking policy of this signature, if applicable.
@@ -413,7 +412,7 @@ class EmbeddedPdfSignature:
         self._fieldmdp = sp
         return sp
 
-    def compute_digest(self, hash_algo: Optional[str] = None) -> bytes:
+    def compute_digest(self, hash_algo: str | None = None) -> bytes:
         """
         Compute the ``/ByteRange`` digest of this signature.
         The result will be cached.
@@ -518,7 +517,7 @@ class EmbeddedPdfSignature:
 
     def evaluate_modifications(
         self, diff_policy: DiffPolicy
-    ) -> Union[DiffResult, SuspiciousModification]:
+    ) -> DiffResult | SuspiciousModification:
         """
         Internal method used to evaluate the modification level of a signature.
         """
@@ -545,7 +544,7 @@ reference to the author signature, together with the associated DocMDP policy.
 """
 
 
-def read_certification_data(reader: PdfFileReader) -> Optional[DocMDPInfo]:
+def read_certification_data(reader: PdfFileReader) -> DocMDPInfo | None:
     """
     Read the certification information for a PDF document, if present.
 
@@ -631,9 +630,8 @@ def _validate_sv_constraints(
         mandated_sf: SigSeedSubFilter = sv_spec.subfilters[0]
         if selected_sf is not None and mandated_sf != selected_sf:
             raise SigSeedValueValidationError(
-                "The seed value dictionary mandates subfilter '%s', "
-                "but '%s' was used in the signature."
-                % (mandated_sf.value, selected_sf.value)
+                f"The seed value dictionary mandates subfilter '{mandated_sf.value}', "
+                f"but '{selected_sf.value}' was used in the signature."
             )
 
     if (
@@ -688,9 +686,8 @@ def _validate_sv_constraints(
 
         if sv_spec.add_rev_info != revinfo_found:
             raise SigSeedValueValidationError(
-                "The seed value dict mandates that revocation info %sbe "
-                "added, but it was %sfound in the signature."
-                % (
+                "The seed value dict mandates that revocation info {}be "
+                "added, but it was {}found in the signature.".format(
                     "" if sv_spec.add_rev_info else "not ",
                     "" if revinfo_found else "not ",
                 )
@@ -701,8 +698,7 @@ def _validate_sv_constraints(
         ):
             raise SigSeedValueValidationError(
                 "The seed value dict mandates that Adobe-style revocation "
-                "info be added; this requires subfilter '%s'"
-                % (SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value)
+                f"info be added; this requires subfilter '{SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value}'"
             )
 
     if (
@@ -711,8 +707,8 @@ def _validate_sv_constraints(
         selected_md = emb_sig.md_algorithm.lower()
         if selected_md not in sv_spec.digest_methods:
             raise SigSeedValueValidationError(
-                "The selected message digest %s is not allowed by the "
-                "seed value dictionary." % selected_md
+                f"The selected message digest {selected_md} is not allowed by the "
+                "seed value dictionary."
             )
 
     if flags & SigSeedValFlags.REASONS:
@@ -728,8 +724,8 @@ def _validate_sv_constraints(
             )
         if not must_omit and reason_given not in reasons:
             raise SigSeedValueValidationError(
-                "The reason for signing \"%s\" is not accepted by the "
-                "seed value dictionary." % (reason_given,)
+                f"The reason for signing \"{reason_given}\" is not accepted by the "
+                "seed value dictionary."
             )
 
 
@@ -751,7 +747,7 @@ def report_seed_value_validation(
     :return:
         A ``status_kwargs`` dict.
     """
-    sv_err: Optional[SigSeedValueValidationError]
+    sv_err: SigSeedValueValidationError | None
     try:
         _validate_sv_constraints(
             embedded_sig, validation_path, timestamp_found=timestamp_found
@@ -780,13 +776,13 @@ def _validate_subfilter(subfilter_str, permitted_subfilters, err_msg):
 
 async def async_validate_pdf_signature(
     embedded_sig: EmbeddedPdfSignature,
-    signer_validation_context: Optional[ValidationContext] = None,
-    ts_validation_context: Optional[ValidationContext] = None,
-    ac_validation_context: Optional[ValidationContext] = None,
-    diff_policy: Optional[DiffPolicy] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
+    signer_validation_context: ValidationContext | None = None,
+    ts_validation_context: ValidationContext | None = None,
+    ac_validation_context: ValidationContext | None = None,
+    diff_policy: DiffPolicy | None = None,
+    key_usage_settings: KeyUsageConstraints | None = None,
     skip_diff: bool = False,
-    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
+    algorithm_policy: CMSAlgorithmUsagePolicy | None = None,
 ) -> PdfSignatureStatus:
     """
     .. versionadded:: 0.9.0
@@ -904,8 +900,8 @@ async def async_validate_pdf_signature(
 
 async def async_validate_pdf_timestamp(
     embedded_sig: EmbeddedPdfSignature,
-    validation_context: Optional[ValidationContext] = None,
-    diff_policy: Optional[DiffPolicy] = None,
+    validation_context: ValidationContext | None = None,
+    diff_policy: DiffPolicy | None = None,
     skip_diff: bool = False,
 ) -> DocumentTimestampStatus:
     """

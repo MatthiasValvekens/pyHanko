@@ -1,6 +1,5 @@
 import enum
 from dataclasses import dataclass
-from typing import Optional
 
 from pyhanko.sign.validation.qualified.tsp import (
     QcCertType,
@@ -87,7 +86,7 @@ class QualificationResult:
     Status indicator.
     """
 
-    service_definition: Optional[QualifiedServiceInformation]
+    service_definition: QualifiedServiceInformation | None
     """
     Service definition under which the tested object was considered
     qualified.

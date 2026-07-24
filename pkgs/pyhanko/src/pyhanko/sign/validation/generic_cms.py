@@ -1,22 +1,13 @@
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable, Generator, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import (
     IO,
     Any,
-    Awaitable,
-    Callable,
-    Dict,
-    Generator,
     Generic,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
     overload,
 )
 
@@ -104,7 +95,7 @@ StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
 def get_signing_cert_attr(
     signed_attrs: cms.CMSAttributes,
-) -> Union[tsp.SigningCertificate, tsp.SigningCertificateV2, None]:
+) -> tsp.SigningCertificate | tsp.SigningCertificateV2 | None:
     """
     Retrieve the ``signingCertificate`` or ``signingCertificateV2`` attribute
     (giving preference to the latter) from a signature's signed attributes.
@@ -170,8 +161,8 @@ def _check_signing_certificate(
 def validate_algorithm_protection(
     attrs: cms.CMSAttributes,
     claimed_digest_algorithm_obj: cms.DigestAlgorithm,
-    claimed_signature_algorithm_obj: Optional[algos.SignedDigestAlgorithm],
-    claimed_mac_algorithm_obj: Optional[algos.HmacAlgorithm],
+    claimed_signature_algorithm_obj: algos.SignedDigestAlgorithm | None,
+    claimed_mac_algorithm_obj: algos.HmacAlgorithm | None,
 ):
     """
     Internal API to validate the CMS algorithm protection attribute
@@ -241,7 +232,7 @@ def _enforce_algorithm_usage(
     signer_info: cms.SignerInfo,
     cert: x509.Certificate,
     algorithm_usage_policy: CMSAlgorithmUsagePolicy,
-    time_indic: Optional[datetime] = None,
+    time_indic: datetime | None = None,
 ):
     """
     Enforce the algorithm usage policy.
@@ -304,8 +295,8 @@ def validate_sig_integrity(
     cert: x509.Certificate,
     expected_content_type: str,
     actual_digest: bytes,
-    sig_validator: Optional[SignatureValidator] = None,
-) -> Tuple[bool, bool]:
+    sig_validator: SignatureValidator | None = None,
+) -> tuple[bool, bool]:
     """
     Validate the integrity of a signature for a particular signerInfo object
     inside a CMS signed data container.
@@ -469,15 +460,15 @@ def extract_certs_for_validation(
 
 async def cms_basic_validation(
     signed_data: cms.SignedData,
-    raw_digest: Optional[bytes] = None,
-    validation_context: Optional[ValidationContext] = None,
-    status_kwargs: Optional[dict] = None,
-    validation_path: Optional[ValidationPath] = None,
-    pkix_validation_params: Optional[PKIXValidationParams] = None,
-    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
+    raw_digest: bytes | None = None,
+    validation_context: ValidationContext | None = None,
+    status_kwargs: dict | None = None,
+    validation_path: ValidationPath | None = None,
+    pkix_validation_params: PKIXValidationParams | None = None,
+    algorithm_policy: CMSAlgorithmUsagePolicy | None = None,
     *,
     key_usage_settings: KeyUsageConstraints,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Perform basic validation of CMS and PKCS#7 signatures in isolation
     (i.e. integrity and trust checks).
@@ -623,7 +614,7 @@ async def validate_cert_usage(
     validation_context: ValidationContext,
     key_usage_settings: KeyUsageConstraints,
     paths: CancelableAsyncIterator[ValidationPath],
-    pkix_validation_params: Optional[PKIXValidationParams] = None,
+    pkix_validation_params: PKIXValidationParams | None = None,
 ) -> 'CertvalidatorOperationResult[ValidationPath]':
     """
     Low-level certificate validation routine.
@@ -666,11 +657,11 @@ async def validate_cert_usage(
 async def async_validate_cms_signature(
     signed_data: cms.SignedData,
     *,
-    status_cls: Type[StatusType],
-    raw_digest: Optional[bytes] = None,
-    validation_context: Optional[ValidationContext] = None,
-    status_kwargs: Optional[dict] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
+    status_cls: type[StatusType],
+    raw_digest: bytes | None = None,
+    validation_context: ValidationContext | None = None,
+    status_kwargs: dict | None = None,
+    key_usage_settings: KeyUsageConstraints | None = None,
 ) -> StatusType: ...
 
 
@@ -678,21 +669,21 @@ async def async_validate_cms_signature(
 async def async_validate_cms_signature(
     signed_data: cms.SignedData,
     *,
-    raw_digest: Optional[bytes] = None,
-    validation_context: Optional[ValidationContext] = None,
-    status_kwargs: Optional[dict] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
+    raw_digest: bytes | None = None,
+    validation_context: ValidationContext | None = None,
+    status_kwargs: dict | None = None,
+    key_usage_settings: KeyUsageConstraints | None = None,
 ) -> SignatureStatus: ...
 
 
 async def async_validate_cms_signature(
     signed_data: cms.SignedData,
     status_cls=SignatureStatus,
-    raw_digest: Optional[bytes] = None,
-    validation_context: Optional[ValidationContext] = None,
-    status_kwargs: Optional[dict] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
-    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
+    raw_digest: bytes | None = None,
+    validation_context: ValidationContext | None = None,
+    status_kwargs: dict | None = None,
+    key_usage_settings: KeyUsageConstraints | None = None,
+    algorithm_policy: CMSAlgorithmUsagePolicy | None = None,
 ) -> StatusType:
     """
     Validate a CMS signature (i.e. a ``SignedData`` object).
@@ -739,7 +730,7 @@ async def async_validate_cms_signature(
     return status_cls(**status_kwargs)
 
 
-def extract_self_reported_ts(signer_info: cms.SignerInfo) -> Optional[datetime]:
+def extract_self_reported_ts(signer_info: cms.SignerInfo) -> datetime | None:
     """
     Extract self-reported timestamp (from the ``signingTime`` attribute)
 
@@ -810,9 +801,9 @@ def get_hash_spec_for_tst_digest(mi_hash_algo: str):
 
 async def collect_timing_info(
     signer_info: cms.SignerInfo,
-    ts_validation_context: Optional[ValidationContext],
+    ts_validation_context: ValidationContext | None,
     raw_digest: Callable[[str], bytes],
-    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
+    algorithm_policy: CMSAlgorithmUsagePolicy | None = None,
 ):
     """
     Collect and validate timing information in a ``SignerInfo`` value.
@@ -838,14 +829,14 @@ async def collect_timing_info(
             there is a clear reason to do otherwise.
     """
 
-    status_kwargs: Dict[str, Any] = {}
+    status_kwargs: dict[str, Any] = {}
 
     # timestamp-related validation
     signer_reported_dt = extract_self_reported_ts(signer_info)
     if signer_reported_dt is not None:
         status_kwargs['signer_reported_dt'] = signer_reported_dt
 
-    tst_validity: Optional[TimestampSignatureStatus] = None
+    tst_validity: TimestampSignatureStatus | None = None
     for tst_signed_data in extract_tst_data_iter(signer_info, signed=False):
         tst_validity_kwargs = await validate_tst_signed_data(
             tst_signed_data,
@@ -860,7 +851,7 @@ async def collect_timing_info(
     if tst_validity is not None:
         status_kwargs['timestamp_validity'] = tst_validity
 
-    content_tst_validity: Optional[TimestampSignatureStatus] = None
+    content_tst_validity: TimestampSignatureStatus | None = None
     for content_tst_signed_data in extract_tst_data_iter(
         signer_info, signed=True
     ):
@@ -885,9 +876,9 @@ async def collect_timing_info(
 
 async def validate_tst_signed_data(
     tst_signed_data: cms.SignedData,
-    validation_context: Optional[ValidationContext],
+    validation_context: ValidationContext | None,
     expected_tst_imprint: Callable[[str], bytes],
-    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
+    algorithm_policy: CMSAlgorithmUsagePolicy | None = None,
 ):
     """
     Validate the ``SignedData`` of a time stamp token.
@@ -953,11 +944,9 @@ async def process_certified_attrs(
     acs: Iterable[cms.AttributeCertificateV2],
     signer_cert: x509.Certificate,
     validation_context: ValidationContext,
-) -> Tuple[
-    List[ACValidationResult],
-    List[
-        Union[PathValidationError, PathBuildingError, InvalidCertificateError]
-    ],
+) -> tuple[
+    list[ACValidationResult],
+    list[PathValidationError | PathBuildingError | InvalidCertificateError],
 ]:
     jobs = [
         async_validate_ac(ac, validation_context, holder_cert=signer_cert)
@@ -980,7 +969,7 @@ async def process_certified_attrs(
 async def collect_signer_attr_status(
     sd_attr_certificates: Iterable[cms.AttributeCertificateV2],
     signer_cert: x509.Certificate,
-    validation_context: Optional[ValidationContext],
+    validation_context: ValidationContext | None,
     sd_signed_attrs: cms.CMSAttributes,
 ):
     # check if we need to process signer-attrs-v2 first
@@ -996,7 +985,7 @@ async def collect_signer_attr_status(
             str(e), ades_subindication=AdESFailure.FORMAT_FAILURE
         ) from e
 
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     cades_ac_results = None
     cades_ac_errors = None
     if signer_attrs is not None:
@@ -1079,13 +1068,13 @@ async def collect_signer_attr_status(
 
 
 async def async_validate_detached_cms(
-    input_data: Union[bytes, IO, cms.ContentInfo, cms.EncapsulatedContentInfo],
+    input_data: bytes | IO | cms.ContentInfo | cms.EncapsulatedContentInfo,
     signed_data: cms.SignedData,
-    signer_validation_context: Optional[ValidationContext] = None,
-    ts_validation_context: Optional[ValidationContext] = None,
-    ac_validation_context: Optional[ValidationContext] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
-    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
+    signer_validation_context: ValidationContext | None = None,
+    ts_validation_context: ValidationContext | None = None,
+    ac_validation_context: ValidationContext | None = None,
+    key_usage_settings: KeyUsageConstraints | None = None,
+    algorithm_policy: CMSAlgorithmUsagePolicy | None = None,
     chunk_size=misc.DEFAULT_CHUNK_SIZE,
     max_read=None,
 ) -> StandardCMSSignatureStatus:
@@ -1142,7 +1131,7 @@ async def async_validate_detached_cms(
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
     signer_info = extract_signer_info(signed_data)
-    digest_by_algo: Dict[str, bytes] = {}
+    digest_by_algo: dict[str, bytes] = {}
 
     def _content_digest(digest_algorithm: str) -> bytes:
         try:
@@ -1208,11 +1197,11 @@ class CertvalidatorOperationResult(Generic[ResultType]):
     Internal class to inspect error data from certvalidator.
     """
 
-    success_result: Optional[ResultType]
-    revo_details: Optional[RevocationDetails] = None
-    error_time_horizon: Optional[datetime] = None
-    error_path: Optional[ValidationPath] = None
-    error_subindic: Optional[AdESIndeterminate] = None
+    success_result: ResultType | None
+    revo_details: RevocationDetails | None = None
+    error_time_horizon: datetime | None = None
+    error_path: ValidationPath | None = None
+    error_subindic: AdESIndeterminate | None = None
 
 
 async def handle_certvalidator_errors(
@@ -1232,7 +1221,7 @@ async def handle_certvalidator_errors(
         )
         logger.warning(msg, exc_info=e)
 
-    time_horizon: Optional[datetime] = None
+    time_horizon: datetime | None = None
     revo_details = path = None
     try:
         return CertvalidatorOperationResult(success_result=await coro)

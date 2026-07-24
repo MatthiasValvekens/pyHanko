@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Tuple
 
 from xsdata.models.datatype import XmlDateTime
 
@@ -18,7 +17,7 @@ __NAMESPACE__ = "http://uri.etsi.org/19102/v1.2.1#"
 
 @dataclass(frozen=True)
 class ConstraintStatusType:
-    status: Optional[str] = field(
+    status: str | None = field(
         default=None,
         metadata={
             "name": "Status",
@@ -27,7 +26,7 @@ class ConstraintStatusType:
             "required": True,
         },
     )
-    overridden_by: Optional[str] = field(
+    overridden_by: str | None = field(
         default=None,
         metadata={
             "name": "OverriddenBy",
@@ -39,7 +38,7 @@ class ConstraintStatusType:
 
 @dataclass(frozen=True)
 class NsPrefixMappingType:
-    namespace_uri: Optional[str] = field(
+    namespace_uri: str | None = field(
         default=None,
         metadata={
             "name": "NamespaceURI",
@@ -48,7 +47,7 @@ class NsPrefixMappingType:
             "required": True,
         },
     )
-    namespace_prefix: Optional[str] = field(
+    namespace_prefix: str | None = field(
         default=None,
         metadata={
             "name": "NamespacePrefix",
@@ -61,7 +60,7 @@ class NsPrefixMappingType:
 
 @dataclass(frozen=True)
 class SAFilterType:
-    filter: Optional[str] = field(
+    filter: str | None = field(
         default=None,
         metadata={
             "name": "Filter",
@@ -74,7 +73,7 @@ class SAFilterType:
 
 @dataclass(frozen=True)
 class SAOCSPIDType:
-    produced_at: Optional[XmlDateTime] = field(
+    produced_at: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "ProducedAt",
@@ -83,7 +82,7 @@ class SAOCSPIDType:
             "required": True,
         },
     )
-    responder_idby_name: Optional[str] = field(
+    responder_idby_name: str | None = field(
         default=None,
         metadata={
             "name": "ResponderIDByName",
@@ -91,7 +90,7 @@ class SAOCSPIDType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    responder_idby_key: Optional[bytes] = field(
+    responder_idby_key: bytes | None = field(
         default=None,
         metadata={
             "name": "ResponderIDByKey",
@@ -110,7 +109,7 @@ class SAOneSignerRoleTypeEndorsementType(Enum):
 
 @dataclass(frozen=True)
 class SignatureQualityType:
-    signature_quality_information: Tuple[str, ...] = field(
+    signature_quality_information: tuple[str, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SignatureQualityInformation",
@@ -123,7 +122,7 @@ class SignatureQualityType:
 
 @dataclass(frozen=True)
 class SignatureValidationProcessType:
-    signature_validation_process_id: Optional[str] = field(
+    signature_validation_process_id: str | None = field(
         default=None,
         metadata={
             "name": "SignatureValidationProcessID",
@@ -131,7 +130,7 @@ class SignatureValidationProcessType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_validation_service_policy: Optional[str] = field(
+    signature_validation_service_policy: str | None = field(
         default=None,
         metadata={
             "name": "SignatureValidationServicePolicy",
@@ -139,7 +138,7 @@ class SignatureValidationProcessType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_validation_practice_statement: Optional[str] = field(
+    signature_validation_practice_statement: str | None = field(
         default=None,
         metadata={
             "name": "SignatureValidationPracticeStatement",
@@ -147,7 +146,7 @@ class SignatureValidationProcessType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Optional[object] = field(
+    other_element: object | None = field(
         default=None,
         metadata={
             "type": "Wildcard",
@@ -158,7 +157,7 @@ class SignatureValidationProcessType:
 
 @dataclass(frozen=True)
 class TypedDataType:
-    type_value: Optional[str] = field(
+    type_value: str | None = field(
         default=None,
         metadata={
             "name": "Type",
@@ -167,7 +166,7 @@ class TypedDataType:
             "required": True,
         },
     )
-    value: Optional[object] = field(
+    value: object | None = field(
         default=None,
         metadata={
             "name": "Value",
@@ -179,14 +178,14 @@ class TypedDataType:
 
 @dataclass(frozen=True)
 class VOReferenceType:
-    any_element: Optional[object] = field(
+    any_element: object | None = field(
         default=None,
         metadata={
             "type": "Wildcard",
             "namespace": "##any",
         },
     )
-    voreference: Tuple[str, ...] = field(
+    voreference: tuple[str, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "VOReference",
@@ -198,7 +197,7 @@ class VOReferenceType:
 
 @dataclass(frozen=True)
 class AdditionalValidationReportDataType:
-    report_data: Tuple[TypedDataType, ...] = field(
+    report_data: tuple[TypedDataType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ReportData",
@@ -211,7 +210,7 @@ class AdditionalValidationReportDataType:
 
 @dataclass(frozen=True)
 class AttributeBaseType:
-    attribute_object: Tuple[VOReferenceType, ...] = field(
+    attribute_object: tuple[VOReferenceType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "AttributeObject",
@@ -219,7 +218,7 @@ class AttributeBaseType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signed: Optional[bool] = field(
+    signed: bool | None = field(
         default=None,
         metadata={
             "name": "Signed",
@@ -230,7 +229,7 @@ class AttributeBaseType:
 
 @dataclass(frozen=True)
 class CertificateChainType:
-    signing_certificate: Optional[VOReferenceType] = field(
+    signing_certificate: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "SigningCertificate",
@@ -239,7 +238,7 @@ class CertificateChainType:
             "required": True,
         },
     )
-    intermediate_certificate: Tuple[VOReferenceType, ...] = field(
+    intermediate_certificate: tuple[VOReferenceType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "IntermediateCertificate",
@@ -247,7 +246,7 @@ class CertificateChainType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    trust_anchor: Optional[VOReferenceType] = field(
+    trust_anchor: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "TrustAnchor",
@@ -255,7 +254,7 @@ class CertificateChainType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Optional[object] = field(
+    other_element: object | None = field(
         default=None,
         metadata={
             "type": "Wildcard",
@@ -266,7 +265,7 @@ class CertificateChainType:
 
 @dataclass(frozen=True)
 class CryptoInformationType:
-    validation_object_id: Optional[VOReferenceType] = field(
+    validation_object_id: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "ValidationObjectId",
@@ -275,7 +274,7 @@ class CryptoInformationType:
             "required": True,
         },
     )
-    algorithm: Optional[str] = field(
+    algorithm: str | None = field(
         default=None,
         metadata={
             "name": "Algorithm",
@@ -284,7 +283,7 @@ class CryptoInformationType:
             "required": True,
         },
     )
-    algorithm_parameters: Optional[TypedDataType] = field(
+    algorithm_parameters: TypedDataType | None = field(
         default=None,
         metadata={
             "name": "AlgorithmParameters",
@@ -292,7 +291,7 @@ class CryptoInformationType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    secure_algorithm: Optional[bool] = field(
+    secure_algorithm: bool | None = field(
         default=None,
         metadata={
             "name": "SecureAlgorithm",
@@ -301,7 +300,7 @@ class CryptoInformationType:
             "required": True,
         },
     )
-    not_after: Optional[XmlDateTime] = field(
+    not_after: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "NotAfter",
@@ -309,7 +308,7 @@ class CryptoInformationType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Optional[object] = field(
+    other_element: object | None = field(
         default=None,
         metadata={
             "type": "Wildcard",
@@ -320,7 +319,7 @@ class CryptoInformationType:
 
 @dataclass(frozen=True)
 class POEType:
-    poetime: Optional[XmlDateTime] = field(
+    poetime: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "POETime",
@@ -329,7 +328,7 @@ class POEType:
             "required": True,
         },
     )
-    type_of_proof: Optional[str] = field(
+    type_of_proof: str | None = field(
         default=None,
         metadata={
             "name": "TypeOfProof",
@@ -338,7 +337,7 @@ class POEType:
             "required": True,
         },
     )
-    poeobject: Optional[VOReferenceType] = field(
+    poeobject: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "POEObject",
@@ -350,7 +349,7 @@ class POEType:
 
 @dataclass(frozen=True)
 class RevocationStatusInformationType:
-    validation_object_id: Optional[VOReferenceType] = field(
+    validation_object_id: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "ValidationObjectId",
@@ -359,7 +358,7 @@ class RevocationStatusInformationType:
             "required": True,
         },
     )
-    revocation_time: Optional[XmlDateTime] = field(
+    revocation_time: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "RevocationTime",
@@ -368,7 +367,7 @@ class RevocationStatusInformationType:
             "required": True,
         },
     )
-    revocation_reason: Optional[str] = field(
+    revocation_reason: str | None = field(
         default=None,
         metadata={
             "name": "RevocationReason",
@@ -376,7 +375,7 @@ class RevocationStatusInformationType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    revocation_object: Optional[VOReferenceType] = field(
+    revocation_object: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "RevocationObject",
@@ -384,7 +383,7 @@ class RevocationStatusInformationType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Optional[object] = field(
+    other_element: object | None = field(
         default=None,
         metadata={
             "type": "Wildcard",
@@ -395,7 +394,7 @@ class RevocationStatusInformationType:
 
 @dataclass(frozen=True)
 class SACRLIDType:
-    digest_method: Optional[DigestMethod] = field(
+    digest_method: DigestMethod | None = field(
         default=None,
         metadata={
             "name": "DigestMethod",
@@ -404,7 +403,7 @@ class SACRLIDType:
             "required": True,
         },
     )
-    digest_value: Optional[DigestValue] = field(
+    digest_value: DigestValue | None = field(
         default=None,
         metadata={
             "name": "DigestValue",
@@ -417,7 +416,7 @@ class SACRLIDType:
 
 @dataclass(frozen=True)
 class SACertIDType:
-    x509_issuer_serial: Optional[bytes] = field(
+    x509_issuer_serial: bytes | None = field(
         default=None,
         metadata={
             "name": "X509IssuerSerial",
@@ -426,7 +425,7 @@ class SACertIDType:
             "format": "base64",
         },
     )
-    digest_method: Optional[DigestMethod] = field(
+    digest_method: DigestMethod | None = field(
         default=None,
         metadata={
             "name": "DigestMethod",
@@ -435,7 +434,7 @@ class SACertIDType:
             "required": True,
         },
     )
-    digest_value: Optional[DigestValue] = field(
+    digest_value: DigestValue | None = field(
         default=None,
         metadata={
             "name": "DigestValue",
@@ -448,7 +447,7 @@ class SACertIDType:
 
 @dataclass(frozen=True)
 class SAOneSignerRoleType:
-    role: Optional[str] = field(
+    role: str | None = field(
         default=None,
         metadata={
             "name": "Role",
@@ -457,7 +456,7 @@ class SAOneSignerRoleType:
             "required": True,
         },
     )
-    endorsement_type: Optional[SAOneSignerRoleTypeEndorsementType] = field(
+    endorsement_type: SAOneSignerRoleTypeEndorsementType | None = field(
         default=None,
         metadata={
             "name": "EndorsementType",
@@ -470,7 +469,7 @@ class SAOneSignerRoleType:
 
 @dataclass(frozen=True)
 class SignatureIdentifierType:
-    digest_alg_and_value: Optional[DigestAlgAndValueType] = field(
+    digest_alg_and_value: DigestAlgAndValueType | None = field(
         default=None,
         metadata={
             "name": "DigestAlgAndValue",
@@ -478,7 +477,7 @@ class SignatureIdentifierType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_value: Optional[SignatureValue] = field(
+    signature_value: SignatureValue | None = field(
         default=None,
         metadata={
             "name": "SignatureValue",
@@ -486,7 +485,7 @@ class SignatureIdentifierType:
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
         },
     )
-    hash_only: Optional[bool] = field(
+    hash_only: bool | None = field(
         default=None,
         metadata={
             "name": "HashOnly",
@@ -495,7 +494,7 @@ class SignatureIdentifierType:
             "required": True,
         },
     )
-    doc_hash_only: Optional[bool] = field(
+    doc_hash_only: bool | None = field(
         default=None,
         metadata={
             "name": "DocHashOnly",
@@ -504,7 +503,7 @@ class SignatureIdentifierType:
             "required": True,
         },
     )
-    daidentifier: Optional[str] = field(
+    daidentifier: str | None = field(
         default=None,
         metadata={
             "name": "DAIdentifier",
@@ -512,14 +511,14 @@ class SignatureIdentifierType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Tuple[object, ...] = field(
+    other_element: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
             "namespace": "##other",
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "type": "Attribute",
@@ -529,18 +528,16 @@ class SignatureIdentifierType:
 
 @dataclass(frozen=True)
 class SignatureValidationPolicyType:
-    signature_policy_identifier: Optional[SignaturePolicyIdentifierType] = (
-        field(
-            default=None,
-            metadata={
-                "name": "SignaturePolicyIdentifier",
-                "type": "Element",
-                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-                "required": True,
-            },
-        )
+    signature_policy_identifier: SignaturePolicyIdentifierType | None = field(
+        default=None,
+        metadata={
+            "name": "SignaturePolicyIdentifier",
+            "type": "Element",
+            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+            "required": True,
+        },
     )
-    policy_name: Optional[str] = field(
+    policy_name: str | None = field(
         default=None,
         metadata={
             "name": "PolicyName",
@@ -548,7 +545,7 @@ class SignatureValidationPolicyType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    formal_policy_uri: Optional[str] = field(
+    formal_policy_uri: str | None = field(
         default=None,
         metadata={
             "name": "FormalPolicyURI",
@@ -556,7 +553,7 @@ class SignatureValidationPolicyType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    readable_policy_uri: Optional[str] = field(
+    readable_policy_uri: str | None = field(
         default=None,
         metadata={
             "name": "ReadablePolicyURI",
@@ -564,7 +561,7 @@ class SignatureValidationPolicyType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    formal_policy_object: Optional[VOReferenceType] = field(
+    formal_policy_object: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "FormalPolicyObject",
@@ -576,7 +573,7 @@ class SignatureValidationPolicyType:
 
 @dataclass(frozen=True)
 class SignatureValidatorType:
-    digital_id: Tuple[DigitalIdentityType, ...] = field(
+    digital_id: tuple[DigitalIdentityType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "DigitalId",
@@ -585,7 +582,7 @@ class SignatureValidatorType:
             "min_occurs": 1,
         },
     )
-    tspinformation: Optional[TSPInformationType] = field(
+    tspinformation: TSPInformationType | None = field(
         default=None,
         metadata={
             "name": "TSPInformation",
@@ -593,7 +590,7 @@ class SignatureValidatorType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Tuple[object, ...] = field(
+    other_element: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -604,7 +601,7 @@ class SignatureValidatorType:
 
 @dataclass(frozen=True)
 class SignerInformationType:
-    signer_certificate: Optional[VOReferenceType] = field(
+    signer_certificate: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "SignerCertificate",
@@ -613,7 +610,7 @@ class SignerInformationType:
             "required": True,
         },
     )
-    signer: Optional[str] = field(
+    signer: str | None = field(
         default=None,
         metadata={
             "name": "Signer",
@@ -621,14 +618,14 @@ class SignerInformationType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Optional[object] = field(
+    other_element: object | None = field(
         default=None,
         metadata={
             "type": "Wildcard",
             "namespace": "##other",
         },
     )
-    pseudonym: Optional[bool] = field(
+    pseudonym: bool | None = field(
         default=None,
         metadata={
             "name": "Pseudonym",
@@ -639,7 +636,7 @@ class SignerInformationType:
 
 @dataclass(frozen=True)
 class SignersDocumentType:
-    digest_alg_and_value: Optional[DigestAlgAndValueType] = field(
+    digest_alg_and_value: DigestAlgAndValueType | None = field(
         default=None,
         metadata={
             "name": "DigestAlgAndValue",
@@ -648,7 +645,7 @@ class SignersDocumentType:
             "required": True,
         },
     )
-    signers_document_representation: Tuple[VOReferenceType, ...] = field(
+    signers_document_representation: tuple[VOReferenceType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SignersDocumentRepresentation",
@@ -659,7 +656,7 @@ class SignersDocumentType:
             "sequence": 1,
         },
     )
-    signers_document_ref: Optional[VOReferenceType] = field(
+    signers_document_ref: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "SignersDocumentRef",
@@ -671,14 +668,14 @@ class SignersDocumentType:
 
 @dataclass(frozen=True)
 class ValidationObjectRepresentationType:
-    direct: Optional[object] = field(
+    direct: object | None = field(
         default=None,
         metadata={
             "type": "Element",
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    base64: Optional[bytes] = field(
+    base64: bytes | None = field(
         default=None,
         metadata={
             "type": "Element",
@@ -686,7 +683,7 @@ class ValidationObjectRepresentationType:
             "format": "base64",
         },
     )
-    digest_alg_and_value: Optional[DigestAlgAndValueType] = field(
+    digest_alg_and_value: DigestAlgAndValueType | None = field(
         default=None,
         metadata={
             "name": "DigestAlgAndValue",
@@ -694,7 +691,7 @@ class ValidationObjectRepresentationType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    uri: Optional[str] = field(
+    uri: str | None = field(
         default=None,
         metadata={
             "name": "URI",
@@ -706,7 +703,7 @@ class ValidationObjectRepresentationType:
 
 @dataclass(frozen=True)
 class XAdESSignaturePtrType:
-    ns_prefix_mapping: Tuple[NsPrefixMappingType, ...] = field(
+    ns_prefix_mapping: tuple[NsPrefixMappingType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "NsPrefixMapping",
@@ -714,21 +711,21 @@ class XAdESSignaturePtrType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    which_document: Optional[str] = field(
+    which_document: str | None = field(
         default=None,
         metadata={
             "name": "WhichDocument",
             "type": "Attribute",
         },
     )
-    xpath: Optional[str] = field(
+    xpath: str | None = field(
         default=None,
         metadata={
             "name": "XPath",
             "type": "Attribute",
         },
     )
-    schema_refs: Tuple[str, ...] = field(
+    schema_refs: tuple[str, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SchemaRefs",
@@ -740,7 +737,7 @@ class XAdESSignaturePtrType:
 
 @dataclass(frozen=True)
 class SACertIDListType(AttributeBaseType):
-    cert_id: Tuple[SACertIDType, ...] = field(
+    cert_id: tuple[SACertIDType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "CertID",
@@ -752,7 +749,7 @@ class SACertIDListType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SACommitmentTypeIndicationType(AttributeBaseType):
-    commitment_type_identifier: Optional[str] = field(
+    commitment_type_identifier: str | None = field(
         default=None,
         metadata={
             "name": "CommitmentTypeIdentifier",
@@ -765,7 +762,7 @@ class SACommitmentTypeIndicationType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SAContactInfoType(AttributeBaseType):
-    contact_info_element: Optional[str] = field(
+    contact_info_element: str | None = field(
         default=None,
         metadata={
             "name": "ContactInfoElement",
@@ -778,7 +775,7 @@ class SAContactInfoType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SADSSType(AttributeBaseType):
-    certs: Optional[VOReferenceType] = field(
+    certs: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "Certs",
@@ -786,7 +783,7 @@ class SADSSType(AttributeBaseType):
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    crls: Optional[VOReferenceType] = field(
+    crls: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "CRLs",
@@ -794,7 +791,7 @@ class SADSSType(AttributeBaseType):
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    ocsps: Optional[VOReferenceType] = field(
+    ocsps: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "OCSPs",
@@ -806,7 +803,7 @@ class SADSSType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SADataObjectFormatType(AttributeBaseType):
-    content_type: Optional[str] = field(
+    content_type: str | None = field(
         default=None,
         metadata={
             "name": "ContentType",
@@ -814,7 +811,7 @@ class SADataObjectFormatType(AttributeBaseType):
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    mime_type: Optional[str] = field(
+    mime_type: str | None = field(
         default=None,
         metadata={
             "name": "MimeType",
@@ -826,7 +823,7 @@ class SADataObjectFormatType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SAMessageDigestType(AttributeBaseType):
-    digest: Optional[bytes] = field(
+    digest: bytes | None = field(
         default=None,
         metadata={
             "name": "Digest",
@@ -840,7 +837,7 @@ class SAMessageDigestType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SANameType(AttributeBaseType):
-    name_element: Optional[str] = field(
+    name_element: str | None = field(
         default=None,
         metadata={
             "name": "NameElement",
@@ -853,7 +850,7 @@ class SANameType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SAReasonType(AttributeBaseType):
-    reason_element: Optional[str] = field(
+    reason_element: str | None = field(
         default=None,
         metadata={
             "name": "ReasonElement",
@@ -866,7 +863,7 @@ class SAReasonType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SARevIDListType(AttributeBaseType):
-    crlid: Tuple[SACRLIDType, ...] = field(
+    crlid: tuple[SACRLIDType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "CRLID",
@@ -874,7 +871,7 @@ class SARevIDListType(AttributeBaseType):
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    ocspid: Tuple[SAOCSPIDType, ...] = field(
+    ocspid: tuple[SAOCSPIDType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "OCSPID",
@@ -886,7 +883,7 @@ class SARevIDListType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SASigPolicyIdentifierType(AttributeBaseType):
-    sig_policy_id: Optional[str] = field(
+    sig_policy_id: str | None = field(
         default=None,
         metadata={
             "name": "SigPolicyId",
@@ -899,7 +896,7 @@ class SASigPolicyIdentifierType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SASignatureProductionPlaceType(AttributeBaseType):
-    address_string: Tuple[str, ...] = field(
+    address_string: tuple[str, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "AddressString",
@@ -912,7 +909,7 @@ class SASignatureProductionPlaceType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SASignerRoleType(AttributeBaseType):
-    role_details: Tuple[SAOneSignerRoleType, ...] = field(
+    role_details: tuple[SAOneSignerRoleType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "RoleDetails",
@@ -925,7 +922,7 @@ class SASignerRoleType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SASigningTimeType(AttributeBaseType):
-    time: Optional[XmlDateTime] = field(
+    time: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "Time",
@@ -938,7 +935,7 @@ class SASigningTimeType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SASubFilterType(AttributeBaseType):
-    sub_filter_element: Optional[str] = field(
+    sub_filter_element: str | None = field(
         default=None,
         metadata={
             "name": "SubFilterElement",
@@ -951,7 +948,7 @@ class SASubFilterType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SATimestampType(AttributeBaseType):
-    time_stamp_value: Optional[XmlDateTime] = field(
+    time_stamp_value: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "TimeStampValue",
@@ -964,7 +961,7 @@ class SATimestampType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class ValidationReportDataType:
-    trust_anchor: Optional[VOReferenceType] = field(
+    trust_anchor: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "TrustAnchor",
@@ -972,7 +969,7 @@ class ValidationReportDataType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    certificate_chain: Optional[CertificateChainType] = field(
+    certificate_chain: CertificateChainType | None = field(
         default=None,
         metadata={
             "name": "CertificateChain",
@@ -980,7 +977,7 @@ class ValidationReportDataType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    related_validation_object: Tuple[VOReferenceType, ...] = field(
+    related_validation_object: tuple[VOReferenceType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "RelatedValidationObject",
@@ -988,7 +985,7 @@ class ValidationReportDataType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    revocation_status_information: Optional[RevocationStatusInformationType] = (
+    revocation_status_information: RevocationStatusInformationType | None = (
         field(
             default=None,
             metadata={
@@ -998,7 +995,7 @@ class ValidationReportDataType:
             },
         )
     )
-    crypto_information: Optional[CryptoInformationType] = field(
+    crypto_information: CryptoInformationType | None = field(
         default=None,
         metadata={
             "name": "CryptoInformation",
@@ -1006,9 +1003,9 @@ class ValidationReportDataType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    additional_validation_report_data: Optional[
-        AdditionalValidationReportDataType
-    ] = field(
+    additional_validation_report_data: (
+        AdditionalValidationReportDataType | None
+    ) = field(
         default=None,
         metadata={
             "name": "AdditionalValidationReportData",
@@ -1020,7 +1017,7 @@ class ValidationReportDataType:
 
 @dataclass(frozen=True)
 class ValidationTimeInfoType:
-    validation_time: Optional[XmlDateTime] = field(
+    validation_time: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "ValidationTime",
@@ -1029,7 +1026,7 @@ class ValidationTimeInfoType:
             "required": True,
         },
     )
-    best_signature_time: Optional[POEType] = field(
+    best_signature_time: POEType | None = field(
         default=None,
         metadata={
             "name": "BestSignatureTime",
@@ -1048,7 +1045,7 @@ class XAdESSignaturePtr(XAdESSignaturePtrType):
 
 @dataclass(frozen=True)
 class SAVRIType(AttributeBaseType):
-    certs: Optional[VOReferenceType] = field(
+    certs: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "Certs",
@@ -1056,7 +1053,7 @@ class SAVRIType(AttributeBaseType):
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    crls: Optional[VOReferenceType] = field(
+    crls: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "CRLs",
@@ -1064,7 +1061,7 @@ class SAVRIType(AttributeBaseType):
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    ocsps: Optional[VOReferenceType] = field(
+    ocsps: VOReferenceType | None = field(
         default=None,
         metadata={
             "name": "OCSPs",
@@ -1072,7 +1069,7 @@ class SAVRIType(AttributeBaseType):
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    tu: Optional[str] = field(
+    tu: str | None = field(
         default=None,
         metadata={
             "name": "TU",
@@ -1080,7 +1077,7 @@ class SAVRIType(AttributeBaseType):
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    ts: Optional[SATimestampType] = field(
+    ts: SATimestampType | None = field(
         default=None,
         metadata={
             "name": "TS",
@@ -1092,7 +1089,7 @@ class SAVRIType(AttributeBaseType):
 
 @dataclass(frozen=True)
 class SignatureReferenceType:
-    canonicalization_method: Optional[str] = field(
+    canonicalization_method: str | None = field(
         default=None,
         metadata={
             "name": "CanonicalizationMethod",
@@ -1100,7 +1097,7 @@ class SignatureReferenceType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    digest_method: Optional[str] = field(
+    digest_method: str | None = field(
         default=None,
         metadata={
             "name": "DigestMethod",
@@ -1108,7 +1105,7 @@ class SignatureReferenceType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    digest_value: Optional[bytes] = field(
+    digest_value: bytes | None = field(
         default=None,
         metadata={
             "name": "DigestValue",
@@ -1117,7 +1114,7 @@ class SignatureReferenceType:
             "format": "base64",
         },
     )
-    xad_essignature_ptr: Optional[XAdESSignaturePtr] = field(
+    xad_essignature_ptr: XAdESSignaturePtr | None = field(
         default=None,
         metadata={
             "name": "XAdESSignaturePtr",
@@ -1125,7 +1122,7 @@ class SignatureReferenceType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    pad_esfield_name: Optional[str] = field(
+    pad_esfield_name: str | None = field(
         default=None,
         metadata={
             "name": "PAdESFieldName",
@@ -1133,7 +1130,7 @@ class SignatureReferenceType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Tuple[object, ...] = field(
+    other_element: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -1144,7 +1141,7 @@ class SignatureReferenceType:
 
 @dataclass(frozen=True)
 class ValidationStatusType:
-    main_indication: Optional[str] = field(
+    main_indication: str | None = field(
         default=None,
         metadata={
             "name": "MainIndication",
@@ -1153,7 +1150,7 @@ class ValidationStatusType:
             "required": True,
         },
     )
-    sub_indication: Tuple[str, ...] = field(
+    sub_indication: tuple[str, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SubIndication",
@@ -1161,7 +1158,7 @@ class ValidationStatusType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    associated_validation_report_data: Tuple[ValidationReportDataType, ...] = (
+    associated_validation_report_data: tuple[ValidationReportDataType, ...] = (
         field(
             default_factory=tuple,
             metadata={
@@ -1175,7 +1172,7 @@ class ValidationStatusType:
 
 @dataclass(frozen=True)
 class IndividualValidationConstraintReportType:
-    validation_constraint_identifier: Optional[str] = field(
+    validation_constraint_identifier: str | None = field(
         default=None,
         metadata={
             "name": "ValidationConstraintIdentifier",
@@ -1184,7 +1181,7 @@ class IndividualValidationConstraintReportType:
             "required": True,
         },
     )
-    validation_constraint_parameter: Tuple[TypedDataType, ...] = field(
+    validation_constraint_parameter: tuple[TypedDataType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ValidationConstraintParameter",
@@ -1192,7 +1189,7 @@ class IndividualValidationConstraintReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    constraint_status: Optional[ConstraintStatusType] = field(
+    constraint_status: ConstraintStatusType | None = field(
         default=None,
         metadata={
             "name": "ConstraintStatus",
@@ -1201,7 +1198,7 @@ class IndividualValidationConstraintReportType:
             "required": True,
         },
     )
-    validation_status: Optional[ValidationStatusType] = field(
+    validation_status: ValidationStatusType | None = field(
         default=None,
         metadata={
             "name": "ValidationStatus",
@@ -1209,7 +1206,7 @@ class IndividualValidationConstraintReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    indications: Optional[object] = field(
+    indications: object | None = field(
         default=None,
         metadata={
             "name": "Indications",
@@ -1221,7 +1218,7 @@ class IndividualValidationConstraintReportType:
 
 @dataclass(frozen=True)
 class POEProvisioningType:
-    poetime: Optional[XmlDateTime] = field(
+    poetime: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "POETime",
@@ -1230,7 +1227,7 @@ class POEProvisioningType:
             "required": True,
         },
     )
-    validation_object: Tuple[VOReferenceType, ...] = field(
+    validation_object: tuple[VOReferenceType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ValidationObject",
@@ -1238,7 +1235,7 @@ class POEProvisioningType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_reference: Tuple[SignatureReferenceType, ...] = field(
+    signature_reference: tuple[SignatureReferenceType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SignatureReference",
@@ -1250,7 +1247,7 @@ class POEProvisioningType:
 
 @dataclass(frozen=True)
 class SACounterSignatureType(AttributeBaseType):
-    counter_signature: Optional[SignatureReferenceType] = field(
+    counter_signature: SignatureReferenceType | None = field(
         default=None,
         metadata={
             "name": "CounterSignature",
@@ -1269,7 +1266,7 @@ class SignatureReference(SignatureReferenceType):
 
 @dataclass(frozen=True)
 class SignatureAttributesType:
-    signing_time: Tuple[SASigningTimeType, ...] = field(
+    signing_time: tuple[SASigningTimeType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SigningTime",
@@ -1277,7 +1274,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signing_certificate: Tuple[SACertIDListType, ...] = field(
+    signing_certificate: tuple[SACertIDListType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SigningCertificate",
@@ -1285,7 +1282,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    data_object_format: Tuple[SADataObjectFormatType, ...] = field(
+    data_object_format: tuple[SADataObjectFormatType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "DataObjectFormat",
@@ -1293,7 +1290,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    commitment_type_indication: Tuple[SACommitmentTypeIndicationType, ...] = (
+    commitment_type_indication: tuple[SACommitmentTypeIndicationType, ...] = (
         field(
             default_factory=tuple,
             metadata={
@@ -1303,7 +1300,7 @@ class SignatureAttributesType:
             },
         )
     )
-    all_data_objects_time_stamp: Tuple[SATimestampType, ...] = field(
+    all_data_objects_time_stamp: tuple[SATimestampType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "AllDataObjectsTimeStamp",
@@ -1311,7 +1308,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    individual_data_objects_time_stamp: Tuple[SATimestampType, ...] = field(
+    individual_data_objects_time_stamp: tuple[SATimestampType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "IndividualDataObjectsTimeStamp",
@@ -1319,7 +1316,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    sig_policy_identifier: Tuple[SASigPolicyIdentifierType, ...] = field(
+    sig_policy_identifier: tuple[SASigPolicyIdentifierType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SigPolicyIdentifier",
@@ -1327,7 +1324,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_production_place: Tuple[SASignatureProductionPlaceType, ...] = (
+    signature_production_place: tuple[SASignatureProductionPlaceType, ...] = (
         field(
             default_factory=tuple,
             metadata={
@@ -1337,7 +1334,7 @@ class SignatureAttributesType:
             },
         )
     )
-    signer_role: Tuple[SASignerRoleType, ...] = field(
+    signer_role: tuple[SASignerRoleType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SignerRole",
@@ -1345,7 +1342,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    counter_signature: Tuple[SACounterSignatureType, ...] = field(
+    counter_signature: tuple[SACounterSignatureType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "CounterSignature",
@@ -1353,7 +1350,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_time_stamp: Tuple[SATimestampType, ...] = field(
+    signature_time_stamp: tuple[SATimestampType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SignatureTimeStamp",
@@ -1361,7 +1358,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    complete_certificate_refs: Tuple[SACertIDListType, ...] = field(
+    complete_certificate_refs: tuple[SACertIDListType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "CompleteCertificateRefs",
@@ -1369,7 +1366,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    complete_revocation_refs: Tuple[SARevIDListType, ...] = field(
+    complete_revocation_refs: tuple[SARevIDListType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "CompleteRevocationRefs",
@@ -1377,7 +1374,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    attribute_certificate_refs: Tuple[SACertIDListType, ...] = field(
+    attribute_certificate_refs: tuple[SACertIDListType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "AttributeCertificateRefs",
@@ -1385,7 +1382,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    attribute_revocation_refs: Tuple[SARevIDListType, ...] = field(
+    attribute_revocation_refs: tuple[SARevIDListType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "AttributeRevocationRefs",
@@ -1393,7 +1390,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    sig_and_refs_time_stamp: Tuple[SATimestampType, ...] = field(
+    sig_and_refs_time_stamp: tuple[SATimestampType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SigAndRefsTimeStamp",
@@ -1401,7 +1398,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    refs_only_time_stamp: Tuple[SATimestampType, ...] = field(
+    refs_only_time_stamp: tuple[SATimestampType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "RefsOnlyTimeStamp",
@@ -1409,7 +1406,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    certificate_values: Tuple[AttributeBaseType, ...] = field(
+    certificate_values: tuple[AttributeBaseType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "CertificateValues",
@@ -1417,7 +1414,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    revocation_values: Tuple[AttributeBaseType, ...] = field(
+    revocation_values: tuple[AttributeBaseType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "RevocationValues",
@@ -1425,7 +1422,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    attr_authorities_cert_values: Tuple[AttributeBaseType, ...] = field(
+    attr_authorities_cert_values: tuple[AttributeBaseType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "AttrAuthoritiesCertValues",
@@ -1433,7 +1430,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    attribute_revocation_values: Tuple[AttributeBaseType, ...] = field(
+    attribute_revocation_values: tuple[AttributeBaseType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "AttributeRevocationValues",
@@ -1441,7 +1438,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    time_stamp_validation_data: Tuple[AttributeBaseType, ...] = field(
+    time_stamp_validation_data: tuple[AttributeBaseType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "TimeStampValidationData",
@@ -1449,7 +1446,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    archive_time_stamp: Tuple[SATimestampType, ...] = field(
+    archive_time_stamp: tuple[SATimestampType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ArchiveTimeStamp",
@@ -1457,7 +1454,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    renewed_digests: Tuple[Tuple[int, ...], ...] = field(
+    renewed_digests: tuple[tuple[int, ...], ...] = field(
         default_factory=tuple,
         metadata={
             "name": "RenewedDigests",
@@ -1466,7 +1463,7 @@ class SignatureAttributesType:
             "tokens": True,
         },
     )
-    message_digest: Tuple[SAMessageDigestType, ...] = field(
+    message_digest: tuple[SAMessageDigestType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "MessageDigest",
@@ -1474,7 +1471,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    dss: Tuple[SADSSType, ...] = field(
+    dss: tuple[SADSSType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "DSS",
@@ -1482,7 +1479,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    vri: Tuple[SAVRIType, ...] = field(
+    vri: tuple[SAVRIType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "VRI",
@@ -1490,7 +1487,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    doc_time_stamp: Tuple[SATimestampType, ...] = field(
+    doc_time_stamp: tuple[SATimestampType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "DocTimeStamp",
@@ -1498,7 +1495,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    reason: Tuple[SAReasonType, ...] = field(
+    reason: tuple[SAReasonType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Reason",
@@ -1506,7 +1503,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    name: Tuple[SANameType, ...] = field(
+    name: tuple[SANameType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Name",
@@ -1514,7 +1511,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    contact_info: Tuple[SAContactInfoType, ...] = field(
+    contact_info: tuple[SAContactInfoType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ContactInfo",
@@ -1522,7 +1519,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    sub_filter: Tuple[SASubFilterType, ...] = field(
+    sub_filter: tuple[SASubFilterType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SubFilter",
@@ -1530,7 +1527,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    byte_range: Tuple[Tuple[int, ...], ...] = field(
+    byte_range: tuple[tuple[int, ...], ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ByteRange",
@@ -1539,7 +1536,7 @@ class SignatureAttributesType:
             "tokens": True,
         },
     )
-    filter: Tuple[SAFilterType, ...] = field(
+    filter: tuple[SAFilterType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Filter",
@@ -1547,7 +1544,7 @@ class SignatureAttributesType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    other_element: Tuple[object, ...] = field(
+    other_element: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -1558,17 +1555,15 @@ class SignatureAttributesType:
 
 @dataclass(frozen=True)
 class ValidationConstraintsEvaluationReportType:
-    signature_validation_policy: Optional[SignatureValidationPolicyType] = (
-        field(
-            default=None,
-            metadata={
-                "name": "SignatureValidationPolicy",
-                "type": "Element",
-                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-            },
-        )
+    signature_validation_policy: SignatureValidationPolicyType | None = field(
+        default=None,
+        metadata={
+            "name": "SignatureValidationPolicy",
+            "type": "Element",
+            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+        },
     )
-    validation_constraint: Tuple[
+    validation_constraint: tuple[
         IndividualValidationConstraintReportType, ...
     ] = field(
         default_factory=tuple,
@@ -1582,7 +1577,7 @@ class ValidationConstraintsEvaluationReportType:
 
 @dataclass(frozen=True)
 class SignatureValidationReportType:
-    signature_identifier: Optional[SignatureIdentifierType] = field(
+    signature_identifier: SignatureIdentifierType | None = field(
         default=None,
         metadata={
             "name": "SignatureIdentifier",
@@ -1590,9 +1585,9 @@ class SignatureValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    validation_constraints_evaluation_report: Optional[
-        ValidationConstraintsEvaluationReportType
-    ] = field(
+    validation_constraints_evaluation_report: (
+        ValidationConstraintsEvaluationReportType | None
+    ) = field(
         default=None,
         metadata={
             "name": "ValidationConstraintsEvaluationReport",
@@ -1600,7 +1595,7 @@ class SignatureValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    validation_time_info: Optional[ValidationTimeInfoType] = field(
+    validation_time_info: ValidationTimeInfoType | None = field(
         default=None,
         metadata={
             "name": "ValidationTimeInfo",
@@ -1608,7 +1603,7 @@ class SignatureValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signers_document: Optional[SignersDocumentType] = field(
+    signers_document: SignersDocumentType | None = field(
         default=None,
         metadata={
             "name": "SignersDocument",
@@ -1616,7 +1611,7 @@ class SignatureValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_attributes: Optional[SignatureAttributesType] = field(
+    signature_attributes: SignatureAttributesType | None = field(
         default=None,
         metadata={
             "name": "SignatureAttributes",
@@ -1624,7 +1619,7 @@ class SignatureValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signer_information: Optional[SignerInformationType] = field(
+    signer_information: SignerInformationType | None = field(
         default=None,
         metadata={
             "name": "SignerInformation",
@@ -1632,7 +1627,7 @@ class SignatureValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_quality: Optional[SignatureQualityType] = field(
+    signature_quality: SignatureQualityType | None = field(
         default=None,
         metadata={
             "name": "SignatureQuality",
@@ -1640,17 +1635,15 @@ class SignatureValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_validation_process: Optional[SignatureValidationProcessType] = (
-        field(
-            default=None,
-            metadata={
-                "name": "SignatureValidationProcess",
-                "type": "Element",
-                "namespace": "http://uri.etsi.org/19102/v1.2.1#",
-            },
-        )
+    signature_validation_process: SignatureValidationProcessType | None = field(
+        default=None,
+        metadata={
+            "name": "SignatureValidationProcess",
+            "type": "Element",
+            "namespace": "http://uri.etsi.org/19102/v1.2.1#",
+        },
     )
-    signature_validation_status: Optional[ValidationStatusType] = field(
+    signature_validation_status: ValidationStatusType | None = field(
         default=None,
         metadata={
             "name": "SignatureValidationStatus",
@@ -1659,7 +1652,7 @@ class SignatureValidationReportType:
             "required": True,
         },
     )
-    any_element: Tuple[object, ...] = field(
+    any_element: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -1670,7 +1663,7 @@ class SignatureValidationReportType:
 
 @dataclass(frozen=True)
 class ValidationObjectType:
-    object_type: Optional[str] = field(
+    object_type: str | None = field(
         default=None,
         metadata={
             "name": "ObjectType",
@@ -1679,9 +1672,9 @@ class ValidationObjectType:
             "required": True,
         },
     )
-    validation_object_representation: Optional[
-        ValidationObjectRepresentationType
-    ] = field(
+    validation_object_representation: (
+        ValidationObjectRepresentationType | None
+    ) = field(
         default=None,
         metadata={
             "name": "ValidationObjectRepresentation",
@@ -1690,7 +1683,7 @@ class ValidationObjectType:
             "required": True,
         },
     )
-    poe: Optional[POEType] = field(
+    poe: POEType | None = field(
         default=None,
         metadata={
             "name": "POE",
@@ -1698,7 +1691,7 @@ class ValidationObjectType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    poeprovisioning: Optional[POEProvisioningType] = field(
+    poeprovisioning: POEProvisioningType | None = field(
         default=None,
         metadata={
             "name": "POEProvisioning",
@@ -1706,7 +1699,7 @@ class ValidationObjectType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    validation_report: Optional[SignatureValidationReportType] = field(
+    validation_report: SignatureValidationReportType | None = field(
         default=None,
         metadata={
             "name": "ValidationReport",
@@ -1714,7 +1707,7 @@ class ValidationObjectType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "type": "Attribute",
@@ -1725,7 +1718,7 @@ class ValidationObjectType:
 
 @dataclass(frozen=True)
 class ValidationObjectListType:
-    validation_object: Tuple[ValidationObjectType, ...] = field(
+    validation_object: tuple[ValidationObjectType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ValidationObject",
@@ -1738,7 +1731,7 @@ class ValidationObjectListType:
 
 @dataclass(frozen=True)
 class ValidationReportType:
-    signature_validation_report: Tuple[SignatureValidationReportType, ...] = (
+    signature_validation_report: tuple[SignatureValidationReportType, ...] = (
         field(
             default_factory=tuple,
             metadata={
@@ -1749,7 +1742,7 @@ class ValidationReportType:
             },
         )
     )
-    signature_validation_objects: Optional[ValidationObjectListType] = field(
+    signature_validation_objects: ValidationObjectListType | None = field(
         default=None,
         metadata={
             "name": "SignatureValidationObjects",
@@ -1757,7 +1750,7 @@ class ValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature_validator: Optional[SignatureValidatorType] = field(
+    signature_validator: SignatureValidatorType | None = field(
         default=None,
         metadata={
             "name": "SignatureValidator",
@@ -1765,7 +1758,7 @@ class ValidationReportType:
             "namespace": "http://uri.etsi.org/19102/v1.2.1#",
         },
     )
-    signature: Optional[Signature] = field(
+    signature: Signature | None = field(
         default=None,
         metadata={
             "name": "Signature",

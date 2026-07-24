@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List, Optional
 
 from pyhanko.pdf_utils import generic
 
@@ -21,7 +20,7 @@ __all__ = [
 class SimpleFontMeta:
     first_char: int
     last_char: int
-    widths: List[int]
+    widths: list[int]
     descriptor: generic.DictionaryObject
 
 
@@ -68,7 +67,7 @@ class SimpleFontEngine(FontEngine):
         writer: BasePdfFileWriter,
         name: str,
         avg_width: float,
-        meta: Optional[SimpleFontMeta] = None,
+        meta: SimpleFontMeta | None = None,
     ):
         self.avg_width = avg_width
         self.name = name
@@ -112,7 +111,7 @@ class SimpleFontEngine(FontEngine):
 
 class SimpleFontEngineFactory(FontEngineFactory):
     def __init__(
-        self, name: str, avg_width: float, meta: Optional[SimpleFontMeta] = None
+        self, name: str, avg_width: float, meta: SimpleFontMeta | None = None
     ):
         self.avg_width = avg_width
         self.name = name

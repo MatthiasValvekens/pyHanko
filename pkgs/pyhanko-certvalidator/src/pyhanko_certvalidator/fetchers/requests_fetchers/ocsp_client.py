@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, Union
+from collections.abc import Iterable
 
 import requests
 from asn1crypto import cms, ocsp, x509
@@ -37,7 +37,7 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
 
     async def fetch(
         self,
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert: x509.Certificate | cms.AttributeCertificateV2,
         authority: Authority,
     ) -> ocsp.OCSPResponse:
         tag = (issuer_serial(cert), authority.hashable)
@@ -64,7 +64,7 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
 
     async def _fetch(
         self,
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert: x509.Certificate | cms.AttributeCertificateV2,
         authority: Authority,
     ):
         ocsp_request = format_ocsp_request(
@@ -95,7 +95,7 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
         return self.get_results()
 
     def fetched_responses_for_cert(
-        self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+        self, cert: x509.Certificate | cms.AttributeCertificateV2
     ) -> Iterable[ocsp.OCSPResponse]:
         target_is = issuer_serial(cert)
         return {

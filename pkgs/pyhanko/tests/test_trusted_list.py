@@ -515,7 +515,7 @@ def test_parse_ca_with_extensions():
     assert result.expired_certs_revocation_info == datetime(
         2016, 6, 30, 21, 0, 0, tzinfo=timezone.utc
     )
-    qualification = list(result.qualifications)[0]
+    qualification = next(iter(result.qualifications))
     assert qualification.qualifiers == frozenset([tsp.Qualifier.WITH_SSCD])
     criteria = qualification.criteria_list.criteria
     assert tsp.PolicySetCriterion(frozenset(['2.999'])) in criteria
@@ -949,7 +949,7 @@ def test_tsp_registry_multiple_sds():
         )
     )
     assert len(result) == 2
-    assert set(r.base_info.service_name for r in result) == {'test1', 'test2'}
+    assert {r.base_info.service_name for r in result} == {'test1', 'test2'}
 
 
 @pytest.mark.parametrize(
@@ -1786,9 +1786,8 @@ def test_fs_cache_expire(tmp_path):
         fs['foo'] = 'bar'
         fs['baz'] = 'quux'
 
-    with freeze_time('2025-08-31'):
-        with pytest.raises(KeyError):
-            fs.__getitem__('foo')
+    with freeze_time('2025-08-31'), pytest.raises(KeyError):
+        fs.__getitem__('foo')
 
 
 def test_fs_cache_expire_after_reload(tmp_path):

@@ -1,6 +1,5 @@
 import asyncio
 from io import BytesIO
-from typing import Optional
 
 import pytest
 from certomancer import PKIArchitecture
@@ -32,7 +31,7 @@ def signer_cert_label():
 def write_input_to_validate(
     pki_arch: PKIArchitecture,
     fname: str,
-    w: Optional[BasePdfFileWriter],
+    w: BasePdfFileWriter | None,
     weakened: bool = False,
     wrong_key: bool = False,
     signer_cert_label: CertLabel = CertLabel('signer1'),

@@ -90,7 +90,7 @@ def test_parse_unnaturally_split_content_stream():
     d2 = b"0 -1 0 100 cm Q"
     streams = _wrap_as_streams(w, d1, d2)
     result = list(parse_content_stream(streams))
-    push, cm, pop = result
+    _push, cm, _pop = result
 
     assert cm.args == [NumberObject(n) for n in (1, 0, 0, -1, 0, 100)]
     assert cm.op == 'cm'
@@ -122,7 +122,7 @@ def test_parse_content_stream_with_comments(ds, expected_cm_start):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     streams = _wrap_as_streams(w, *ds)
     result = list(parse_content_stream(streams))
-    push, cm, pop = result
+    _push, cm, _pop = result
 
     assert cm.args == [NumberObject(n) for n in (1, 0, 0, -1, 0, 100)]
     assert cm.op == 'cm'

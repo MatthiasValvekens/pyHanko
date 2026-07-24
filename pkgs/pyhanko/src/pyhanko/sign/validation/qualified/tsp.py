@@ -1,8 +1,8 @@
 import enum
 from collections import defaultdict
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, FrozenSet, Generator, Iterable, Optional, Set, Tuple
 
 from asn1crypto import x509
 from pyhanko.sign.validation.settings import KeyUsageConstraints
@@ -32,7 +32,6 @@ __all__ = [
     'QTSTServiceInformation',
     'QcCertType',
     'Qualification',
-    'Qualification',
     'QualifiedServiceInformation',
     'Qualifier',
     'TSPRegistry',
@@ -55,7 +54,7 @@ class TSPServiceParsingError(ValueError):
 class AdditionalServiceInformation:
     uri: str
     critical: bool
-    textual_info: Optional[str]
+    textual_info: str | None
 
 
 class QcCertType(enum.Enum):
@@ -106,25 +105,25 @@ class BaseServiceInformation:
     Start of the service definition's validity window.
     """
 
-    valid_until: Optional[datetime]
+    valid_until: datetime | None
     """
     End of the service definition's validity window,
     if defined. If not, the service is presumed to be
     valid indefinitely.
     """
 
-    provider_certs: Tuple[x509.Certificate, ...]
+    provider_certs: tuple[x509.Certificate, ...]
     """
     Certificates linked to this service provider.
     """
 
-    additional_info_certificate_type: FrozenSet[QcCertType]
+    additional_info_certificate_type: frozenset[QcCertType]
     """
     If non-empty, narrows the scope of the specified service type
     to the types of certificate listed.
     """
 
-    other_additional_info: FrozenSet[AdditionalServiceInformation]
+    other_additional_info: frozenset[AdditionalServiceInformation]
     """
     Other information that qualifies the type of service.
     """
@@ -198,7 +197,7 @@ class PolicySetCriterion(Criterion):
     certificate policies.
     """
 
-    required_policy_oids: FrozenSet[str]
+    required_policy_oids: frozenset[str]
     """
     Policies that must be applicable to the certificate.
 
@@ -216,7 +215,7 @@ class PolicySetCriterion(Criterion):
 
 @dataclass(frozen=True)
 class CertSubjectDNCriterion(Criterion):
-    required_rdn_part_oids: FrozenSet[str]
+    required_rdn_part_oids: frozenset[str]
 
     def matches(self, cert: x509.Certificate) -> bool:
         subject_dn: x509.Name = cert.subject
@@ -259,7 +258,7 @@ class CriteriaList(Criterion):
     Logical operation to apply to the list of sub-criteria.
     """
 
-    criteria: FrozenSet[Criterion]
+    criteria: frozenset[Criterion]
     """
     Set of sub-criteria.
     """
@@ -281,7 +280,7 @@ class Qualification:
     Representation of a qualification in the sense of ETSI TS 119 612, 5.5.9.2.
     """
 
-    qualifiers: FrozenSet[Qualifier]
+    qualifiers: frozenset[Qualifier]
     """
     Set of qualifiers to apply to the certificates matching the criteria.
     """
@@ -303,7 +302,7 @@ class QualifiedServiceInformation:
     Basic information about the service.
     """
 
-    qualifications: FrozenSet[Qualification]
+    qualifications: frozenset[Qualification]
     """
     Relevant qualifications.
     """
@@ -316,7 +315,7 @@ class CAServiceInformation(QualifiedServiceInformation):
     """
 
     # TODO process this setting
-    expired_certs_revocation_info: Optional[datetime]
+    expired_certs_revocation_info: datetime | None
     """
     See ETSI TS 119 612, 5.5.9.1.
 
@@ -349,10 +348,10 @@ class TSPRegistry:
     """
 
     def __init__(self: 'TSPRegistry'):
-        self._ca_cert_to_si: Dict[Authority, Set[CAServiceInformation]] = (
+        self._ca_cert_to_si: dict[Authority, set[CAServiceInformation]] = (
             defaultdict(set)
         )
-        self._tst_cert_to_si: Dict[Authority, Set[QTSTServiceInformation]] = (
+        self._tst_cert_to_si: dict[Authority, set[QTSTServiceInformation]] = (
             defaultdict(set)
         )
 
@@ -377,7 +376,7 @@ class TSPRegistry:
             self._tst_cert_to_si[AuthorityWithCert(cert)].add(qtst_service_info)
 
     def applicable_service_definitions(
-        self, authority: Authority, moment: Optional[datetime]
+        self, authority: Authority, moment: datetime | None
     ) -> Iterable[QualifiedServiceInformation]:
         """
         Retrieve the service definitions in this registry on behalf
@@ -455,7 +454,7 @@ class TSPTrustManager(TrustManager):
     def __init__(self, tsp_registry: TSPRegistry):
         self.tsp_registry = tsp_registry
 
-    def as_trust_anchor(self, authority: Authority) -> Optional[TrustAnchor]:
+    def as_trust_anchor(self, authority: Authority) -> TrustAnchor | None:
         try:
             # moment = None -> pick the most recent applicable
             sd = next(

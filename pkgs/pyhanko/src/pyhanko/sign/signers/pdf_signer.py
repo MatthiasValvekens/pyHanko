@@ -8,9 +8,10 @@ import itertools
 import logging
 import uuid
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import IO, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import IO, Any
 
 import tzlocal
 from asn1crypto import algos, cms, crl, keys, ocsp
@@ -225,7 +226,7 @@ class DSSContentSettings(GeneralDSSContentSettings):
     The default is :attr:`.SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS`.
     """
 
-    next_ts_settings: Optional[TimestampDSSContentSettings] = None
+    next_ts_settings: TimestampDSSContentSettings | None = None
     """
     Explicit settings for DSS updates pertaining to a document timestamp
     added as part of the same signing workflow, if applicable.
@@ -278,13 +279,13 @@ class PdfSignatureMetadata:
     Specification for a PDF signature.
     """
 
-    field_name: Optional[str] = None
+    field_name: str | None = None
     """
     The name of the form field to contain the signature.
     If there is only one available signature field, the name may be inferred.
     """
 
-    md_algorithm: Optional[str] = None
+    md_algorithm: str | None = None
     """
     The name of the digest algorithm to use.
     It should be supported by `pyca/cryptography`.
@@ -293,23 +294,23 @@ class PdfSignatureMetadata:
     a suitable default, unless a seed value dictionary happens to be available.
     """
 
-    location: Optional[str] = None
+    location: str | None = None
     """
     Location of signing.
     """
 
-    reason: Optional[str] = None
+    reason: str | None = None
     """
     Reason for signing (textual).
     """
 
-    contact_info: Optional[str] = None
+    contact_info: str | None = None
     """
     Information provided by the signer to enable the receiver to contact the
     signer to verify the signature.
     """
 
-    name: Optional[str] = None
+    name: str | None = None
     """
     Name of the signer. This value is usually not necessary to set, since
     it should appear on the signer's certificate, but there are cases
@@ -317,7 +318,7 @@ class PdfSignatureMetadata:
     signing is delegated to a trusted third party).
     """
 
-    app_build_props: Optional[BuildProps] = None
+    app_build_props: BuildProps | None = None
     """
     Properties of the application that created the signature.
     
@@ -325,12 +326,12 @@ class PdfSignatureMetadata:
     dictionary of the signature.
     """
 
-    prop_auth_time: Optional[int] = None
+    prop_auth_time: int | None = None
     """
     Number of seconds since signer was last authenticated.
     """
 
-    prop_auth_type: Optional[SigAuthType] = None
+    prop_auth_type: SigAuthType | None = None
     """
     Signature /Prop_AuthType to use.
 
@@ -349,7 +350,7 @@ class PdfSignatureMetadata:
     """
     # TODO Does this restriction also apply to prior document timestamps?
 
-    subfilter: Optional[SigSeedSubFilter] = None
+    subfilter: SigSeedSubFilter | None = None
     """
     Signature subfilter to use.
 
@@ -397,13 +398,13 @@ class PdfSignatureMetadata:
     See also :meth:`.PdfTimeStamper.update_archival_timestamp_chain`.
     """
 
-    timestamp_field_name: Optional[str] = None
+    timestamp_field_name: str | None = None
     """
     Name of the timestamp field created when :attr:`use_pades_lta` is ``True``.
     If not specified, a unique name will be generated using :mod:`uuid`.
     """
 
-    validation_context: Optional[ValidationContext] = None
+    validation_context: ValidationContext | None = None
     """
     The validation context to use when validating signatures.
     If provided, the signer's certificate and any timestamp certificates
@@ -424,7 +425,7 @@ class PdfSignatureMetadata:
         on approval signatures.
     """
 
-    signer_key_usage: Set[str] = field(
+    signer_key_usage: set[str] = field(
         default_factory=lambda: constants.DEFAULT_SIGNER_KEY_USAGE
     )
     """
@@ -436,7 +437,7 @@ class PdfSignatureMetadata:
     Only relevant if a validation context is also provided.
     """
 
-    cades_signed_attr_spec: Optional[CAdESSignedAttrSpec] = None
+    cades_signed_attr_spec: CAdESSignedAttrSpec | None = None
     """
     .. versionadded:: 0.5.0
 
@@ -465,7 +466,7 @@ class PdfSignatureMetadata:
         predictable.
     """
 
-    ac_validation_context: Optional[ValidationContext] = None
+    ac_validation_context: ValidationContext | None = None
     """
     .. versionadded:: 0.11.0
 
@@ -552,7 +553,7 @@ class PdfTimeStamper:
     def __init__(
         self,
         timestamper: TimeStamper,
-        field_name: Optional[str] = None,
+        field_name: str | None = None,
         invis_settings: InvisSigSettings = InvisSigSettings(),
         readable_field_name: str = "Timestamp",
     ):
@@ -584,7 +585,7 @@ class PdfTimeStamper:
         validation_context=None,
         bytes_reserved=None,
         validation_paths=None,
-        timestamper: Optional[TimeStamper] = None,
+        timestamper: TimeStamper | None = None,
         *,
         in_place=False,
         output=None,
@@ -669,7 +670,7 @@ class PdfTimeStamper:
         validation_context=None,
         bytes_reserved=None,
         validation_paths=None,
-        timestamper: Optional[TimeStamper] = None,
+        timestamper: TimeStamper | None = None,
         *,
         in_place=False,
         output=None,
@@ -835,7 +836,7 @@ class PdfTimeStamper:
             # FIXME in this case, the ser/deser step is unnecessary
             #  and inefficient; should probably rewrite
             #  using supply_dss_in_writer
-            credential_ser: Optional[SerialisedCredential] = None
+            credential_ser: SerialisedCredential | None = None
             if pdf_out.security_handler:
                 credential = pdf_out.security_handler.extract_credential()
                 if credential:
@@ -963,7 +964,7 @@ class PdfTimeStamper:
         from ..validation.status import TimestampSignatureStatus
 
         timestamps = reversed(reader.embedded_timestamp_signatures)
-        last_timestamp: Optional[EmbeddedPdfSignature]
+        last_timestamp: EmbeddedPdfSignature | None
         try:
             last_timestamp = next(timestamps)
         except StopIteration:
@@ -974,7 +975,7 @@ class PdfTimeStamper:
             last_timestamp = None
 
         # Validate the previous timestamp if present
-        tst_status: Optional[TimestampSignatureStatus] = None
+        tst_status: TimestampSignatureStatus | None = None
         if last_timestamp is None:
             md_algorithm = default_md_algorithm
         else:
@@ -1066,9 +1067,9 @@ class PdfSigner:
         signature_meta: PdfSignatureMetadata,
         signer: Signer,
         *,
-        timestamper: Optional[TimeStamper] = None,
-        stamp_style: Optional[BaseStampStyle] = None,
-        new_field_spec: Optional[SigFieldSpec] = None,
+        timestamper: TimeStamper | None = None,
+        stamp_style: BaseStampStyle | None = None,
+        new_field_spec: SigFieldSpec | None = None,
     ):
         self.signature_meta = signature_meta
         if (
@@ -1084,7 +1085,7 @@ class PdfSigner:
         stamp_style = stamp_style or constants.DEFAULT_SIGNING_STAMP_STYLE
         self.stamp_style: BaseStampStyle = stamp_style
 
-        self.signer_hash_algo: Optional[str]
+        self.signer_hash_algo: str | None
         try:
             mech = self.signer.get_signature_mechanism_for_digest(None)
             self.signer_hash_algo = get_cms_hash_algo_for_mechanism(mech)
@@ -1095,7 +1096,7 @@ class PdfSigner:
         self.default_timestamper = timestamper
 
     @property
-    def default_md_for_signer(self) -> Optional[str]:
+    def default_md_for_signer(self) -> str | None:
         """
         Name of the default message digest algorithm for this signer, if there
         is one.
@@ -1128,9 +1129,7 @@ class PdfSigner:
         if cd.permission == MDPPerm.NO_CHANGES:
             raise SigningError("Author signature forbids all changes")
 
-    def _retrieve_seed_value_spec(
-        self, sig_field
-    ) -> Optional[SigSeedValueSpec]:
+    def _retrieve_seed_value_spec(self, sig_field) -> SigSeedValueSpec | None:
         # for testing & debugging
         if self._ignore_sv:
             return None
@@ -1139,7 +1138,7 @@ class PdfSigner:
             return None
         return SigSeedValueSpec.from_pdf_object(sv_dict)
 
-    def _select_md_algorithm(self, sv_spec: Optional[SigSeedValueSpec]) -> str:
+    def _select_md_algorithm(self, sv_spec: SigSeedValueSpec | None) -> str:
         signature_meta = self.signature_meta
 
         # priority order for the message digest algorithm
@@ -1326,7 +1325,7 @@ class PdfSigner:
         in_place=False,
         output=None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
-    ) -> Tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
+    ) -> tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
         """
         .. deprecated:: 0.9.0
             Use :meth:`async_digest_doc_for_signing` instead.
@@ -1407,7 +1406,7 @@ class PdfSigner:
         in_place=False,
         output=None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
-    ) -> Tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
+    ) -> tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
         """
         .. versionadded:: 0.9.0
 
@@ -1647,33 +1646,33 @@ class PreSignValidationStatus:
     Validation path for the signer's certificate.
     """
 
-    validation_paths: List[ValidationPath]
+    validation_paths: list[ValidationPath]
     """
     List of other relevant validation paths.
     """
 
-    ts_validation_paths: Optional[List[ValidationPath]] = None
+    ts_validation_paths: list[ValidationPath] | None = None
     """
     List of validation paths relevant for embedded timestamps.
     """
 
-    adobe_revinfo_attr: Optional[asn1_pdf.RevocationInfoArchival] = None
+    adobe_revinfo_attr: asn1_pdf.RevocationInfoArchival | None = None
     """
     Preformatted revocation info attribute to include, if requested by the
     settings.
     """
 
-    ocsps_to_embed: List[ocsp.OCSPResponse] = field(default_factory=list)
+    ocsps_to_embed: list[ocsp.OCSPResponse] = field(default_factory=list)
     """
     List of OCSP responses collected so far.
     """
 
-    crls_to_embed: List[crl.CertificateList] = field(default_factory=list)
+    crls_to_embed: list[crl.CertificateList] = field(default_factory=list)
     """
     List of CRLS collected so far.
     """
 
-    ac_validation_paths: List[ValidationPath] = field(default_factory=list)
+    ac_validation_paths: list[ValidationPath] = field(default_factory=list)
     """
     List of validation paths relevant for embedded attribute certificates.
     """
@@ -1710,10 +1709,10 @@ class PdfSigningSession:
         cms_writer,
         sig_field,
         md_algorithm: str,
-        timestamper: Optional[TimeStamper],
+        timestamper: TimeStamper | None,
         subfilter: SigSeedSubFilter,
-        system_time: Optional[datetime] = None,
-        sv_spec: Optional[SigSeedValueSpec] = None,
+        system_time: datetime | None = None,
+        sv_spec: SigSeedValueSpec | None = None,
     ):
         self.pdf_signer = pdf_signer
         self.pdf_out = pdf_out
@@ -1729,8 +1728,8 @@ class PdfSigningSession:
         self.sv_spec = sv_spec
 
     async def perform_presign_validation(
-        self, pdf_out: Optional[BasePdfFileWriter] = None
-    ) -> Optional[PreSignValidationStatus]:
+        self, pdf_out: BasePdfFileWriter | None = None
+    ) -> PreSignValidationStatus | None:
         """
         Perform certificate validation checks for the signer's certificate,
         including any necessary revocation checks.
@@ -1807,7 +1806,7 @@ class PdfSigningSession:
         else:
             ts_paths = None
 
-        aa_paths: List[ValidationPath]
+        aa_paths: list[ValidationPath]
         # fetch attribute certificate validation paths
         if signature_meta.ac_validation_context is not None:
             async_aa_paths = self._perform_presign_ac_validation(
@@ -1933,14 +1932,14 @@ class PdfSigningSession:
         sig_field = self.sig_field
         signature_meta = self.pdf_signer.signature_meta
         if sv_spec is not None:
-            sv_lock_lut: Dict[Any, List[MDPPerm]] = {
+            sv_lock_lut: dict[Any, list[MDPPerm]] = {
                 SeedLockDocument.LOCK: [MDPPerm.NO_CHANGES],
                 SeedLockDocument.DO_NOT_LOCK: [
                     MDPPerm.FILL_FORMS,
                     MDPPerm.ANNOTATE,
                 ],
             }
-            sv_lock_values: List[MDPPerm] = sv_lock_lut.get(
+            sv_lock_values: list[MDPPerm] = sv_lock_lut.get(
                 sv_spec.lock_document, []
             )
             sv_lock_value_req = sv_lock_values is not None and bool(
@@ -2020,7 +2019,7 @@ class PdfSigningSession:
         )
 
     def _enforce_seed_value_constraints(
-        self, validation_path: Optional[ValidationPath]
+        self, validation_path: ValidationPath | None
     ):
         sv_spec = self.sv_spec
         pdf_signer = self.pdf_signer
@@ -2081,9 +2080,8 @@ class PdfSigningSession:
             mandated_sf: SigSeedSubFilter = sv_spec.subfilters[0]
             if selected_sf is not None and mandated_sf != selected_sf:
                 raise SigningError(
-                    "The seed value dictionary mandates subfilter '%s', "
-                    "but '%s' was requested."
-                    % (mandated_sf.value, selected_sf.value)
+                    f"The seed value dictionary mandates subfilter '{mandated_sf.value}', "
+                    f"but '{selected_sf.value}' was requested."
                 )
 
         # SV dict serves as a source of defaults as well
@@ -2114,8 +2112,7 @@ class PdfSigningSession:
             ):
                 raise SigningError(
                     "The seed value dict mandates that Adobe-style revocation "
-                    "info be added; this requires subfilter '%s'"
-                    % (SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value)
+                    f"info be added; this requires subfilter '{SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value}'"
                 )
         if (
             flags & SigSeedValFlags.DIGEST_METHOD
@@ -2125,9 +2122,10 @@ class PdfSigningSession:
                 selected_md = selected_md.lower()
                 if selected_md not in sv_spec.digest_methods:
                     raise SigningError(
-                        "The selected message digest %s is not allowed by the "
-                        "seed value dictionary. Please select one of %s."
-                        % (selected_md, ", ".join(sv_spec.digest_methods))
+                        "The selected message digest {} is not allowed by the "
+                        "seed value dictionary. Please select one of {}.".format(
+                            selected_md, ", ".join(sv_spec.digest_methods)
+                        )
                     )
 
         if flags & SigSeedValFlags.REASONS:
@@ -2143,16 +2141,15 @@ class PdfSigningSession:
                 )
             if not must_omit and reasons and reason_given not in reasons:
                 raise SigningError(
-                    "Reason \"%s\" is not a valid reason for signing, "
-                    "please choose one of the following: %s."
-                    % (
+                    "Reason \"{}\" is not a valid reason for signing, "
+                    "please choose one of the following: {}.".format(
                         reason_given,
-                        ", ".join("\"%s\"" % s for s in reasons),
+                        ", ".join(f"\"{s}\"" for s in reasons),
                     )
                 )
 
     async def estimate_signature_container_size(
-        self, validation_info: Optional[PreSignValidationStatus], tight=False
+        self, validation_info: PreSignValidationStatus | None, tight=False
     ):
         md_algorithm = self.md_algorithm
         signature_meta = self.pdf_signer.signature_meta
@@ -2201,7 +2198,7 @@ class PdfSigningSession:
 
     def prepare_tbs_document(
         self,
-        validation_info: Optional[PreSignValidationStatus],
+        validation_info: PreSignValidationStatus | None,
         bytes_reserved,
         appearance_text_params=None,
     ) -> 'PdfTBSDocument':
@@ -2315,7 +2312,7 @@ class PdfSigningSession:
                 doc_timestamper = self.timestamper
             # if necessary/supported, extract a file access credential
             # to perform post-signing operations later
-            credential_ser: Optional[SerialisedCredential] = None
+            credential_ser: SerialisedCredential | None = None
             if security_handler is not None:
                 credential = security_handler.extract_credential()
                 if credential is not None:
@@ -2368,19 +2365,19 @@ class PostSignInstructions:
     Validation information to embed in the DSS (if not already present).
     """
 
-    timestamper: Optional[TimeStamper] = None
+    timestamper: TimeStamper | None = None
     """
     Timestamper to use for produce document timestamps. If ``None``, no
     timestamp will be added.
     """
 
-    timestamp_md_algorithm: Optional[str] = None
+    timestamp_md_algorithm: str | None = None
     """
     Digest algorithm to use when producing timestamps.
     Defaults to :const:`~pyhanko.sign.signers.constants.DEFAULT_MD`.
     """
 
-    timestamp_field_name: Optional[str] = None
+    timestamp_field_name: str | None = None
     """
     Name of the timestamp field to use. If not specified, a field name will be
     generated.
@@ -2426,7 +2423,7 @@ class PostSignInstructions:
         involved, not from the initial configuration.
     """
 
-    file_credential: Optional[SerialisedCredential] = None
+    file_credential: SerialisedCredential | None = None
     """
     .. versionadded:: 0.13.0
 
@@ -2472,15 +2469,15 @@ class PdfMacAttrProviderSpec(attributes.UnsignedAttributeProviderSpec):
     def __init__(
         self,
         pdf_out: BasePdfFileWriter,
-        document_digest: Optional[bytes] = None,
+        document_digest: bytes | None = None,
     ):
         self.pdf_out = pdf_out
         self.document_digest = document_digest
-        self.wrapped: Optional[attributes.UnsignedAttributeProviderSpec] = None
-        self._orig: Optional[attributes.UnsignedAttributeProviderSpec] = None
-        self._target: Optional[Signer] = None
+        self.wrapped: attributes.UnsignedAttributeProviderSpec | None = None
+        self._orig: attributes.UnsignedAttributeProviderSpec | None = None
+        self._target: Signer | None = None
 
-    def install(self, signer: Signer, timestamper: Optional[TimeStamper]):
+    def install(self, signer: Signer, timestamper: TimeStamper | None):
         """
         Install the provider on a signer.
 
@@ -2567,9 +2564,9 @@ class PdfTBSDocument:
         signer: Signer,
         md_algorithm: str,
         use_pades: bool,
-        timestamper: Optional[TimeStamper] = None,
-        post_sign_instructions: Optional[PostSignInstructions] = None,
-        validation_context: Optional[ValidationContext] = None,
+        timestamper: TimeStamper | None = None,
+        post_sign_instructions: PostSignInstructions | None = None,
+        validation_context: ValidationContext | None = None,
     ):
         self.cms_writer = cms_writer
         self.signer = signer
@@ -2582,10 +2579,10 @@ class PdfTBSDocument:
     def digest_tbs_document(
         self,
         *,
-        output: Optional[IO] = None,
+        output: IO | None = None,
         in_place: bool = False,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
-    ) -> Tuple[PreparedByteRangeDigest, IO]:
+    ) -> tuple[PreparedByteRangeDigest, IO]:
         """
         Write the document to an output stream and compute the digest, while
         keeping track of the (future) location of the signature contents in the
@@ -2669,9 +2666,9 @@ class PdfTBSDocument:
         cls,
         output: IO,
         prepared_digest: PreparedByteRangeDigest,
-        signature_cms: Union[bytes, cms.ContentInfo],
-        post_sign_instr: Optional[PostSignInstructions] = None,
-        validation_context: Optional[ValidationContext] = None,
+        signature_cms: bytes | cms.ContentInfo,
+        post_sign_instr: PostSignInstructions | None = None,
+        validation_context: ValidationContext | None = None,
     ) -> 'PdfPostSignatureDocument':
         """
         Resume signing after obtaining a CMS object from an external source.
@@ -2711,9 +2708,9 @@ class PdfTBSDocument:
         cls,
         output: IO,
         prepared_digest: PreparedByteRangeDigest,
-        signature_cms: Union[bytes, cms.ContentInfo],
-        post_sign_instr: Optional[PostSignInstructions] = None,
-        validation_context: Optional[ValidationContext] = None,
+        signature_cms: bytes | cms.ContentInfo,
+        post_sign_instr: PostSignInstructions | None = None,
+        validation_context: ValidationContext | None = None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
     ):
         """
@@ -2758,9 +2755,9 @@ class PdfTBSDocument:
         cls,
         output: IO,
         prepared_digest: PreparedByteRangeDigest,
-        signature_cms: Union[bytes, cms.ContentInfo],
-        post_sign_instr: Optional[PostSignInstructions] = None,
-        validation_context: Optional[ValidationContext] = None,
+        signature_cms: bytes | cms.ContentInfo,
+        post_sign_instr: PostSignInstructions | None = None,
+        validation_context: ValidationContext | None = None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
     ):
         """
@@ -2815,8 +2812,8 @@ class PdfPostSignatureDocument:
     def __init__(
         self,
         sig_contents: bytes,
-        post_sign_instr: Optional[PostSignInstructions] = None,
-        validation_context: Optional[ValidationContext] = None,
+        post_sign_instr: PostSignInstructions | None = None,
+        validation_context: ValidationContext | None = None,
     ):
         self.sig_contents = sig_contents
         self.post_sign_instructions = post_sign_instr
@@ -2850,14 +2847,14 @@ class PdfPostSignatureDocument:
         # might not have all relevant OCSP responses / CRLs available.
         # Hence why we also pass in the data from the pre-signing check.
         # The DSS handling code will deal with deduplication.
-        dss_op_kwargs: Dict[str, Any]
-        dss_op_kwargs = dict(
-            paths=validation_info.validation_paths,
-            validation_context=validation_context,
-            ocsps=validation_info.ocsps_to_embed,
-            crls=validation_info.crls_to_embed,
-            embed_roots=instr.embed_roots,
-        )
+        dss_op_kwargs: dict[str, Any]
+        dss_op_kwargs = {
+            'paths': validation_info.validation_paths,
+            'validation_context': validation_context,
+            'ocsps': validation_info.ocsps_to_embed,
+            'crls': validation_info.crls_to_embed,
+            'embed_roots': instr.embed_roots,
+        }
         if dss_settings.include_vri:
             dss_op_kwargs['sig_contents'] = self.sig_contents
         else:

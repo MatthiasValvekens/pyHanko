@@ -3,7 +3,6 @@ import itertools
 import os
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import Optional
 
 import pytest
 import tzlocal
@@ -976,20 +975,20 @@ async def test_sign_weak_sig_digest_mismatch_allowed():
             self,
             signature_algo: algos.SignedDigestAlgorithm,
             message_digest_algo: algos.DigestAlgorithm,
-            moment: Optional[datetime],
+            moment: datetime | None,
         ) -> AlgorithmUsageConstraint:
             return AlgorithmUsageConstraint(allowed=True)
 
         def digest_algorithm_allowed(
-            self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+            self, algo: algos.DigestAlgorithm, moment: datetime | None
         ) -> AlgorithmUsageConstraint:
             return AlgorithmUsageConstraint(allowed=True)
 
         def signature_algorithm_allowed(
             self,
             algo: algos.SignedDigestAlgorithm,
-            moment: Optional[datetime],
-            public_key: Optional[keys.PublicKeyInfo],
+            moment: datetime | None,
+            public_key: keys.PublicKeyInfo | None,
         ) -> AlgorithmUsageConstraint:
             return AlgorithmUsageConstraint(allowed=True)
 
@@ -1010,20 +1009,20 @@ class _AllowMismatches(CMSAlgorithmUsagePolicy):
         self,
         signature_algo: algos.SignedDigestAlgorithm,
         message_digest_algo: algos.DigestAlgorithm,
-        moment: Optional[datetime],
+        moment: datetime | None,
     ) -> AlgorithmUsageConstraint:
         return AlgorithmUsageConstraint(allowed=True)
 
     def digest_algorithm_allowed(
-        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+        self, algo: algos.DigestAlgorithm, moment: datetime | None
     ) -> AlgorithmUsageConstraint:
         return self.policy.digest_algorithm_allowed(algo, moment)
 
     def signature_algorithm_allowed(
         self,
         algo: algos.SignedDigestAlgorithm,
-        moment: Optional[datetime],
-        public_key: Optional[keys.PublicKeyInfo],
+        moment: datetime | None,
+        public_key: keys.PublicKeyInfo | None,
     ) -> AlgorithmUsageConstraint:
         return self.policy.signature_algorithm_allowed(algo, moment, public_key)
 
@@ -1143,7 +1142,7 @@ async def test_sign_weak_sig_digest_disallowed_by_custom_policy():
 
     class Policy(CMSAlgorithmUsagePolicy):
         def digest_algorithm_allowed(
-            self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+            self, algo: algos.DigestAlgorithm, moment: datetime | None
         ) -> AlgorithmUsageConstraint:
             return AlgorithmUsageConstraint(
                 allowed=False, failure_reason="Test reason"
@@ -1152,8 +1151,8 @@ async def test_sign_weak_sig_digest_disallowed_by_custom_policy():
         def signature_algorithm_allowed(
             self,
             algo: algos.SignedDigestAlgorithm,
-            moment: Optional[datetime],
-            public_key: Optional[keys.PublicKeyInfo],
+            moment: datetime | None,
+            public_key: keys.PublicKeyInfo | None,
         ) -> AlgorithmUsageConstraint:
             return AlgorithmUsageConstraint(allowed=True)
 
@@ -1809,7 +1808,7 @@ async def test_ac_attr_validation_fail(requests_mock):
     input_data = b'Hello world!'
     signer = get_ac_aware_signer()
     output = await signer.async_sign_general_data(input_data, 'sha256')
-    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    main_vc, _ac_vc = live_ac_vcs(requests_mock)
     status = await async_validate_detached_cms(
         input_data,
         output['content'],
@@ -2431,17 +2430,16 @@ def test_find_cms_attribute_deprecated_success():
 def test_find_cms_attribute_deprecated_raises_on_missing():
     attrs = _create_test_attrs()
 
-    with pytest.deprecated_call():
-        with pytest.raises(
-            NonexistentAttributeError, match='nonexistent_attribute'
-        ):
-            find_cms_attribute(attrs, 'nonexistent_attribute')
+    with (
+        pytest.deprecated_call(),
+        pytest.raises(NonexistentAttributeError, match='nonexistent_attribute'),
+    ):
+        find_cms_attribute(attrs, 'nonexistent_attribute')
 
 
 def test_find_cms_attribute_deprecated_none_attrs():
-    with pytest.deprecated_call():
-        with pytest.raises(NonexistentAttributeError):
-            find_cms_attribute(None, 'content_type')
+    with pytest.deprecated_call(), pytest.raises(NonexistentAttributeError):
+        find_cms_attribute(None, 'content_type')
 
 
 def test_find_cms_attribute_deprecated_with_multiple_values():

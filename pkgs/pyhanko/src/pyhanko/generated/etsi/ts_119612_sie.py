@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Tuple
 
 from .xades import AnyType, ObjectIdentifierType
 
@@ -29,7 +28,7 @@ class KeyUsageBitTypename(Enum):
 
 @dataclass(frozen=True)
 class QualifierType:
-    uri: Optional[str] = field(
+    uri: str | None = field(
         default=None,
         metadata={
             "type": "Attribute",
@@ -39,13 +38,13 @@ class QualifierType:
 
 @dataclass(frozen=True)
 class KeyUsageBitType:
-    value: Optional[bool] = field(
+    value: bool | None = field(
         default=None,
         metadata={
             "required": True,
         },
     )
-    name: Optional[KeyUsageBitTypename] = field(
+    name: KeyUsageBitTypename | None = field(
         default=None,
         metadata={
             "type": "Attribute",
@@ -55,7 +54,7 @@ class KeyUsageBitType:
 
 @dataclass(frozen=True)
 class PoliciesListType:
-    policy_identifier: Tuple[ObjectIdentifierType, ...] = field(
+    policy_identifier: tuple[ObjectIdentifierType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "PolicyIdentifier",
@@ -68,7 +67,7 @@ class PoliciesListType:
 
 @dataclass(frozen=True)
 class QualifiersType:
-    qualifier: Tuple[QualifierType, ...] = field(
+    qualifier: tuple[QualifierType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Qualifier",
@@ -81,7 +80,7 @@ class QualifiersType:
 
 @dataclass(frozen=True)
 class KeyUsageType:
-    key_usage_bit: Tuple[KeyUsageBitType, ...] = field(
+    key_usage_bit: tuple[KeyUsageBitType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "KeyUsageBit",
@@ -95,7 +94,7 @@ class KeyUsageType:
 
 @dataclass(frozen=True)
 class CriteriaListType:
-    key_usage: Tuple[KeyUsageType, ...] = field(
+    key_usage: tuple[KeyUsageType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "KeyUsage",
@@ -103,7 +102,7 @@ class CriteriaListType:
             "namespace": "http://uri.etsi.org/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#",
         },
     )
-    policy_set: Tuple[PoliciesListType, ...] = field(
+    policy_set: tuple[PoliciesListType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "PolicySet",
@@ -111,7 +110,7 @@ class CriteriaListType:
             "namespace": "http://uri.etsi.org/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#",
         },
     )
-    criteria_list: Tuple["CriteriaListType", ...] = field(
+    criteria_list: tuple["CriteriaListType", ...] = field(
         default_factory=tuple,
         metadata={
             "name": "CriteriaList",
@@ -119,7 +118,7 @@ class CriteriaListType:
             "namespace": "http://uri.etsi.org/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#",
         },
     )
-    description: Optional[str] = field(
+    description: str | None = field(
         default=None,
         metadata={
             "name": "Description",
@@ -127,7 +126,7 @@ class CriteriaListType:
             "namespace": "http://uri.etsi.org/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#",
         },
     )
-    other_criteria_list: Optional[AnyType] = field(
+    other_criteria_list: AnyType | None = field(
         default=None,
         metadata={
             "name": "otherCriteriaList",
@@ -135,7 +134,7 @@ class CriteriaListType:
             "namespace": "http://uri.etsi.org/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#",
         },
     )
-    assert_value: Optional[CriteriaListTypeassert] = field(
+    assert_value: CriteriaListTypeassert | None = field(
         default=None,
         metadata={
             "name": "assert",
@@ -146,7 +145,7 @@ class CriteriaListType:
 
 @dataclass(frozen=True)
 class QualificationElementType:
-    qualifiers: Optional[QualifiersType] = field(
+    qualifiers: QualifiersType | None = field(
         default=None,
         metadata={
             "name": "Qualifiers",
@@ -155,7 +154,7 @@ class QualificationElementType:
             "required": True,
         },
     )
-    criteria_list: Optional[CriteriaListType] = field(
+    criteria_list: CriteriaListType | None = field(
         default=None,
         metadata={
             "name": "CriteriaList",
@@ -168,7 +167,7 @@ class QualificationElementType:
 
 @dataclass(frozen=True)
 class QualificationsType:
-    qualification_element: Tuple[QualificationElementType, ...] = field(
+    qualification_element: tuple[QualificationElementType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "QualificationElement",

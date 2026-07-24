@@ -4,7 +4,7 @@ import secrets
 import struct
 from dataclasses import dataclass
 from hashlib import sha256, sha384, sha512
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional
 
 from asn1crypto import core
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -50,7 +50,7 @@ class _R6KeyEntry:
         return _R6KeyEntry(entry[:32], entry[32:40], entry[40:48])
 
 
-def _r6_normalise_pw(password: Union[str, bytes]) -> bytes:
+def _r6_normalise_pw(password: str | bytes) -> bytes:
     if isinstance(password, str):
         # saslprep expects non-empty strings, apparently
         if not password:
@@ -62,7 +62,7 @@ def _r6_normalise_pw(password: Union[str, bytes]) -> bytes:
 
 
 def _r6_password_authenticate(
-    pw_bytes: bytes, entry: _R6KeyEntry, u_entry: Optional[bytes] = None
+    pw_bytes: bytes, entry: _R6KeyEntry, u_entry: bytes | None = None
 ):
     purported_hash = _r6_hash_algo(pw_bytes, entry.validation_salt, u_entry)
     return purported_hash == entry.hash_value
@@ -72,7 +72,7 @@ def _r6_derive_file_key(
     pw_bytes: bytes,
     entry: _R6KeyEntry,
     e_entry: bytes,
-    u_entry: Optional[bytes] = None,
+    u_entry: bytes | None = None,
 ):
     interm_key = _r6_hash_algo(pw_bytes, entry.key_salt, u_entry)
     assert len(e_entry) == 32
@@ -90,7 +90,7 @@ def _bytes_mod_3(input_bytes: bytes):
 
 
 def _r6_hash_algo(
-    pw_bytes: bytes, current_salt: bytes, u_entry: Optional[bytes] = None
+    pw_bytes: bytes, current_salt: bytes, u_entry: bytes | None = None
 ) -> bytes:
     """
     Algorithm 2.B in ISO 32000-2 § 7.6.4.3.4
@@ -204,23 +204,17 @@ class StandardAESCryptFilter(StandardCryptFilter, AESCryptFilterMixin):
     AES crypt filter for the standard security handler.
     """
 
-    pass
-
 
 class StandardAESGCMCryptFilter(StandardCryptFilter, AESGCMCryptFilterMixin):
     """
     AES-GCM crypt filter for the standard security handler.
     """
 
-    pass
-
 
 class StandardRC4CryptFilter(StandardCryptFilter, RC4CryptFilterMixin):
     """
     RC4 crypt filter for the standard security handler.
     """
-
-    pass
 
 
 STD_CF = generic.NameObject('/StdCF')
@@ -270,7 +264,7 @@ class StandardSecurityHandler(SecurityHandler):
     security handlers through :meth:`.SecurityHandler.build`.
     """
 
-    _known_crypt_filters: Dict[generic.NameObject, CryptFilterBuilder] = {
+    _known_crypt_filters: dict[generic.NameObject, CryptFilterBuilder] = {
         generic.NameObject('/V2'): _build_legacy_standard_crypt_filter,
         generic.NameObject('/AESV2'): lambda _, __: StandardAESCryptFilter(
             keylen=16
@@ -564,9 +558,9 @@ class StandardSecurityHandler(SecurityHandler):
         ueseed=None,
         encrypted_perms=None,
         encrypt_metadata=True,
-        crypt_filter_config: Optional[CryptFilterConfiguration] = None,
+        crypt_filter_config: CryptFilterConfiguration | None = None,
         compat_entries=True,
-        kdf_salt: Optional[bytes] = None,
+        kdf_salt: bytes | None = None,
     ):
         if crypt_filter_config is None:
             if version == SecurityHandlerVersion.RC4_40:
@@ -615,7 +609,7 @@ class StandardSecurityHandler(SecurityHandler):
             self.oeseed = self.ueseed = self.encrypted_perms = None
         self.odata = odata
         self.udata = udata
-        self._shared_key: Optional[bytes] = None
+        self._shared_key: bytes | None = None
         self._auth_failed = False
 
     @classmethod
@@ -655,22 +649,22 @@ class StandardSecurityHandler(SecurityHandler):
                     f"Cannot parse {x} as a permission indicator"
                 )
 
-        return dict(
-            legacy_keylen=keylen,
-            perm_flags=encrypt_dict.get_and_apply(
+        return {
+            'legacy_keylen': keylen,
+            'perm_flags': encrypt_dict.get_and_apply(
                 '/P',
                 _parse_permissions,
                 default=StandardPermissions.allow_everything(),
             ),
-            odata=odata.original_bytes[:48],
-            udata=udata.original_bytes[:48],
-            oeseed=encrypt_dict.get_and_apply('/OE', _get_bytes),
-            ueseed=encrypt_dict.get_and_apply('/UE', _get_bytes),
-            encrypted_perms=encrypt_dict.get_and_apply('/Perms', _get_bytes),
-            encrypt_metadata=encrypt_dict.get_and_apply(
+            'odata': odata.original_bytes[:48],
+            'udata': udata.original_bytes[:48],
+            'oeseed': encrypt_dict.get_and_apply('/OE', _get_bytes),
+            'ueseed': encrypt_dict.get_and_apply('/UE', _get_bytes),
+            'encrypted_perms': encrypt_dict.get_and_apply('/Perms', _get_bytes),
+            'encrypt_metadata': encrypt_dict.get_and_apply(
                 '/EncryptMetadata', bool, default=True
             ),
-            kdf_salt=encrypt_dict.get_and_apply(
+            'kdf_salt': encrypt_dict.get_and_apply(
                 '/KDFSalt',
                 lambda x: (
                     x.original_bytes
@@ -680,7 +674,7 @@ class StandardSecurityHandler(SecurityHandler):
                     else None
                 ),
             ),
-        )
+        }
 
     @classmethod
     def instantiate_from_pdf_object(
@@ -775,9 +769,7 @@ class StandardSecurityHandler(SecurityHandler):
             return AuthStatus.USER, key
         return AuthStatus.FAILED, None
 
-    def authenticate(
-        self, credential, id1: Optional[bytes] = None
-    ) -> AuthResult:
+    def authenticate(self, credential, id1: bytes | None = None) -> AuthResult:
         """
         Authenticate a user to this security handler.
 
@@ -821,7 +813,7 @@ class StandardSecurityHandler(SecurityHandler):
         return AuthResult(status=res, permission_flags=self.perms)
 
     # Algorithm 2.A in ISO 32000-2 § 7.6.4.3.3
-    def _authenticate_r6(self, password) -> Tuple[AuthStatus, Optional[bytes]]:
+    def _authenticate_r6(self, password) -> tuple[AuthStatus, bytes | None]:
         pw_bytes = _r6_normalise_pw(password)
         o_entry_split = _R6KeyEntry.from_bytes(self.odata)
         u_entry_split = _R6KeyEntry.from_bytes(self.udata)

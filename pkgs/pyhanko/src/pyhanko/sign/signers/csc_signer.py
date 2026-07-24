@@ -88,7 +88,7 @@ import base64
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, FrozenSet, List, Optional
+from typing import Any
 
 import tzlocal
 from asn1crypto import algos, x509
@@ -138,7 +138,7 @@ class CSCServiceSessionInfo:
     The format is vendor-dependent.
     """
 
-    oauth_token: Optional[str] = None
+    oauth_token: str | None = None
     """
     OAuth token to use when making requests to the CSC service.
     """
@@ -193,12 +193,12 @@ class CSCCredentialInfo:
     The signer's certificate.
     """
 
-    chain: List[x509.Certificate]
+    chain: list[x509.Certificate]
     """
     Other relevant CA certificates.
     """
 
-    supported_mechanisms: FrozenSet[str]
+    supported_mechanisms: frozenset[str]
     """
     Signature mechanisms supported by the credential.
     """
@@ -359,7 +359,7 @@ class CSCAuthorizationInfo:
     Signature activation data; opaque to the client.
     """
 
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
     """
     Expiry date of the signature activation data.
     """
@@ -390,7 +390,7 @@ class CSCAuthorizationManager(abc.ABC):
         self.credential_info = credential_info
 
     async def authorize_signature(
-        self, hash_b64s: List[str]
+        self, hash_b64s: list[str]
     ) -> CSCAuthorizationInfo:
         """
         Request a SAD token from the signing service, either freshly or to
@@ -410,11 +410,11 @@ class CSCAuthorizationManager(abc.ABC):
     def format_csc_auth_request(
         self,
         num_signatures: int = 1,
-        pin: Optional[str] = None,
-        otp: Optional[str] = None,
-        hash_b64s: Optional[List[str]] = None,
-        description: Optional[str] = None,
-        client_data: Optional[str] = None,
+        pin: str | None = None,
+        otp: str | None = None,
+        hash_b64s: list[str] | None = None,
+        description: str | None = None,
+        client_data: str | None = None,
     ) -> dict:
         """
         Format the parameters for a call to ``credentials/authorize``.
@@ -439,7 +439,7 @@ class CSCAuthorizationManager(abc.ABC):
             A dict that, when encoded as a JSON object, be used as the request
             body for a call to ``credentials/authorize``.
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             'credentialID': self.csc_session_info.credential_id
         }
 
@@ -539,7 +539,7 @@ class PrefetchedSADAuthorizationManager(CSCAuthorizationManager):
         self._used = False
 
     async def authorize_signature(
-        self, hash_b64s: List[str]
+        self, hash_b64s: list[str]
     ) -> CSCAuthorizationInfo:
         """
         Return the prefetched SAD, or raise an error if called twice.
@@ -572,7 +572,7 @@ class _CSCBatchInfo:
     The digest algorithm that was used for the entire batch.
     """
 
-    b64_hashes: List[str] = field(default_factory=list)
+    b64_hashes: list[str] = field(default_factory=list)
     """
     List of base64-encoded hashes to sign.
     """
@@ -582,7 +582,7 @@ class _CSCBatchInfo:
     Flag indicating whether the commit process has been started.
     """
 
-    results: Optional[List[bytes]] = None
+    results: list[bytes] | None = None
     """
     Signature(s) returned by the API.
     """
@@ -637,9 +637,9 @@ class CSCSigner(Signer):
         sign_timeout: int = 300,
         prefer_pss: bool = False,
         embed_roots: bool = True,
-        client_data: Optional[str] = None,
+        client_data: str | None = None,
         batch_autocommit: bool = True,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
         est_raw_signature_size=512,
     ):
         credential_info = auth_manager.credential_info
@@ -649,7 +649,7 @@ class CSCSigner(Signer):
         self.sign_timeout = sign_timeout
         self.client_data = client_data
         self.batch_autocommit = batch_autocommit
-        self._current_batch: Optional[_CSCBatchInfo] = None
+        self._current_batch: _CSCBatchInfo | None = None
         self.batch_size = batch_size or 1
         super().__init__(
             prefer_pss=prefer_pss,
@@ -672,7 +672,7 @@ class CSCSigner(Signer):
         return result
 
     async def format_csc_signing_req(
-        self, tbs_hashes: List[str], digest_algorithm: str
+        self, tbs_hashes: list[str], digest_algorithm: str
     ) -> dict:
         """
         Populate the request data for a CSC signing request

@@ -1,8 +1,9 @@
 import enum
 import hashlib
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, Optional, Union
+from typing import Any, Union
 
 from asn1crypto import core, x509
 
@@ -42,7 +43,7 @@ KnownObjectType = Union[bytes, CRLContainer, OCSPContainer, x509.Certificate]
 
 def guess_validation_object_type(
     thing: object,
-) -> Optional[ValidationObjectType]:
+) -> ValidationObjectType | None:
     if isinstance(thing, CRLContainer):
         return ValidationObjectType.CRL
     elif isinstance(thing, OCSPContainer):
@@ -93,7 +94,7 @@ class KnownPOE:
     poe_type: POEType
     digest: bytes
     poe_time: datetime
-    validation_object: Optional[ValidationObject] = None
+    validation_object: ValidationObject | None = None
 
 
 def digest_for_poe(data: bytes) -> bytes:
@@ -108,15 +109,15 @@ class POEManager:
         Override the current time.
     """
 
-    def __init__(self, current_dt_override: Optional[datetime] = None):
-        self._poes: Dict[bytes, KnownPOE] = {}
+    def __init__(self, current_dt_override: datetime | None = None):
+        self._poes: dict[bytes, KnownPOE] = {}
         self._current_dt_override = current_dt_override
 
     def register(
         self,
         data: KnownObjectType,
         poe_type: POEType,
-        dt: Optional[datetime] = None,
+        dt: datetime | None = None,
     ) -> KnownPOE:
         """
         Register a new POE claim if no POE for an earlier time is available.
@@ -160,7 +161,7 @@ class POEManager:
         self,
         digest: bytes,
         poe_type: POEType,
-        dt: Optional[datetime] = None,
+        dt: datetime | None = None,
     ) -> KnownPOE:
         """
         Register a new POE claim if no POE for an earlier time is available.

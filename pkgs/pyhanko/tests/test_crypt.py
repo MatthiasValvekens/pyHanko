@@ -2,7 +2,6 @@ import binascii
 import os
 import warnings
 from io import BytesIO
-from typing import Optional
 
 import pytest
 from asn1crypto import cms, x509
@@ -212,7 +211,7 @@ def _produce_pubkey_encrypted_file(
     use_aes,
     use_crypt_filters,
     policy: pubkey.RecipientEncryptionPolicy = pubkey.RecipientEncryptionPolicy(),
-    cert: Optional[x509.Certificate] = None,
+    cert: x509.Certificate | None = None,
 ):
     if cert is None:
         cert = PUBKEY_TEST_DECRYPTER.cert

@@ -1,7 +1,6 @@
 import enum
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
 
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils.misc import get_and_apply
@@ -16,18 +15,18 @@ class StdLogOutput(enum.Enum):
 
 @dataclass(frozen=True)
 class LogConfig:
-    level: Union[int, str]
+    level: int | str
     """
     Logging level, should be one of the levels defined in the logging module.
     """
 
-    output: Union[StdLogOutput, str]
+    output: StdLogOutput | str
     """
     Name of the output file, or a standard one.
     """
 
     @staticmethod
-    def parse_output_spec(spec) -> Union[StdLogOutput, str]:
+    def parse_output_spec(spec) -> StdLogOutput | str:
         if not isinstance(spec, str):
             raise ConfigurationError(
                 "Log output must be specified as a string."
@@ -44,7 +43,7 @@ class LogConfig:
 DEFAULT_ROOT_LOGGER_LEVEL = logging.INFO
 
 
-def _retrieve_log_level(settings_dict, key, default=None) -> Union[int, str]:
+def _retrieve_log_level(settings_dict, key, default=None) -> int | str:
     try:
         level_spec = settings_dict[key]
     except KeyError:
@@ -60,7 +59,7 @@ def _retrieve_log_level(settings_dict, key, default=None) -> Union[int, str]:
     return level_spec
 
 
-def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
+def parse_logging_config(log_config_spec) -> dict[str | None, LogConfig]:
     if not isinstance(log_config_spec, dict):
         raise ConfigurationError('logging config should be a dictionary')
 
@@ -75,7 +74,7 @@ def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
         default=StdLogOutput.STDERR,
     )
 
-    log_config: Dict[Optional[str], LogConfig] = {
+    log_config: dict[str | None, LogConfig] = {
         None: LogConfig(root_logger_level, root_logger_output),
         # these modules are quite noisy, so we tone them down a notch by default
         'signxml.processor': LogConfig(logging.WARNING, root_logger_output),

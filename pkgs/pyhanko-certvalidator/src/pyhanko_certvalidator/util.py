@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import abc
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import AsyncIterator, Generic, List, Optional, TypeVar, Union
+from typing import Generic, TypeVar
 
 from asn1crypto import algos, cms, core, x509
 from cryptography.hazmat.primitives import hashes
@@ -46,7 +47,7 @@ def extract_ac_issuer_dir_name(
 
 
 def get_issuer_dn(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
 ) -> x509.Name:
     if isinstance(cert, x509.Certificate):
         return cert.issuer
@@ -55,7 +56,7 @@ def get_issuer_dn(
 
 
 def issuer_serial(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
 ) -> bytes:
     if isinstance(cert, x509.Certificate):
         return cert.issuer_serial
@@ -81,7 +82,7 @@ def get_ac_extension_value(
         return None
 
 
-def _get_absolute_http_crls(dps: Optional[x509.CRLDistributionPoints]):
+def _get_absolute_http_crls(dps: x509.CRLDistributionPoints | None):
     # see x509._get_http_crl_distribution_points
 
     if dps is None:
@@ -102,21 +103,21 @@ def _get_absolute_http_crls(dps: Optional[x509.CRLDistributionPoints]):
 
 def _get_ac_crl_dps(
     attr_cert: cms.AttributeCertificateV2,
-) -> List[x509.DistributionPoint]:
+) -> list[x509.DistributionPoint]:
     dps_ext = get_ac_extension_value(attr_cert, 'crl_distribution_points')
     return list(_get_absolute_http_crls(dps_ext))
 
 
 def _get_ac_delta_crl_dps(
     attr_cert: cms.AttributeCertificateV2,
-) -> List[x509.DistributionPoint]:
+) -> list[x509.DistributionPoint]:
     delta_dps_ext = get_ac_extension_value(attr_cert, 'freshest_crl')
     return list(_get_absolute_http_crls(delta_dps_ext))
 
 
 def get_relevant_crl_dps(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2], *, use_deltas
-) -> List[x509.DistributionPoint]:
+    cert: x509.Certificate | cms.AttributeCertificateV2, *, use_deltas
+) -> list[x509.DistributionPoint]:
     is_pkc = isinstance(cert, x509.Certificate)
 
     if is_pkc:
@@ -160,7 +161,7 @@ def _get_http_ocsp_urls(aia_ext):
                 yield url
 
 
-def get_ocsp_urls(cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+def get_ocsp_urls(cert: x509.Certificate | cms.AttributeCertificateV2):
     if isinstance(cert, x509.Certificate):
         aia = cert.authority_information_access_value
     else:
@@ -170,7 +171,7 @@ def get_ocsp_urls(cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
 
 
 def get_declared_revinfo(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
 ):
     if isinstance(cert, x509.Certificate):
         aia = cert.authority_information_access_value
@@ -202,7 +203,7 @@ def get_pyca_cryptography_hash(algorithm) -> hashes.HashAlgorithm:
 
 def get_pyca_cryptography_hash_for_signing(
     algorithm, prehashed=False
-) -> Union[hashes.HashAlgorithm, Prehashed]:
+) -> hashes.HashAlgorithm | Prehashed:
     hash_algo = get_pyca_cryptography_hash(algorithm)
     return Prehashed(hash_algo) if prehashed else hash_algo
 
@@ -244,8 +245,8 @@ ListElem = TypeVar('ListElem')
 
 @dataclass(frozen=True)
 class ConsList(Generic[ListElem]):
-    head: Optional[ListElem]
-    tail: Optional[ConsList[ListElem]] = None
+    head: ListElem | None
+    tail: ConsList[ListElem] | None = None
 
     @staticmethod
     def empty() -> ConsList[ListElem]:
@@ -262,7 +263,7 @@ class ConsList(Generic[ListElem]):
             cur = cur.tail
 
     @property
-    def last(self) -> Optional[ListElem]:
+    def last(self) -> ListElem | None:
         cur = self
         result = None
         while cur.tail is not None:

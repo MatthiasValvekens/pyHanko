@@ -57,7 +57,7 @@ def add_sig_field(infile, outfile, field, resave):
             writer = IncrementalPdfFileWriter(infile, strict=False)
 
         for s in field:
-            name, spec = parse_field_location_spec(s)
+            _name, spec = parse_field_location_spec(s)
             assert spec is not None
             fields.append_signature_field(writer, spec)
 

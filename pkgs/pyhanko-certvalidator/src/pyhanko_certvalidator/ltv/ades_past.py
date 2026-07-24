@@ -1,7 +1,6 @@
 import dataclasses
 import logging
 from datetime import datetime, timezone
-from typing import Optional
 
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
@@ -77,8 +76,8 @@ async def past_validate(
     path: ValidationPath,
     validation_policy_spec: CertValidationPolicySpec,
     validation_data_handlers: ValidationDataHandlers,
-    init_control_time: Optional[datetime] = None,
-    best_signature_time: Optional[datetime] = None,
+    init_control_time: datetime | None = None,
+    best_signature_time: datetime | None = None,
 ) -> datetime:
     """
     Execute the ETSI EN 319 102-1 past certificate validation algorithm

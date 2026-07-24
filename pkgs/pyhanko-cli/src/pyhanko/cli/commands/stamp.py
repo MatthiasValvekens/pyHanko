@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 
 import click
 from pyhanko.cli._root import cli_root
@@ -18,7 +17,7 @@ _CONFIG_REQUIRED_MSG = (
 
 
 def select_style(ctx: click.Context, style_name: str, url: str):
-    cli_config: Optional[CLIConfig] = ctx.obj.config
+    cli_config: CLIConfig | None = ctx.obj.config
     if not cli_config:
         if not style_name:
             return None
@@ -87,7 +86,7 @@ def stamp(
     stamp_url: str,
     text_param: list,
 ):
-    cli_config: Optional[CLIConfig] = ctx.obj.config
+    cli_config: CLIConfig | None = ctx.obj.config
     if cli_config is None:
         raise click.ClickException(_CONFIG_REQUIRED_MSG)
     text_params = {}

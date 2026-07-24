@@ -1,4 +1,5 @@
-from typing import Iterable, Optional
+from collections.abc import Iterable
+from typing import Optional
 
 from asn1crypto import x509
 
@@ -24,7 +25,7 @@ async def find_valid_path(
     certificate: x509.Certificate,
     paths: CancelableAsyncIterator[ValidationPath],
     validation_context: ValidationContext,
-    pkix_validation_params: Optional[PKIXValidationParams] = None,
+    pkix_validation_params: PKIXValidationParams | None = None,
 ):
     exceptions = []
     try:
@@ -67,9 +68,9 @@ class CertificateValidator:
     def __init__(
         self,
         end_entity_cert: x509.Certificate,
-        intermediate_certs: Optional[Iterable[x509.Certificate]] = None,
-        validation_context: Optional[ValidationContext] = None,
-        pkix_params: Optional[PKIXValidationParams] = None,
+        intermediate_certs: Iterable[x509.Certificate] | None = None,
+        validation_context: ValidationContext | None = None,
+        pkix_params: PKIXValidationParams | None = None,
     ):
         """
         :param end_entity_cert:
@@ -107,7 +108,7 @@ class CertificateValidator:
 
         self._context: ValidationContext = validation_context
         self._certificate: x509.Certificate = end_entity_cert
-        self._params: Optional[PKIXValidationParams] = pkix_params
+        self._params: PKIXValidationParams | None = pkix_params
 
     async def async_validate_path(self) -> ValidationPath:
         """

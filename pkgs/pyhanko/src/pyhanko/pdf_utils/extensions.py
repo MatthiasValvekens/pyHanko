@@ -1,6 +1,6 @@
 import enum
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
@@ -53,12 +53,12 @@ class DeveloperExtension:
     Extension level.
     """
 
-    url: Optional[str] = None
+    url: str | None = None
     """
     Optional URL linking to the extension's documentation.
     """
 
-    extension_revision: Optional[str] = None
+    extension_revision: str | None = None
     """
     Optional extra revision information. Not comparable.
     """

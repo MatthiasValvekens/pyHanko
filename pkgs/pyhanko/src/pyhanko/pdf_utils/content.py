@@ -1,7 +1,6 @@
 import binascii
 import uuid
 from enum import Enum
-from typing import Optional
 
 from .generic import (
     DictionaryObject,
@@ -16,14 +15,14 @@ from .reader import PdfFileReader
 from .writer import BasePdfFileWriter
 
 __all__ = [
+    'AnnotAppearances',
+    'AppearanceContent',
     'ImportedPdfPage',
     'PdfContent',
     'PdfResources',
     'RawContent',
     'ResourceManagementError',
     'ResourceType',
-    'AnnotAppearances',
-    'AppearanceContent',
 ]
 
 # TODO have the merge_resources helper in incremental_writer rely on some
@@ -84,8 +83,6 @@ class ResourceManagementError(ValueError):
     """
     Used to signal problems with resource dictionaries.
     """
-
-    pass
 
 
 def _res_merge_helper(dict1, dict2):
@@ -179,9 +176,9 @@ class PdfContent:
 
     def __init__(
         self,
-        resources: Optional[PdfResources] = None,
-        box: Optional[BoxConstraints] = None,
-        writer: Optional[BasePdfFileWriter] = None,
+        resources: PdfResources | None = None,
+        box: BoxConstraints | None = None,
+        writer: BasePdfFileWriter | None = None,
     ):
         self._resources: PdfResources = resources or PdfResources()
         self.box: BoxConstraints = box or BoxConstraints()
@@ -305,8 +302,8 @@ class RawContent(PdfContent):
     def __init__(
         self,
         data: bytes,
-        resources: Optional[PdfResources] = None,
-        box: Optional[BoxConstraints] = None,
+        resources: PdfResources | None = None,
+        box: BoxConstraints | None = None,
     ):
         super().__init__(resources, box)
         self.data = data
@@ -364,8 +361,8 @@ class AnnotAppearances:
     def __init__(
         self,
         normal: IndirectObject,
-        rollover: Optional[IndirectObject] = None,
-        down: Optional[IndirectObject] = None,
+        rollover: IndirectObject | None = None,
+        down: IndirectObject | None = None,
     ):
         self.normal = normal
         self.rollover = rollover
@@ -393,11 +390,11 @@ class AppearanceContent(PdfContent):
     def __init__(
         self,
         writer: BasePdfFileWriter,
-        box: Optional[BoxConstraints] = None,
+        box: BoxConstraints | None = None,
     ):
         super().__init__(box=box, writer=writer)
         self._resources_ready = False
-        self._content_xobj_ref: Optional[IndirectObject] = None
+        self._content_xobj_ref: IndirectObject | None = None
 
     def register(self) -> IndirectObject:
         """

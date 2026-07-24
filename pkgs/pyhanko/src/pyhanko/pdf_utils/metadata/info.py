@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import tzlocal
 from pyhanko.pdf_utils import generic, misc
@@ -41,7 +41,7 @@ def _write_meta_string(
 def _write_meta_date(
     dictionary: generic.DictionaryObject,
     key: str,
-    meta_date: Union[datetime, str, None],
+    meta_date: datetime | str | None,
     existing_only: bool,
 ) -> bool:
     if isinstance(meta_date, datetime):
@@ -108,7 +108,7 @@ def update_info_dict(
 
 def _read_date_from_dict(
     info_dict: generic.DictionaryObject, key: str, strict: bool
-) -> Optional[datetime]:
+) -> datetime | None:
     try:
         date_str = info_dict[key]
     except KeyError:
@@ -131,7 +131,7 @@ def _read_date_from_dict(
 def view_from_info_dict(
     info_dict: generic.DictionaryObject, strict: bool = True
 ) -> model.DocumentMetadata:
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     for s_entry in ('title', 'author', 'subject', 'creator'):
         try:
             kwargs[s_entry] = str(info_dict[f"/{s_entry.title()}"])

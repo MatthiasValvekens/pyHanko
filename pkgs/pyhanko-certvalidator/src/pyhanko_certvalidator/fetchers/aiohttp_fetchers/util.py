@@ -1,6 +1,6 @@
 import asyncio
 import ssl
-from typing import Any, Dict, Union
+from typing import Any
 
 import aiohttp
 import certifi
@@ -37,15 +37,15 @@ class LazySession:
 class AIOHttpMixin:
     def __init__(
         self,
-        session: Union[aiohttp.ClientSession, LazySession],
+        session: aiohttp.ClientSession | LazySession,
         user_agent=None,
         per_request_timeout=10,
     ):
         self._session = session
         self.user_agent = user_agent or DEFAULT_USER_AGENT
         self.per_request_timeout = per_request_timeout
-        self.__results: Dict[Any, Any] = {}
-        self.__result_events: Dict[Any, asyncio.Event] = {}
+        self.__results: dict[Any, Any] = {}
+        self.__result_events: dict[Any, asyncio.Event] = {}
         super().__init__()
 
     def get_session(self) -> aiohttp.ClientSession:

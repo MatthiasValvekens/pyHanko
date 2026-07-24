@@ -633,11 +633,13 @@ def test_xref_orphaned_strict():
     # higher-generation xref without matching free
     # should not work in strict mode
     fpath = os.path.join(PDF_DATA_DIR, 'minimal-with-orphaned-xrefs.pdf')
-    with open(fpath, 'rb') as inf:
-        with pytest.raises(
+    with (
+        open(fpath, 'rb') as inf,
+        pytest.raises(
             misc.PdfReadError, match="Object with id 1.*orphaned.*generation 9"
-        ):
-            PdfFileReader(inf, strict=True)
+        ),
+    ):
+        PdfFileReader(inf, strict=True)
 
 
 def test_xref_stream_parse_entry_types():

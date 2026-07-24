@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from enum import unique
-from typing import Optional, Set, Union
 
 from pyhanko.pdf_utils.misc import OrderedEnum
 from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
@@ -69,8 +68,6 @@ class ModificationLevel(OrderedEnum):
 class SuspiciousModification(ValueError):
     """Error indicating a suspicious modification"""
 
-    pass
-
 
 @dataclass(frozen=True)
 class DiffResult:
@@ -85,7 +82,7 @@ class DiffResult:
     The strictest modification level at which all changes pass muster.
     """
 
-    changed_form_fields: Set[str]
+    changed_form_fields: set[str]
     """
     Set containing the names of all changed form fields.
 
@@ -105,8 +102,8 @@ class DiffPolicy:
         self,
         old: HistoricalResolver,
         new: HistoricalResolver,
-        field_mdp_spec: Optional[FieldMDPSpec] = None,
-        doc_mdp: Optional[MDPPerm] = None,
+        field_mdp_spec: FieldMDPSpec | None = None,
+        doc_mdp: MDPPerm | None = None,
     ) -> DiffResult:
         """
         Execute the policy on a pair of revisions, with the MDP values provided.
@@ -128,10 +125,10 @@ class DiffPolicy:
     def review_file(
         self,
         reader: PdfFileReader,
-        base_revision: Union[int, HistoricalResolver],
-        field_mdp_spec: Optional[FieldMDPSpec] = None,
-        doc_mdp: Optional[MDPPerm] = None,
-    ) -> Union[DiffResult, SuspiciousModification]:
+        base_revision: int | HistoricalResolver,
+        field_mdp_spec: FieldMDPSpec | None = None,
+        doc_mdp: MDPPerm | None = None,
+    ) -> DiffResult | SuspiciousModification:
         """
         Compare the current state of a file to an earlier version,
         with the MDP values provided.

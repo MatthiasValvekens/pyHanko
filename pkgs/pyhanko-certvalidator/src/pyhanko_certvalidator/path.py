@@ -1,7 +1,7 @@
-# coding: utf-8
 import itertools
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import FrozenSet, Iterable, Iterator, Optional, Union
+from typing import Union
 
 from asn1crypto import cms, x509
 
@@ -41,7 +41,7 @@ class ValidationPath:
     certificate.
     """
 
-    _qualified_policies: Optional[FrozenSet[QualifiedPolicy]] = None
+    _qualified_policies: frozenset[QualifiedPolicy] | None = None
 
     _path_aa_controls = None
 
@@ -49,7 +49,7 @@ class ValidationPath:
         self,
         trust_anchor: TrustAnchor,
         interm: Iterable[x509.Certificate],
-        leaf: Optional[Leaf],
+        leaf: Leaf | None,
     ):
         if interm and not leaf:
             raise ValueError("Leafless paths cannot have intermediate certs")
@@ -85,7 +85,7 @@ class ValidationPath:
             return self._leaf
 
     @property
-    def leaf(self) -> Optional[Leaf]:
+    def leaf(self) -> Leaf | None:
         """
         Returns the current leaf certificate (AC or public-key).
         The trust root's certificate will be returned if there is one and
@@ -103,7 +103,7 @@ class ValidationPath:
         # __init__ ensures that leaf None -> there are no intermediate certs
         return None
 
-    def describe_leaf(self) -> Optional[str]:
+    def describe_leaf(self) -> str | None:
         leaf = self.leaf
         if isinstance(leaf, x509.Certificate):
             return leaf.subject.human_friendly
@@ -112,7 +112,7 @@ class ValidationPath:
         else:
             return None
 
-    def get_ee_cert_safe(self) -> Optional[x509.Certificate]:
+    def get_ee_cert_safe(self) -> x509.Certificate | None:
         """
         Returns the current leaf certificate if it is an X.509 public-key
         certificate, and ``None`` otherwise.
@@ -293,7 +293,7 @@ class ValidationPath:
     def _set_qualified_policies(self, policies):
         self._qualified_policies = policies
 
-    def qualified_policies(self) -> Optional[FrozenSet[QualifiedPolicy]]:
+    def qualified_policies(self) -> frozenset[QualifiedPolicy] | None:
         return self._qualified_policies
 
     def aa_attr_in_scope(self, attr_id: cms.AttCertAttributeType) -> bool:

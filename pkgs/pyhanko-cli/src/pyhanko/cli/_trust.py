@@ -1,8 +1,9 @@
 import asyncio
 import ssl
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Dict, Iterable, Optional, TypeVar, Union
+from typing import Any, TypeVar
 
 import certifi
 import click
@@ -49,8 +50,8 @@ from pyhanko_certvalidator.registry import (
 
 __all__ = [
     'TrustManagerSettings',
-    'init_trust_manager',
     'build_vc_kwargs',
+    'init_trust_manager',
 ]
 
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
@@ -60,18 +61,18 @@ DEFAULT_TL_CACHE_REFRESH_TIME = timedelta(days=15)
 
 @dataclass(frozen=True)
 class TrustManagerSettings:
-    trust: Union[Iterable[str], str, None]
+    trust: Iterable[str] | str | None
     trust_replace: bool
     eutl: bool
     eutl_force_redownload: bool
-    eutl_lotl_url: Optional[str] = None
-    lotl_tlso_certs: Optional[str] = None
-    territories: Union[Iterable[str], str, None] = None
+    eutl_lotl_url: str | None = None
+    lotl_tlso_certs: str | None = None
+    territories: Iterable[str] | str | None = None
 
 
 async def init_trust_manager(
     settings: TrustManagerSettings,
-    cli_config: Optional[CLIConfig],
+    cli_config: CLIConfig | None,
 ):
     if isinstance(settings.trust, str):
         trust = {settings.trust}
@@ -205,17 +206,17 @@ def _parse_other_certs(config_dict):
 
 def build_cert_validation_policy_and_extract_extra_certs(
     *,
-    cli_config: Optional[CLIConfig],
-    validation_context: Optional[str],
-    trust: Union[Iterable[str], str],
+    cli_config: CLIConfig | None,
+    validation_context: str | None,
+    trust: Iterable[str] | str,
     trust_replace: bool,
     eutl_all: bool,
     eutl_force_redownload: bool,
-    eutl_territories: Optional[str],
+    eutl_territories: str | None,
     other_certs: Iterable[str],
-    revocation_policy: Optional[str],
+    revocation_policy: str | None,
 ):
-    overrides: Dict[str, Any] = {}
+    overrides: dict[str, Any] = {}
     if eutl_territories == '':
         raise click.ClickException(
             "argument to --eutl-territories must be non-empty"
@@ -314,7 +315,7 @@ def build_cert_validation_policy_and_extract_extra_certs(
         return cert_validation_policy, other_certs
     except click.ClickException:
         raise
-    except IOError as e:
+    except OSError as e:
         msg = "I/O problem while reading validation config"
         logger.error(msg, exc_info=e)
         raise click.ClickException(msg)
@@ -326,11 +327,11 @@ def build_cert_validation_policy_and_extract_extra_certs(
 
 def derive_cert_validation_policy(
     *,
-    cli_config: Optional[CLIConfig],
+    cli_config: CLIConfig | None,
     trust_manager_settings: TrustManagerSettings,
     revinfo_policy: str,
-    retroactive_revinfo: Optional[bool] = None,
-    time_tolerance: Optional[timedelta] = None,
+    retroactive_revinfo: bool | None = None,
+    time_tolerance: timedelta | None = None,
 ) -> CertValidationPolicySpec:
     if time_tolerance is None:
         if cli_config:
@@ -358,7 +359,7 @@ def derive_cert_validation_policy(
 
 
 def init_handlers(
-    other_certs: Union[Iterable[str], str],
+    other_certs: Iterable[str] | str,
     allow_fetching: bool,
 ):
     other_cert_objs = list(load_certs_from_pemder(other_certs))
@@ -443,15 +444,15 @@ def parse_trust_config_into_policy(
 
 def build_vc_kwargs(
     *,
-    cli_config: Optional[CLIConfig],
-    validation_context: Optional[str],
-    trust: Union[Iterable[str], str],
+    cli_config: CLIConfig | None,
+    validation_context: str | None,
+    trust: Iterable[str] | str,
     trust_replace: bool,
     eutl_all: bool,
     eutl_force_redownload: bool,
-    eutl_territories: Optional[str],
-    other_certs: Union[Iterable[str], str],
-    revocation_policy: Optional[str],
+    eutl_territories: str | None,
+    other_certs: Iterable[str] | str,
+    revocation_policy: str | None,
     retroactive_revinfo: bool,
     allow_fetching: bool,
 ):
@@ -479,7 +480,7 @@ def build_vc_kwargs(
 
 
 def _get_key_usage_settings(ctx: click.Context, validation_context: str):
-    cli_config: Optional[CLIConfig] = ctx.obj.config
+    cli_config: CLIConfig | None = ctx.obj.config
     if cli_config is None:
         return None
 
@@ -569,7 +570,7 @@ def grab_certs(files):
         return None
     try:
         return list(load_certs_from_pemder(files))
-    except (IOError, ValueError) as e:
+    except (OSError, ValueError) as e:
         raise click.ClickException(
             f'Could not load certificates from {files}'
         ) from e

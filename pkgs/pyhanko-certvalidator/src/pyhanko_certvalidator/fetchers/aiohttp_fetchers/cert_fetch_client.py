@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, Union
+from collections.abc import Iterable
 
 import aiohttp
 from asn1crypto import cms, x509
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
     def __init__(
         self,
-        session: Union[aiohttp.ClientSession, LazySession],
+        session: aiohttp.ClientSession | LazySession,
         user_agent=None,
         per_request_timeout=10,
         permit_pem=True,
@@ -65,7 +65,7 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
         return await self._post_fetch_task(url, task)
 
     def fetch_cert_issuers(
-        self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+        self, cert: x509.Certificate | cms.AttributeCertificateV2
     ):
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='certificate')

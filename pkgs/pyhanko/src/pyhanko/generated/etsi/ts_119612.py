@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Optional, Tuple, Union
 
 from xsdata.models.datatype import XmlDateTime
 
@@ -11,7 +10,7 @@ __NAMESPACE__ = "http://uri.etsi.org/02231/v2#"
 
 @dataclass(frozen=True)
 class AnyType:
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -30,7 +29,7 @@ class AttributedNonEmptyURIType:
             "min_length": 1,
         },
     )
-    type_value: Optional[str] = field(
+    type_value: str | None = field(
         default=None,
         metadata={
             "name": "type",
@@ -44,7 +43,7 @@ class ExpiredCertsRevocationInfo:
     class Meta:
         namespace = "http://uri.etsi.org/02231/v2#"
 
-    value: Optional[XmlDateTime] = field(
+    value: XmlDateTime | None = field(
         default=None,
         metadata={
             "required": True,
@@ -54,7 +53,7 @@ class ExpiredCertsRevocationInfo:
 
 @dataclass(frozen=True)
 class NextUpdateType:
-    date_time: Optional[XmlDateTime] = field(
+    date_time: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "dateTime",
@@ -66,7 +65,7 @@ class NextUpdateType:
 
 @dataclass(frozen=True)
 class NonEmptyURIListType:
-    uri: Tuple[str, ...] = field(
+    uri: tuple[str, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "URI",
@@ -135,7 +134,7 @@ class TSLType:
 
 @dataclass(frozen=True)
 class DigitalIdentityType:
-    x509_certificate: Optional[bytes] = field(
+    x509_certificate: bytes | None = field(
         default=None,
         metadata={
             "name": "X509Certificate",
@@ -144,7 +143,7 @@ class DigitalIdentityType:
             "format": "base64",
         },
     )
-    x509_subject_name: Optional[str] = field(
+    x509_subject_name: str | None = field(
         default=None,
         metadata={
             "name": "X509SubjectName",
@@ -152,7 +151,7 @@ class DigitalIdentityType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    key_value: Optional[KeyValue] = field(
+    key_value: KeyValue | None = field(
         default=None,
         metadata={
             "name": "KeyValue",
@@ -160,7 +159,7 @@ class DigitalIdentityType:
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
         },
     )
-    x509_ski: Optional[bytes] = field(
+    x509_ski: bytes | None = field(
         default=None,
         metadata={
             "name": "X509SKI",
@@ -169,7 +168,7 @@ class DigitalIdentityType:
             "format": "base64",
         },
     )
-    other: Optional[AnyType] = field(
+    other: AnyType | None = field(
         default=None,
         metadata={
             "name": "Other",
@@ -187,7 +186,7 @@ class DistributionPoints(NonEmptyURIListType):
 
 @dataclass(frozen=True)
 class ExtensionType(AnyType):
-    critical: Optional[bool] = field(
+    critical: bool | None = field(
         default=None,
         metadata={
             "name": "Critical",
@@ -206,7 +205,7 @@ class MultiLangNormStringType:
             "min_length": 1,
         },
     )
-    lang: Optional[Union[str, Langvalue]] = field(
+    lang: str | Langvalue | None = field(
         default=None,
         metadata={
             "type": "Attribute",
@@ -225,7 +224,7 @@ class MultiLangStringType:
             "min_length": 1,
         },
     )
-    lang: Optional[Union[str, Langvalue]] = field(
+    lang: str | Langvalue | None = field(
         default=None,
         metadata={
             "type": "Attribute",
@@ -250,7 +249,7 @@ class NonEmptyMultiLangURIType:
             "min_length": 1,
         },
     )
-    lang: Optional[Union[str, Langvalue]] = field(
+    lang: str | Langvalue | None = field(
         default=None,
         metadata={
             "type": "Attribute",
@@ -262,7 +261,7 @@ class NonEmptyMultiLangURIType:
 
 @dataclass(frozen=True)
 class PostalAddressType:
-    street_address: Optional[str] = field(
+    street_address: str | None = field(
         default=None,
         metadata={
             "name": "StreetAddress",
@@ -272,7 +271,7 @@ class PostalAddressType:
             "min_length": 1,
         },
     )
-    locality: Optional[str] = field(
+    locality: str | None = field(
         default=None,
         metadata={
             "name": "Locality",
@@ -282,7 +281,7 @@ class PostalAddressType:
             "min_length": 1,
         },
     )
-    state_or_province: Optional[str] = field(
+    state_or_province: str | None = field(
         default=None,
         metadata={
             "name": "StateOrProvince",
@@ -291,7 +290,7 @@ class PostalAddressType:
             "min_length": 1,
         },
     )
-    postal_code: Optional[str] = field(
+    postal_code: str | None = field(
         default=None,
         metadata={
             "name": "PostalCode",
@@ -300,7 +299,7 @@ class PostalAddressType:
             "min_length": 1,
         },
     )
-    country_name: Optional[str] = field(
+    country_name: str | None = field(
         default=None,
         metadata={
             "name": "CountryName",
@@ -310,7 +309,7 @@ class PostalAddressType:
             "min_length": 1,
         },
     )
-    lang: Optional[Union[str, Langvalue]] = field(
+    lang: str | Langvalue | None = field(
         default=None,
         metadata={
             "type": "Attribute",
@@ -322,7 +321,7 @@ class PostalAddressType:
 
 @dataclass(frozen=True)
 class ServiceSupplyPointsType:
-    service_supply_point: Tuple[AttributedNonEmptyURIType, ...] = field(
+    service_supply_point: tuple[AttributedNonEmptyURIType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ServiceSupplyPoint",
@@ -335,7 +334,7 @@ class ServiceSupplyPointsType:
 
 @dataclass(frozen=True)
 class AdditionalInformationType:
-    textual_information: Tuple[MultiLangStringType, ...] = field(
+    textual_information: tuple[MultiLangStringType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "TextualInformation",
@@ -343,7 +342,7 @@ class AdditionalInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    other_information: Tuple[AnyType, ...] = field(
+    other_information: tuple[AnyType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "OtherInformation",
@@ -355,7 +354,7 @@ class AdditionalInformationType:
 
 @dataclass(frozen=True)
 class AdditionalServiceInformationType:
-    uri: Optional[NonEmptyMultiLangURIType] = field(
+    uri: NonEmptyMultiLangURIType | None = field(
         default=None,
         metadata={
             "name": "URI",
@@ -364,7 +363,7 @@ class AdditionalServiceInformationType:
             "required": True,
         },
     )
-    information_value: Optional[str] = field(
+    information_value: str | None = field(
         default=None,
         metadata={
             "name": "InformationValue",
@@ -372,7 +371,7 @@ class AdditionalServiceInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    other_information: Optional[AnyType] = field(
+    other_information: AnyType | None = field(
         default=None,
         metadata={
             "name": "OtherInformation",
@@ -384,7 +383,7 @@ class AdditionalServiceInformationType:
 
 @dataclass(frozen=True)
 class DigitalIdentityListType:
-    digital_id: Tuple[DigitalIdentityType, ...] = field(
+    digital_id: tuple[DigitalIdentityType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "DigitalId",
@@ -396,7 +395,7 @@ class DigitalIdentityListType:
 
 @dataclass(frozen=True)
 class ElectronicAddressType:
-    uri: Tuple[NonEmptyMultiLangURIType, ...] = field(
+    uri: tuple[NonEmptyMultiLangURIType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "URI",
@@ -415,7 +414,7 @@ class Extension(ExtensionType):
 
 @dataclass(frozen=True)
 class InternationalNamesType:
-    name: Tuple[MultiLangNormStringType, ...] = field(
+    name: tuple[MultiLangNormStringType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Name",
@@ -428,7 +427,7 @@ class InternationalNamesType:
 
 @dataclass(frozen=True)
 class NonEmptyMultiLangURIListType:
-    uri: Tuple[NonEmptyMultiLangURIType, ...] = field(
+    uri: tuple[NonEmptyMultiLangURIType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "URI",
@@ -441,7 +440,7 @@ class NonEmptyMultiLangURIListType:
 
 @dataclass(frozen=True)
 class PolicyOrLegalnoticeType:
-    tslpolicy: Tuple[NonEmptyMultiLangURIType, ...] = field(
+    tslpolicy: tuple[NonEmptyMultiLangURIType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "TSLPolicy",
@@ -449,7 +448,7 @@ class PolicyOrLegalnoticeType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    tsllegal_notice: Tuple[MultiLangStringType, ...] = field(
+    tsllegal_notice: tuple[MultiLangStringType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "TSLLegalNotice",
@@ -491,7 +490,7 @@ class ElectronicAddress(ElectronicAddressType):
 
 @dataclass(frozen=True)
 class ExtensionsListType:
-    extension: Tuple[Extension, ...] = field(
+    extension: tuple[Extension, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Extension",
@@ -510,7 +509,7 @@ class PolicyOrLegalNotice(PolicyOrLegalnoticeType):
 
 @dataclass(frozen=True)
 class PostalAddressListType:
-    postal_address: Tuple[PostalAddress, ...] = field(
+    postal_address: tuple[PostalAddress, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "PostalAddress",
@@ -559,7 +558,7 @@ class PostalAddresses(PostalAddressListType):
 
 @dataclass(frozen=True)
 class ServiceDigitalIdentityListType:
-    service_digital_identity: Tuple[ServiceDigitalIdentity, ...] = field(
+    service_digital_identity: tuple[ServiceDigitalIdentity, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ServiceDigitalIdentity",
@@ -572,7 +571,7 @@ class ServiceDigitalIdentityListType:
 
 @dataclass(frozen=True)
 class ServiceHistoryInstanceType:
-    service_type_identifier: Optional[ServiceTypeIdentifier] = field(
+    service_type_identifier: ServiceTypeIdentifier | None = field(
         default=None,
         metadata={
             "name": "ServiceTypeIdentifier",
@@ -581,7 +580,7 @@ class ServiceHistoryInstanceType:
             "required": True,
         },
     )
-    service_name: Optional[InternationalNamesType] = field(
+    service_name: InternationalNamesType | None = field(
         default=None,
         metadata={
             "name": "ServiceName",
@@ -590,7 +589,7 @@ class ServiceHistoryInstanceType:
             "required": True,
         },
     )
-    service_digital_identity: Optional[ServiceDigitalIdentity] = field(
+    service_digital_identity: ServiceDigitalIdentity | None = field(
         default=None,
         metadata={
             "name": "ServiceDigitalIdentity",
@@ -599,7 +598,7 @@ class ServiceHistoryInstanceType:
             "required": True,
         },
     )
-    service_status: Optional[ServiceStatus] = field(
+    service_status: ServiceStatus | None = field(
         default=None,
         metadata={
             "name": "ServiceStatus",
@@ -608,7 +607,7 @@ class ServiceHistoryInstanceType:
             "required": True,
         },
     )
-    status_starting_time: Optional[XmlDateTime] = field(
+    status_starting_time: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "StatusStartingTime",
@@ -617,7 +616,7 @@ class ServiceHistoryInstanceType:
             "required": True,
         },
     )
-    service_information_extensions: Optional[ExtensionsListType] = field(
+    service_information_extensions: ExtensionsListType | None = field(
         default=None,
         metadata={
             "name": "ServiceInformationExtensions",
@@ -629,7 +628,7 @@ class ServiceHistoryInstanceType:
 
 @dataclass(frozen=True)
 class TSPServiceInformationType:
-    service_type_identifier: Optional[ServiceTypeIdentifier] = field(
+    service_type_identifier: ServiceTypeIdentifier | None = field(
         default=None,
         metadata={
             "name": "ServiceTypeIdentifier",
@@ -638,7 +637,7 @@ class TSPServiceInformationType:
             "required": True,
         },
     )
-    service_name: Optional[InternationalNamesType] = field(
+    service_name: InternationalNamesType | None = field(
         default=None,
         metadata={
             "name": "ServiceName",
@@ -647,7 +646,7 @@ class TSPServiceInformationType:
             "required": True,
         },
     )
-    service_digital_identity: Optional[ServiceDigitalIdentity] = field(
+    service_digital_identity: ServiceDigitalIdentity | None = field(
         default=None,
         metadata={
             "name": "ServiceDigitalIdentity",
@@ -656,7 +655,7 @@ class TSPServiceInformationType:
             "required": True,
         },
     )
-    service_status: Optional[ServiceStatus] = field(
+    service_status: ServiceStatus | None = field(
         default=None,
         metadata={
             "name": "ServiceStatus",
@@ -665,7 +664,7 @@ class TSPServiceInformationType:
             "required": True,
         },
     )
-    status_starting_time: Optional[XmlDateTime] = field(
+    status_starting_time: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "StatusStartingTime",
@@ -674,17 +673,15 @@ class TSPServiceInformationType:
             "required": True,
         },
     )
-    scheme_service_definition_uri: Optional[NonEmptyMultiLangURIListType] = (
-        field(
-            default=None,
-            metadata={
-                "name": "SchemeServiceDefinitionURI",
-                "type": "Element",
-                "namespace": "http://uri.etsi.org/02231/v2#",
-            },
-        )
+    scheme_service_definition_uri: NonEmptyMultiLangURIListType | None = field(
+        default=None,
+        metadata={
+            "name": "SchemeServiceDefinitionURI",
+            "type": "Element",
+            "namespace": "http://uri.etsi.org/02231/v2#",
+        },
     )
-    service_supply_points: Optional[ServiceSupplyPoints] = field(
+    service_supply_points: ServiceSupplyPoints | None = field(
         default=None,
         metadata={
             "name": "ServiceSupplyPoints",
@@ -692,7 +689,7 @@ class TSPServiceInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    tspservice_definition_uri: Optional[NonEmptyMultiLangURIListType] = field(
+    tspservice_definition_uri: NonEmptyMultiLangURIListType | None = field(
         default=None,
         metadata={
             "name": "TSPServiceDefinitionURI",
@@ -700,7 +697,7 @@ class TSPServiceInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    service_information_extensions: Optional[ExtensionsListType] = field(
+    service_information_extensions: ExtensionsListType | None = field(
         default=None,
         metadata={
             "name": "ServiceInformationExtensions",
@@ -712,7 +709,7 @@ class TSPServiceInformationType:
 
 @dataclass(frozen=True)
 class AddressType:
-    postal_addresses: Optional[PostalAddresses] = field(
+    postal_addresses: PostalAddresses | None = field(
         default=None,
         metadata={
             "name": "PostalAddresses",
@@ -721,7 +718,7 @@ class AddressType:
             "required": True,
         },
     )
-    electronic_address: Optional[ElectronicAddress] = field(
+    electronic_address: ElectronicAddress | None = field(
         default=None,
         metadata={
             "name": "ElectronicAddress",
@@ -752,7 +749,7 @@ class ServiceInformation(TSPServiceInformationType):
 
 @dataclass(frozen=True)
 class OtherTSLPointerType:
-    service_digital_identities: Optional[ServiceDigitalIdentities] = field(
+    service_digital_identities: ServiceDigitalIdentities | None = field(
         default=None,
         metadata={
             "name": "ServiceDigitalIdentities",
@@ -760,7 +757,7 @@ class OtherTSLPointerType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    tsllocation: Optional[str] = field(
+    tsllocation: str | None = field(
         default=None,
         metadata={
             "name": "TSLLocation",
@@ -770,7 +767,7 @@ class OtherTSLPointerType:
             "min_length": 1,
         },
     )
-    additional_information: Optional[AdditionalInformation] = field(
+    additional_information: AdditionalInformation | None = field(
         default=None,
         metadata={
             "name": "AdditionalInformation",
@@ -782,7 +779,7 @@ class OtherTSLPointerType:
 
 @dataclass(frozen=True)
 class ServiceHistoryType:
-    service_history_instance: Tuple[ServiceHistoryInstance, ...] = field(
+    service_history_instance: tuple[ServiceHistoryInstance, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "ServiceHistoryInstance",
@@ -794,7 +791,7 @@ class ServiceHistoryType:
 
 @dataclass(frozen=True)
 class TSPInformationType:
-    tspname: Optional[InternationalNamesType] = field(
+    tspname: InternationalNamesType | None = field(
         default=None,
         metadata={
             "name": "TSPName",
@@ -803,7 +800,7 @@ class TSPInformationType:
             "required": True,
         },
     )
-    tsptrade_name: Optional[InternationalNamesType] = field(
+    tsptrade_name: InternationalNamesType | None = field(
         default=None,
         metadata={
             "name": "TSPTradeName",
@@ -811,7 +808,7 @@ class TSPInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    tspaddress: Optional[AddressType] = field(
+    tspaddress: AddressType | None = field(
         default=None,
         metadata={
             "name": "TSPAddress",
@@ -820,7 +817,7 @@ class TSPInformationType:
             "required": True,
         },
     )
-    tspinformation_uri: Optional[NonEmptyMultiLangURIListType] = field(
+    tspinformation_uri: NonEmptyMultiLangURIListType | None = field(
         default=None,
         metadata={
             "name": "TSPInformationURI",
@@ -829,7 +826,7 @@ class TSPInformationType:
             "required": True,
         },
     )
-    tspinformation_extensions: Optional[ExtensionsListType] = field(
+    tspinformation_extensions: ExtensionsListType | None = field(
         default=None,
         metadata={
             "name": "TSPInformationExtensions",
@@ -859,7 +856,7 @@ class TSPInformation(TSPInformationType):
 
 @dataclass(frozen=True)
 class OtherTSLPointersType:
-    other_tslpointer: Tuple[OtherTSLPointer, ...] = field(
+    other_tslpointer: tuple[OtherTSLPointer, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "OtherTSLPointer",
@@ -872,7 +869,7 @@ class OtherTSLPointersType:
 
 @dataclass(frozen=True)
 class TSPServiceType:
-    service_information: Optional[ServiceInformation] = field(
+    service_information: ServiceInformation | None = field(
         default=None,
         metadata={
             "name": "ServiceInformation",
@@ -881,7 +878,7 @@ class TSPServiceType:
             "required": True,
         },
     )
-    service_history: Optional[ServiceHistory] = field(
+    service_history: ServiceHistory | None = field(
         default=None,
         metadata={
             "name": "ServiceHistory",
@@ -905,7 +902,7 @@ class TSPService(TSPServiceType):
 
 @dataclass(frozen=True)
 class TSLSchemeInformationType:
-    tslversion_identifier: Optional[int] = field(
+    tslversion_identifier: int | None = field(
         default=None,
         metadata={
             "name": "TSLVersionIdentifier",
@@ -914,7 +911,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    tslsequence_number: Optional[int] = field(
+    tslsequence_number: int | None = field(
         default=None,
         metadata={
             "name": "TSLSequenceNumber",
@@ -923,7 +920,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    tsltype: Optional[TSLType] = field(
+    tsltype: TSLType | None = field(
         default=None,
         metadata={
             "name": "TSLType",
@@ -932,7 +929,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    scheme_operator_name: Optional[SchemeOperatorName] = field(
+    scheme_operator_name: SchemeOperatorName | None = field(
         default=None,
         metadata={
             "name": "SchemeOperatorName",
@@ -941,7 +938,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    scheme_operator_address: Optional[AddressType] = field(
+    scheme_operator_address: AddressType | None = field(
         default=None,
         metadata={
             "name": "SchemeOperatorAddress",
@@ -950,7 +947,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    scheme_name: Optional[SchemeName] = field(
+    scheme_name: SchemeName | None = field(
         default=None,
         metadata={
             "name": "SchemeName",
@@ -959,7 +956,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    scheme_information_uri: Optional[SchemeInformationURI] = field(
+    scheme_information_uri: SchemeInformationURI | None = field(
         default=None,
         metadata={
             "name": "SchemeInformationURI",
@@ -968,7 +965,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    status_determination_approach: Optional[str] = field(
+    status_determination_approach: str | None = field(
         default=None,
         metadata={
             "name": "StatusDeterminationApproach",
@@ -978,7 +975,7 @@ class TSLSchemeInformationType:
             "min_length": 1,
         },
     )
-    scheme_type_community_rules: Optional[SchemeTypeCommunityRules] = field(
+    scheme_type_community_rules: SchemeTypeCommunityRules | None = field(
         default=None,
         metadata={
             "name": "SchemeTypeCommunityRules",
@@ -986,7 +983,7 @@ class TSLSchemeInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    scheme_territory: Optional[SchemeTerritory] = field(
+    scheme_territory: SchemeTerritory | None = field(
         default=None,
         metadata={
             "name": "SchemeTerritory",
@@ -994,7 +991,7 @@ class TSLSchemeInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    policy_or_legal_notice: Optional[PolicyOrLegalNotice] = field(
+    policy_or_legal_notice: PolicyOrLegalNotice | None = field(
         default=None,
         metadata={
             "name": "PolicyOrLegalNotice",
@@ -1002,7 +999,7 @@ class TSLSchemeInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    historical_information_period: Optional[int] = field(
+    historical_information_period: int | None = field(
         default=None,
         metadata={
             "name": "HistoricalInformationPeriod",
@@ -1011,7 +1008,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    pointers_to_other_tsl: Optional[PointersToOtherTSL] = field(
+    pointers_to_other_tsl: PointersToOtherTSL | None = field(
         default=None,
         metadata={
             "name": "PointersToOtherTSL",
@@ -1019,7 +1016,7 @@ class TSLSchemeInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    list_issue_date_time: Optional[XmlDateTime] = field(
+    list_issue_date_time: XmlDateTime | None = field(
         default=None,
         metadata={
             "name": "ListIssueDateTime",
@@ -1028,7 +1025,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    next_update: Optional[NextUpdate] = field(
+    next_update: NextUpdate | None = field(
         default=None,
         metadata={
             "name": "NextUpdate",
@@ -1037,7 +1034,7 @@ class TSLSchemeInformationType:
             "required": True,
         },
     )
-    distribution_points: Optional[DistributionPoints] = field(
+    distribution_points: DistributionPoints | None = field(
         default=None,
         metadata={
             "name": "DistributionPoints",
@@ -1045,7 +1042,7 @@ class TSLSchemeInformationType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    scheme_extensions: Optional[ExtensionsListType] = field(
+    scheme_extensions: ExtensionsListType | None = field(
         default=None,
         metadata={
             "name": "SchemeExtensions",
@@ -1057,7 +1054,7 @@ class TSLSchemeInformationType:
 
 @dataclass(frozen=True)
 class TSPServicesListType:
-    tspservice: Tuple[TSPService, ...] = field(
+    tspservice: tuple[TSPService, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "TSPService",
@@ -1082,7 +1079,7 @@ class TSPServices(TSPServicesListType):
 
 @dataclass(frozen=True)
 class TSPType:
-    tspinformation: Optional[TSPInformation] = field(
+    tspinformation: TSPInformation | None = field(
         default=None,
         metadata={
             "name": "TSPInformation",
@@ -1091,7 +1088,7 @@ class TSPType:
             "required": True,
         },
     )
-    tspservices: Optional[TSPServices] = field(
+    tspservices: TSPServices | None = field(
         default=None,
         metadata={
             "name": "TSPServices",
@@ -1110,7 +1107,7 @@ class TrustServiceProvider(TSPType):
 
 @dataclass(frozen=True)
 class TrustServiceProviderListType:
-    trust_service_provider: Tuple[TrustServiceProvider, ...] = field(
+    trust_service_provider: tuple[TrustServiceProvider, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "TrustServiceProvider",
@@ -1129,7 +1126,7 @@ class TrustServiceProviderList(TrustServiceProviderListType):
 
 @dataclass(frozen=True)
 class TrustStatusListType:
-    scheme_information: Optional[SchemeInformation] = field(
+    scheme_information: SchemeInformation | None = field(
         default=None,
         metadata={
             "name": "SchemeInformation",
@@ -1138,7 +1135,7 @@ class TrustStatusListType:
             "required": True,
         },
     )
-    trust_service_provider_list: Optional[TrustServiceProviderList] = field(
+    trust_service_provider_list: TrustServiceProviderList | None = field(
         default=None,
         metadata={
             "name": "TrustServiceProviderList",
@@ -1146,7 +1143,7 @@ class TrustStatusListType:
             "namespace": "http://uri.etsi.org/02231/v2#",
         },
     )
-    signature: Optional[Signature] = field(
+    signature: Signature | None = field(
         default=None,
         metadata={
             "name": "Signature",
@@ -1154,7 +1151,7 @@ class TrustStatusListType:
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
         },
     )
-    tsltag: Optional[str] = field(
+    tsltag: str | None = field(
         default=None,
         metadata={
             "name": "TSLTag",
@@ -1162,7 +1159,7 @@ class TrustStatusListType:
             "required": True,
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",

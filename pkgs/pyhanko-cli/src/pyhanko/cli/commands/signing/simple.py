@@ -1,5 +1,5 @@
 import contextlib
-from typing import ContextManager, List, Optional
+from typing import ContextManager
 
 import click
 from pyhanko.cli._ctx import CLIContext
@@ -46,7 +46,7 @@ class PemderPlugin(SigningCommandPlugin):
     subcommand_name = 'pemder'
     help_summary = 'read key material from PEM/DER files'
 
-    def click_options(self) -> List[click.Option]:
+    def click_options(self) -> list[click.Option]:
         return [
             click.Option(
                 ('--key',),
@@ -164,10 +164,10 @@ class PKCS12Plugin(SigningCommandPlugin):
     subcommand_name = 'pkcs12'
     help_summary = 'read key material from PKCS#12 files'
 
-    def click_extra_arguments(self) -> List[click.Argument]:
+    def click_extra_arguments(self) -> list[click.Argument]:
         return [click.Argument(('pfx',), type=readable_file, required=False)]
 
-    def click_options(self) -> List[click.Option]:
+    def click_options(self) -> list[click.Option]:
         return [
             click.Option(
                 ('--p12-setup',),
@@ -216,7 +216,7 @@ def _pkcs12_signer(ctx: CLIContext, pfx, chain, passfile, p12_setup, no_pass):
     #  (now it fails with a gnarly DER decoding error, which is not very
     #  user-friendly)
     if p12_setup:
-        cli_config: Optional[CLIConfig] = ctx.config
+        cli_config: CLIConfig | None = ctx.config
         if cli_config is None:
             raise click.ClickException(
                 "The --p12-setup option requires a configuration file"

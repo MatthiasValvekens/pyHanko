@@ -2,7 +2,6 @@ import dataclasses
 import datetime
 from collections import defaultdict
 from io import BytesIO
-from typing import Optional
 
 import pytest
 import tzlocal
@@ -1045,25 +1044,24 @@ class NoSha512AfterSomeTime(AlgorithmUsagePolicy):
     def signature_algorithm_allowed(
         self,
         algo: algos.SignedDigestAlgorithm,
-        moment: Optional[datetime.datetime],
-        public_key: Optional[keys.PublicKeyInfo],
+        moment: datetime.datetime | None,
+        public_key: keys.PublicKeyInfo | None,
     ) -> AlgorithmUsageConstraint:
         try:
             h = algo.hash_algo
         except ValueError:
             h = None
 
-        if h == 'sha512':
-            if moment is None or moment > self.cutoff:
-                return AlgorithmUsageConstraint(
-                    allowed=False,
-                    not_allowed_after=self.cutoff,
-                    failure_reason='just because',
-                )
+        if h == 'sha512' and (moment is None or moment > self.cutoff):
+            return AlgorithmUsageConstraint(
+                allowed=False,
+                not_allowed_after=self.cutoff,
+                failure_reason='just because',
+            )
         return AlgorithmUsageConstraint(allowed=True)
 
     def digest_algorithm_allowed(
-        self, algo: algos.DigestAlgorithm, moment: Optional[datetime.datetime]
+        self, algo: algos.DigestAlgorithm, moment: datetime.datetime | None
     ) -> AlgorithmUsageConstraint:
         if algo['algorithm'].native == 'sha512':
             if moment is None or moment > self.cutoff:
@@ -1079,13 +1077,13 @@ class BanAllTheThings(AlgorithmUsagePolicy):
     def signature_algorithm_allowed(
         self,
         algo: algos.SignedDigestAlgorithm,
-        moment: Optional[datetime.datetime],
-        public_key: Optional[keys.PublicKeyInfo],
+        moment: datetime.datetime | None,
+        public_key: keys.PublicKeyInfo | None,
     ) -> AlgorithmUsageConstraint:
         return AlgorithmUsageConstraint(allowed=False)
 
     def digest_algorithm_allowed(
-        self, algo: algos.DigestAlgorithm, moment: Optional[datetime.datetime]
+        self, algo: algos.DigestAlgorithm, moment: datetime.datetime | None
     ) -> AlgorithmUsageConstraint:
         return AlgorithmUsageConstraint(allowed=False)
 
@@ -1099,8 +1097,8 @@ class RSAConsideredHarmful(AlgorithmUsagePolicy):
     def signature_algorithm_allowed(
         self,
         algo: algos.SignedDigestAlgorithm,
-        moment: Optional[datetime.datetime],
-        public_key: Optional[keys.PublicKeyInfo],
+        moment: datetime.datetime | None,
+        public_key: keys.PublicKeyInfo | None,
     ) -> AlgorithmUsageConstraint:
         name = algo['algorithm'].native
         if moment is None or moment > self.cutoff and 'rsa' in name:
@@ -1112,7 +1110,7 @@ class RSAConsideredHarmful(AlgorithmUsagePolicy):
         return AlgorithmUsageConstraint(allowed=True)
 
     def digest_algorithm_allowed(
-        self, algo: algos.DigestAlgorithm, moment: Optional[datetime.datetime]
+        self, algo: algos.DigestAlgorithm, moment: datetime.datetime | None
     ) -> AlgorithmUsageConstraint:
         return AlgorithmUsageConstraint(allowed=True)
 

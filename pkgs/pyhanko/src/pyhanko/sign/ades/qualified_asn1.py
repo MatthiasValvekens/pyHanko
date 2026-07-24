@@ -98,8 +98,7 @@ def get_qc_statements(cert: x509.Certificate) -> QcStatements:
             continue
         qc_statements: QcStatements = ext['extn_value'].parsed
         return qc_statements
-    else:
-        return QcStatements()
+    return QcStatements()
 
 
 register_x509_extension('1.3.6.1.5.5.7.1.3', 'qc_statements', QcStatements)

@@ -1,8 +1,9 @@
 import binascii
 import enum
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Optional, Set, Union
+from typing import Any
 
 from asn1crypto import algos, x509
 from pyhanko.config import api
@@ -12,8 +13,8 @@ from pyhanko.pdf_utils.misc import get_and_apply
 
 __all__ = [
     'PKCS11PinEntryMode',
-    'PKCS11SigningPinEntryMode',
     'PKCS11SignatureConfig',
+    'PKCS11SigningPinEntryMode',
     'TokenCriteria',
 ]
 
@@ -26,12 +27,12 @@ class TokenCriteria(api.ConfigurableMixin):
     Search criteria for a PKCS#11 token.
     """
 
-    label: Optional[str] = None
+    label: str | None = None
     """
     Label of the token to use. If ``None``, there is no constraint.
     """
 
-    serial: Optional[bytes] = None
+    serial: bytes | None = None
     """
     Serial number of the token to use. If ``None``, there is no constraint.
     """
@@ -157,13 +158,13 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
     module_path: str
     """Path to the PKCS#11 module shared object."""
 
-    cert_label: Optional[str] = None
+    cert_label: str | None = None
     """PKCS#11 label of the signer's certificate."""
 
-    cert_id: Optional[bytes] = None
+    cert_id: bytes | None = None
     """PKCS#11 ID of the signer's certificate."""
 
-    signing_certificate: Optional[x509.Certificate] = None
+    signing_certificate: x509.Certificate | None = None
     """
     The signer's certificate. If present, :attr:`cert_id` and
     :attr:`cert_label` will not be used to obtain the signer's certificate
@@ -175,29 +176,29 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
         the one provided on the token.
     """
 
-    token_criteria: Optional[TokenCriteria] = None
+    token_criteria: TokenCriteria | None = None
     """PKCS#11 token name"""
 
-    other_certs: Optional[List[x509.Certificate]] = None
+    other_certs: list[x509.Certificate] | None = None
     """Other relevant certificates."""
 
-    key_label: Optional[str] = None
+    key_label: str | None = None
     """
     PKCS#11 label of the signer's private key. Defaults to :attr:`cert_label`
     if the latter is specified and :attr:`key_id` is not.
     """
 
-    key_id: Optional[bytes] = None
+    key_id: bytes | None = None
     """
     PKCS#11 key ID.
     """
 
-    slot_no: Optional[int] = None
+    slot_no: int | None = None
     """
     Slot number of the PKCS#11 slot to use.
     """
 
-    user_pin: Optional[str] = None
+    user_pin: str | None = None
     """
     The user's PIN. If unspecified, the user will be prompted for a PIN
     if :attr:`prompt_pin` is ``True``.
@@ -218,7 +219,7 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
         If :attr:`user_pin` is not ``None``, this setting has no effect.
     """
 
-    other_certs_to_pull: Optional[Iterable[str]] = ()
+    other_certs_to_pull: Iterable[str] | None = ()
     """
     List labels of other certificates to pull from the PKCS#11 device.
     Defaults to the empty tuple. If ``None``, pull *all* certificates.
@@ -255,7 +256,7 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
         This corresponds to the ``TOKEN`` flag being set on the PKCS#11 object.
     """
 
-    signature_mechanism: Optional[algos.SignedDigestAlgorithm] = None
+    signature_mechanism: algos.SignedDigestAlgorithm | None = None
     """
     Manually specify the signature mechanism in ASN.1 fully.
 
@@ -270,13 +271,13 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
     Specify pre-sign PIN entry behaviour.
     """
 
-    signing_pin: Optional[str] = None
+    signing_pin: str | None = None
     """
     Signing PIN, used in accordance with :attr:`signing_pin_mode`.
     """
 
     @classmethod
-    def check_config_keys(cls, keys_supplied: Set[str]):
+    def check_config_keys(cls, keys_supplied: set[str]):
         # make sure we don't ding token_label since we actually still
         # process it for compatibility reasons
         super().check_config_keys(
@@ -359,7 +360,7 @@ class PKCS11SignatureConfig(api.ConfigurableMixin):
                 config_dict['token_criteria'].setdefault('label', lbl)
 
 
-def _process_pkcs11_id_value(x: Union[str, int]):
+def _process_pkcs11_id_value(x: str | int):
     if isinstance(x, int):
         return bytes([x])
     else:

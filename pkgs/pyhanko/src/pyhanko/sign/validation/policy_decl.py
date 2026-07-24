@@ -1,8 +1,8 @@
 import dataclasses
 import enum
+from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import FrozenSet, Generator, List, Optional, Union
 
 from asn1crypto import x509
 from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
@@ -80,11 +80,11 @@ class RevocationInfoGatheringSpec:
 
 @dataclass(frozen=True)
 class LocalKnowledge:
-    known_ocsps: List[OCSPContainer] = field(default_factory=list)
-    known_crls: List[CRLContainer] = field(default_factory=list)
-    known_certs: List[x509.Certificate] = field(default_factory=list)
-    known_poes: List[KnownPOE] = field(default_factory=list)
-    nonrevoked_assertions: List[NonRevokedStatusAssertion] = field(
+    known_ocsps: list[OCSPContainer] = field(default_factory=list)
+    known_crls: list[CRLContainer] = field(default_factory=list)
+    known_certs: list[x509.Certificate] = field(default_factory=list)
+    known_poes: list[KnownPOE] = field(default_factory=list)
+    nonrevoked_assertions: list[NonRevokedStatusAssertion] = field(
         default_factory=list
     )
 
@@ -139,16 +139,14 @@ class QualificationRequirements:
         This requires a ``TSPTrustManager``.
     """
 
-    permit_key_mgmt_types: Optional[FrozenSet[QcPrivateKeyManagementType]] = (
-        None
-    )
+    permit_key_mgmt_types: frozenset[QcPrivateKeyManagementType] | None = None
     """
     Set of key management types that is permissible for the validation.
 
     If ``None``, no restrictions are applied.
     """
 
-    permit_cert_types: Optional[FrozenSet[QcCertType]] = frozenset(
+    permit_cert_types: frozenset[QcCertType] | None = frozenset(
         [QcCertType.QC_ESIGN, QcCertType.QC_ESEAL]
     )
     """
@@ -158,7 +156,7 @@ class QualificationRequirements:
     If ``None``, no restrictions are applied.
     """
 
-    require_service_type: Union[TrustedServiceType, str, None] = None
+    require_service_type: TrustedServiceType | str | None = None
     """
     Require the end entity to be directly listed on the trust list
     as a service of the indicated type, without going through any
@@ -178,27 +176,29 @@ class SignatureValidationSpec:
     revinfo_gathering_policy: RevocationInfoGatheringSpec = (
         RevocationInfoGatheringSpec()
     )
-    ts_cert_validation_policy: Optional[CertValidationPolicySpec] = None
-    ac_validation_policy: Optional[CertValidationPolicySpec] = None
+    ts_cert_validation_policy: CertValidationPolicySpec | None = None
+    ac_validation_policy: CertValidationPolicySpec | None = None
     local_knowledge: LocalKnowledge = LocalKnowledge()
     key_usage_settings: KeyUsageConstraints = KeyUsageConstraints()
-    signature_algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None
-    qualification_requirements: Optional[QualificationRequirements] = None
-    ts_qualification_requirements: Optional[QualificationRequirements] = None
+    signature_algorithm_policy: CMSAlgorithmUsagePolicy | None = None
+    qualification_requirements: QualificationRequirements | None = None
+    ts_qualification_requirements: QualificationRequirements | None = None
 
 
 @dataclass(frozen=True)
 class PdfSignatureValidationSpec:
     signature_validation_spec: SignatureValidationSpec
-    diff_policy: Optional[DiffPolicy] = DEFAULT_DIFF_POLICY
+    diff_policy: DiffPolicy | None = DEFAULT_DIFF_POLICY
 
 
 def _backend_if_necessary(
     hist: bool, rule: RevinfoOnlineFetchingRule, backend: FetcherBackend
-) -> Optional[FetcherBackend]:
-    if rule == RevinfoOnlineFetchingRule.LOCAL_ONLY:
-        return None
-    elif rule == RevinfoOnlineFetchingRule.NO_HISTORICAL_FETCH and hist:
+) -> FetcherBackend | None:
+    if (
+        rule == RevinfoOnlineFetchingRule.LOCAL_ONLY
+        or rule == RevinfoOnlineFetchingRule.NO_HISTORICAL_FETCH
+        and hist
+    ):
         return None
     else:
         return backend
@@ -206,9 +206,9 @@ def _backend_if_necessary(
 
 def bootstrap_validation_data_handlers(
     spec: SignatureValidationSpec,
-    timing_info: Optional[ValidationTimingInfo] = None,
-    is_historical: Optional[bool] = None,
-    poe_manager_override: Optional[POEManager] = None,
+    timing_info: ValidationTimingInfo | None = None,
+    is_historical: bool | None = None,
+    poe_manager_override: POEManager | None = None,
 ) -> ValidationDataHandlers:
     if is_historical is None:
         hist = (

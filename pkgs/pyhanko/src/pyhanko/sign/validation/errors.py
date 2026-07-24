@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional, Type
 
 from asn1crypto.core import ObjectIdentifier
 
@@ -20,8 +19,6 @@ __all__ = [
 class ValidationInfoReadingError(ValueErrorWithMessage):
     """Error reading validation info."""
 
-    pass
-
 
 class NoDSSFoundError(ValidationInfoReadingError):
     def __init__(self):
@@ -36,7 +33,7 @@ class SignatureValidationError(ValueErrorWithMessage):
     """Error validating a signature."""
 
     def __init__(
-        self, failure_message, ades_subindication: Optional[AdESSubIndic] = None
+        self, failure_message, ades_subindication: AdESSubIndic | None = None
     ):
         self.ades_subindication = (
             ades_subindication
@@ -44,13 +41,13 @@ class SignatureValidationError(ValueErrorWithMessage):
             else AdESIndeterminate.GENERIC
         )
         if ades_subindication:
-            msg = "%s [%s]" % (failure_message, ades_subindication)
+            msg = f"{failure_message} [{ades_subindication}]"
         else:
             msg = failure_message
         super().__init__(msg)
 
     @property
-    def ades_status(self) -> Optional[AdESStatus]:
+    def ades_status(self) -> AdESStatus | None:
         if self.ades_subindication is not None:
             return self.ades_subindication.status
         return None
@@ -60,8 +57,8 @@ class DisallowedAlgorithmError(SignatureValidationError):
     def __init__(
         self,
         failure_message,
-        time_horizon: Optional[datetime],
-        oid_type: Optional[Type[ObjectIdentifier]] = None,
+        time_horizon: datetime | None,
+        oid_type: type[ObjectIdentifier] | None = None,
     ):
         self.oid_type = oid_type
         self.time_horizon = time_horizon
@@ -79,7 +76,6 @@ class SigSeedValueValidationError(SignatureValidationError):
 
     # TODO perhaps we can encode some more metadata here, such as the
     #  seed value that tripped the failure.
-    pass
 
 
 class TSTDigestNotAvailableError(SignatureValidationError):
@@ -87,5 +83,3 @@ class TSTDigestNotAvailableError(SignatureValidationError):
     Error when a TST message imprint uses a digest algorithm for which
     a digest of the subject data is not available.
     """
-
-    pass

@@ -1,7 +1,6 @@
 """Utilities related to text rendering & layout."""
 
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
 
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
@@ -28,7 +27,7 @@ class TextStyle(ConfigurableMixin):
     Font size to be used.
     """
 
-    leading: Optional[int] = None
+    leading: int | None = None
     """
     Text leading. If ``None``, the :attr:`font_size` parameter is used instead.
     """
@@ -38,9 +37,7 @@ class TextStyle(ConfigurableMixin):
         super().process_entries(config_dict)
         try:
             fc = config_dict['font']
-            if not isinstance(fc, str) or not (
-                fc.endswith('.otf') or fc.endswith('.ttf')
-            ):
+            if not isinstance(fc, str) or not (fc.endswith(('.otf', '.ttf'))):
                 raise ConfigurationError(
                     "'font' must be a path to an OpenType or "
                     "TrueType font file."
@@ -74,7 +71,7 @@ class TextBoxStyle(TextStyle):
     Border width, if applicable.
     """
 
-    box_layout_rule: Optional[layout.SimpleBoxLayoutRule] = None
+    box_layout_rule: layout.SimpleBoxLayoutRule | None = None
     """
     Layout rule to nest the text within its containing box.
     
@@ -88,7 +85,7 @@ class TextBoxStyle(TextStyle):
     Switch layout code to vertical mode instead of horizontal mode.
     """
 
-    text_color: Optional[Tuple[float, float, float]] = None
+    text_color: tuple[float, float, float] | None = None
     """
     Text color specified as an RGB tuple taking values between 0.0 and 1.0.
 
@@ -109,8 +106,8 @@ class TextBox(PdfContent):
         self,
         style: TextBoxStyle,
         writer,
-        resources: Optional[PdfResources] = None,
-        box: Optional[layout.BoxConstraints] = None,
+        resources: PdfResources | None = None,
+        box: layout.BoxConstraints | None = None,
         font_name='F1',
     ):
         super().__init__(resources, writer=writer, box=box)

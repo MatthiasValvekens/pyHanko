@@ -1,6 +1,5 @@
 import itertools
 import math
-from typing import List, Optional
 
 import qrcode.util
 from pyhanko.pdf_utils.content import PdfContent
@@ -68,7 +67,7 @@ class PdfFancyQRImage(PdfStreamQRImage):
         box_size,
         *_args,
         version,
-        center_image: Optional[PdfContent] = None,
+        center_image: PdfContent | None = None,
         **kwargs,
     ):
         super().__init__(border, width, box_size, **kwargs)
@@ -216,7 +215,7 @@ class PdfFancyQRImage(PdfStreamQRImage):
 
 def rounded_square(
     x_pos: float, y_pos: float, sz: float, rad: float
-) -> List[bytes]:
+) -> list[bytes]:
     """
     Add a subpath of a square with rounded corners at the given position.
     Doesn't include any painting or clipping operations.

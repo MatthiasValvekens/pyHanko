@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 from asn1crypto import x509
 from freezegun import freeze_time
@@ -15,12 +14,12 @@ class P11TestConfig:
     module: str
     user_pin: str
     cert_label: str
-    key_label: Optional[str]
+    key_label: str | None
     algo: str
-    cert_chain_labels: List[str]
-    cert_chain: List[x509.Certificate]
-    freeze_time_spec: Optional[str]
-    signing_pin: Optional[str]
+    cert_chain_labels: list[str]
+    cert_chain: list[x509.Certificate]
+    freeze_time_spec: str | None
+    signing_pin: str | None
 
     @property
     def session(self):
@@ -34,13 +33,13 @@ class P11TestConfig:
 
     @property
     def validation_context(self):
-        kwargs = dict(
-            trust_roots=[self.cert_chain[0]],
-            other_certs=self.cert_chain[1:],
-            algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
+        kwargs = {
+            'trust_roots': [self.cert_chain[0]],
+            'other_certs': self.cert_chain[1:],
+            'algorithm_usage_policy': DisallowWeakAlgorithmsPolicy(
                 dsa_key_size_threshold=1024
             ),
-        )
+        }
         if self.freeze_time_spec:
             with freeze_time('2020-11-01'):
                 return ValidationContext(**kwargs)
@@ -49,7 +48,7 @@ class P11TestConfig:
 
     @property
     def signing_kwargs(self):
-        signing_kwargs = dict()
+        signing_kwargs = {}
         if self.signing_pin is not None:
             signing_kwargs["pin"] = self.signing_pin
         return signing_kwargs

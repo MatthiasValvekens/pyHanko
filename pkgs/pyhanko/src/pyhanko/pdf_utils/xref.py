@@ -9,10 +9,10 @@ import enum
 import logging
 import os
 import struct
+from collections.abc import Iterator
 from dataclasses import dataclass
 from io import BytesIO
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple, Union
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import EncryptedObjAccess, pdf_name
@@ -94,7 +94,7 @@ class XRefEntry:
     The type of cross-reference entry.
     """
 
-    location: Optional[Union[int, ObjStreamRef]]
+    location: int | ObjStreamRef | None
     """
     Location the cross-reference points to.
     """
@@ -143,7 +143,7 @@ def parse_xref_table(stream, strict: bool) -> Iterator[XRefEntry]:
         size = generic.NumberObject.read_from_stream(stream)
         misc.read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
-        for cnt in range(0, size):
+        for cnt in range(size):
             line = stream.read(20)
 
             # It's very clear in section 3.4.3 of the PDF spec
@@ -337,7 +337,7 @@ class XRefSectionMetaInfo:
     Location where the xref data ended.
     """
 
-    stream_ref: Optional[generic.Reference]
+    stream_ref: generic.Reference | None
     """
     Reference to the relevant xref stream, if applicable.
     """
@@ -352,16 +352,16 @@ class XRefSectionData:
     def __init__(self: 'XRefSectionData'):
         # TODO Food for thought: is there an efficient IntMap implementation out
         #  there that can beat generic python dicts in real-world scenarios?
-        self.freed: Dict[int, int] = {}
-        self.standard_xrefs: Dict[int, Tuple[int, int]] = {}
-        self.xrefs_in_objstm: Dict[int, ObjStreamRef] = {}
-        self.explicit_refs_in_revision: Set[Tuple[int, int]] = set()
-        self.obj_streams_used: Set[int] = set()
-        self.hybrid: Optional[XRefSection] = None
+        self.freed: dict[int, int] = {}
+        self.standard_xrefs: dict[int, tuple[int, int]] = {}
+        self.xrefs_in_objstm: dict[int, ObjStreamRef] = {}
+        self.explicit_refs_in_revision: set[tuple[int, int]] = set()
+        self.obj_streams_used: set[int] = set()
+        self.hybrid: XRefSection | None = None
 
     def try_resolve(
-        self, ref: Union[generic.Reference, generic.IndirectObject]
-    ) -> Optional[Union[int, ObjStreamRef]]:
+        self, ref: generic.Reference | generic.IndirectObject
+    ) -> int | ObjStreamRef | None:
         # The lookups are ordered more or less in the order we expect
         # them to be queried most frequently in a given file.
 
@@ -473,7 +473,7 @@ class XRefSection:
 
 
 def _check_freed_refs(
-    ix: int, section: XRefSection, all_sections: List[XRefSection]
+    ix: int, section: XRefSection, all_sections: list[XRefSection]
 ):
     # Prevent xref stream objects from being overwritten.
     # (stricter than the spec, but it makes our lives easier at the cost
@@ -530,18 +530,17 @@ def _check_freed_refs(
 
         if ix < len(all_sections) - 1:
             next_section = all_sections[ix + 1]
-            hybrid: Optional[XRefSectionData] = (
+            hybrid: XRefSectionData | None = (
                 next_section.xref_data.hybrid.xref_data
                 if next_section.xref_data.hybrid is not None
                 else None
             )
-            if hybrid is not None:
-                if (
-                    idnum in hybrid.standard_xrefs
-                    or idnum in hybrid.xrefs_in_objstm
-                ):
-                    # exemption!
-                    continue
+            if hybrid is not None and (
+                idnum in hybrid.standard_xrefs
+                or idnum in hybrid.xrefs_in_objstm
+            ):
+                # exemption!
+                continue
 
         improper_generation = None
         for succ in all_sections[ix + 1 :]:
@@ -580,14 +579,14 @@ def _check_freed_refs(
                     )
 
 
-def _with_hybrids(sections: List[XRefSection]):
+def _with_hybrids(sections: list[XRefSection]):
     for section in sections:
         if section.xref_data.hybrid is not None:
             yield section.xref_data.hybrid
         yield section
 
 
-def _check_xref_consistency(all_sections: List[XRefSection]):
+def _check_xref_consistency(all_sections: list[XRefSection]):
     # expand out the hybrid sections as separate sections for the purposes
     # of the xref consistency check (try_resolve takes hybrids into account,
     # but
@@ -662,7 +661,7 @@ class XRefBuilder:
         self.stream = stream
         self.strict = strict
         self.last_startxref = last_startxref
-        self.sections: List[XRefSection] = []
+        self.sections: list[XRefSection] = []
 
         self.trailer = TrailerDictionary()
         self.trailer.container_ref = generic.TrailerReference(handler)
@@ -891,7 +890,7 @@ class TrailerDictionary(generic.PdfObject):
     def __init__(self: 'TrailerDictionary'):
         # trailer revisions, numbered backwards (i.e. in processing order)
         # The element at index 0 is the most recent one.
-        self._trailer_revisions: List[generic.DictionaryObject] = []
+        self._trailer_revisions: list[generic.DictionaryObject] = []
         self._new_changes = generic.DictionaryObject()
 
     def add_trailer_revision(self, trailer_dict: generic.DictionaryObject):
@@ -1035,7 +1034,7 @@ class XRefCache:
     to change without notice.
     """
 
-    def __init__(self, reader, xref_sections: List[XRefSection]):
+    def __init__(self, reader, xref_sections: list[XRefSection]):
         self.reader = reader
         self._xref_sections = xref_sections
 
@@ -1090,7 +1089,7 @@ class XRefCache:
         section = self._xref_sections[revision]
         return section.xref_data
 
-    def explicit_refs_in_revision(self, revision) -> Set[generic.Reference]:
+    def explicit_refs_in_revision(self, revision) -> set[generic.Reference]:
         """
         Look up the object refs for all objects explicitly added or overwritten
         in a given revision.
@@ -1114,7 +1113,7 @@ class XRefCache:
             }
         return result
 
-    def refs_freed_in_revision(self, revision) -> Set[generic.Reference]:
+    def refs_freed_in_revision(self, revision) -> set[generic.Reference]:
         """
         Look up the object refs for all objects explicitly freed
         in a given revision.
@@ -1144,9 +1143,7 @@ class XRefCache:
         section = self._xref_sections[revision]
         return section.meta_info.declared_startxref
 
-    def get_historical_ref(
-        self, ref, revision
-    ) -> Optional[Union[int, ObjStreamRef]]:
+    def get_historical_ref(self, ref, revision) -> int | ObjStreamRef | None:
         """
         Look up the location of the historical value of an object.
 
@@ -1191,7 +1188,7 @@ class XRefCache:
         )
 
 
-PositionDict = Dict[Tuple[int, int], Union[int, Tuple[int, int]]]
+PositionDict = dict[tuple[int, int], int | tuple[int, int]]
 # Note: position_dict is (generation, objId) -> pos
 # for historical reasons (inherited from refactored PyPDF2 logic).
 # Position can be an int (absolute file offset) or a
@@ -1319,7 +1316,7 @@ def _contiguous_xref_chunks(position_dict):
     yield first_idnum, current_chunk
 
 
-def write_xref_table(stream, position_dict: Dict[Tuple[int, int], int]):
+def write_xref_table(stream, position_dict: dict[tuple[int, int], int]):
     xref_location = stream.tell()
     stream.write(b'xref\n')
     # Insert xref table subsections in contiguous chunks.

@@ -236,44 +236,50 @@ def test_opentype_with_langsys():
 
 def test_opentype_langsys_tag_too_long():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    with open(
-        f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
-        'rb',
-    ) as ffile:
-        with pytest.raises(ValueError, match='4 bytes long'):
-            GlyphAccumulator(
-                w,
-                ffile,
-                font_size=10,
-                ot_language_tag='ZHT a',
-                ot_script_tag='hani',
-            )
+    with (
+        open(
+            f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
+            'rb',
+        ) as ffile,
+        pytest.raises(ValueError, match='4 bytes long'),
+    ):
+        GlyphAccumulator(
+            w,
+            ffile,
+            font_size=10,
+            ot_language_tag='ZHT a',
+            ot_script_tag='hani',
+        )
 
 
 def test_opentype_langsys_tag_not_ascii():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    with open(
-        f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
-        'rb',
-    ) as ffile:
-        with pytest.raises(ValueError, match='encodable'):
-            GlyphAccumulator(
-                w,
-                ffile,
-                font_size=10,
-                ot_language_tag='ZHTあ',
-                ot_script_tag='hani',
-            )
+    with (
+        open(
+            f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
+            'rb',
+        ) as ffile,
+        pytest.raises(ValueError, match='encodable'),
+    ):
+        GlyphAccumulator(
+            w,
+            ffile,
+            font_size=10,
+            ot_language_tag='ZHTあ',
+            ot_script_tag='hani',
+        )
 
 
 def test_opentype_invalid_writing_direction():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    with open(
-        f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
-        'rb',
-    ) as ffile:
-        with pytest.raises(ValueError, match='direction must be one of'):
-            GlyphAccumulator(w, ffile, font_size=10, writing_direction='foobar')
+    with (
+        open(
+            f"{TEST_DIR}/data/fonts/NotoSerifSubset.otf",
+            'rb',
+        ) as ffile,
+        pytest.raises(ValueError, match='direction must be one of'),
+    ):
+        GlyphAccumulator(w, ffile, font_size=10, writing_direction='foobar')
 
 
 @with_layout_comparison

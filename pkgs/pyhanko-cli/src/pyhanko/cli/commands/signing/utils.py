@@ -1,4 +1,4 @@
-from typing import BinaryIO, Optional
+from typing import BinaryIO
 
 import click
 from pyhanko.cli._ctx import PasswordPrompter
@@ -14,7 +14,7 @@ class OpenForSigning:
         self.infile_path = infile_path
         self.lenient = lenient
         self.prompter = prompter
-        self.handle: Optional[BinaryIO] = None
+        self.handle: BinaryIO | None = None
 
     def __enter__(self) -> IncrementalPdfFileWriter:
         self.handle = infile = open(self.infile_path, 'rb')
@@ -25,8 +25,7 @@ class OpenForSigning:
             sh = writer.prev.security_handler
             if isinstance(sh, crypt.StandardSecurityHandler):
                 pdf_pass = self.prompter.prompt_for_password(
-                    prompt='Password for encrypted file \'%s\': '
-                    % self.infile_path
+                    prompt=f'Password for encrypted file \'{self.infile_path}\': '
                 )
                 auth = writer.encrypt(pdf_pass)
                 if auth.status == AuthStatus.FAILED:

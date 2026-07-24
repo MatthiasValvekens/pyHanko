@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 from asn1crypto import x509
 from pyhanko.config import api
@@ -21,10 +20,10 @@ class PKCS12SignatureConfig(api.ConfigurableMixin):
     pfx_file: str
     """Path to the PKCS#12 file."""
 
-    other_certs: Optional[List[x509.Certificate]] = None
+    other_certs: list[x509.Certificate] | None = None
     """Other relevant certificates."""
 
-    pfx_passphrase: Optional[bytes] = None
+    pfx_passphrase: bytes | None = None
     """PKCS#12 passphrase (if relevant)."""
 
     prompt_passphrase: bool = True
@@ -69,10 +68,10 @@ class PemDerSignatureConfig(api.ConfigurableMixin):
     cert_file: str
     """Signer's certificate."""
 
-    other_certs: Optional[List[x509.Certificate]] = None
+    other_certs: list[x509.Certificate] | None = None
     """Other relevant certificates."""
 
-    key_passphrase: Optional[bytes] = None
+    key_passphrase: bytes | None = None
     """Signer's key passphrase (if relevant)."""
 
     prompt_passphrase: bool = True

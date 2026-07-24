@@ -1,19 +1,12 @@
 import logging
 from collections import defaultdict
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import unique
 from typing import (
     Any,
     ClassVar,
-    Collection,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Union,
 )
 
 from asn1crypto import cms, core, crl, keys, x509
@@ -103,7 +96,7 @@ class SignatureStatus:
     attributes) is cryptographically valid.
     """
 
-    trust_problem_indic: Optional[AdESSubIndic]
+    trust_problem_indic: AdESSubIndic | None
     """
     If not ``None``, provides the AdES subindication indication what went
     wrong during the validation process.
@@ -125,19 +118,19 @@ class SignatureStatus:
     Message digest algorithm used.
     """
 
-    validation_path: Optional[ValidationPath]
+    validation_path: ValidationPath | None
     """
     Validation path providing a valid chain of trust from the signer's
     certificate to a trusted root certificate.
     """
 
-    revocation_details: Optional[RevocationDetails]
+    revocation_details: RevocationDetails | None
     """
     Details on why and when the signer's certificate (or another certificate
     in the chain) was revoked.
     """
 
-    error_time_horizon: Optional[datetime]
+    error_time_horizon: datetime | None
     """
     Informational timestamp indicating a point in time where the validation
     behaviour potentially changed (e.g. expiration, revocation, etc.).
@@ -148,13 +141,13 @@ class SignatureStatus:
 
     # XXX frozenset makes more sense here, but asn1crypto doesn't allow that
     #  (probably legacy behaviour)
-    key_usage: ClassVar[Set[str]] = {'non_repudiation'}
+    key_usage: ClassVar[set[str]] = {'non_repudiation'}
     """
     Class property indicating which key usages are accepted on the signer's
     certificate. The default is ``non_repudiation`` only.
     """
 
-    extd_key_usage: ClassVar[Optional[Set[str]]] = None
+    extd_key_usage: ClassVar[set[str] | None] = None
     """
     Class property indicating which extended key usage key purposes are accepted
     to be present on the signer's certificate.
@@ -162,12 +155,12 @@ class SignatureStatus:
     See :attr:`.KeyUsageConstraints.extd_key_usage`.
     """
 
-    validation_time: Optional[datetime]
+    validation_time: datetime | None
     """
     Reference time for validation purposes.
     """
 
-    qualification_result: Optional[QualificationResult]
+    qualification_result: QualificationResult | None
     """
     Result of the qualification check for the signing certificate,
     if applicable.
@@ -227,7 +220,7 @@ class SignatureStatus:
 
     @classmethod
     def default_usage_constraints(
-        cls, key_usage_settings: Optional[KeyUsageConstraints] = None
+        cls, key_usage_settings: KeyUsageConstraints | None = None
     ) -> KeyUsageConstraints:
         key_usage_settings = key_usage_settings or KeyUsageConstraints()
         key_usage_settings = KeyUsageConstraints(
@@ -259,7 +252,7 @@ class TimestampSignatureStatus(SignatureStatus):
     Signature status class used when validating timestamp tokens.
     """
 
-    key_usage: ClassVar[Set[str]] = set()
+    key_usage: ClassVar[set[str]] = set()
     """
     There are no (non-extended) key usage requirements for TSA certificates.
     """
@@ -323,7 +316,7 @@ class CertifiedAttributeInfo(X509AttributeInfo):
 
 
 def _handle_attr_err(
-    attr_type: Optional[str], attr_kind: str, err: ValueError, fatal: bool
+    attr_type: str | None, attr_kind: str, err: ValueError, fatal: bool
 ):
     attr_type_str = "unknown type" if not attr_type else f"type '{attr_type}'"
     msg = f"Failed to parse {attr_kind} of {attr_type_str}: {err.args[0]}"
@@ -345,7 +338,7 @@ class CertifiedAttributes:
         cls, results: Iterable[ACValidationResult], parse_error_fatal=False
     ):
         # first, classify the attributes and results by type
-        by_type: Dict[str, Tuple[List[Any], List[ACValidationResult]]] = (
+        by_type: dict[str, tuple[list[Any], list[ACValidationResult]]] = (
             defaultdict(lambda: ([], []))
         )
         for result in results:
@@ -376,7 +369,7 @@ class CertifiedAttributes:
         return infos
 
     def __init__(self: 'CertifiedAttributes'):
-        self._attrs: Dict[str, CertifiedAttributeInfo] = {}
+        self._attrs: dict[str, CertifiedAttributeInfo] = {}
 
     def __getitem__(self, item: str) -> CertifiedAttributeInfo:
         return self._attrs[item]
@@ -427,7 +420,7 @@ class ClaimedAttributes:
         return infos
 
     def __init__(self: 'ClaimedAttributes'):
-        self._attrs: Dict[str, X509AttributeInfo] = {}
+        self._attrs: dict[str, X509AttributeInfo] = {}
 
     def __getitem__(self, item: str) -> X509AttributeInfo:
         return self._attrs[item]
@@ -458,7 +451,7 @@ class CAdESSignerAttributeAssertions:
     May be empty.
     """
 
-    certified_attrs: Optional[CertifiedAttributes] = None
+    certified_attrs: CertifiedAttributes | None = None
     """
     Attributes claimed by the signer using an attribute certificate.
 
@@ -467,9 +460,9 @@ class CAdESSignerAttributeAssertions:
     even if there are no attribute certificates present.
     """
 
-    ac_validation_errs: Optional[
-        Collection[Union[ValidationError, PathBuildingError]]
-    ] = None
+    ac_validation_errs: (
+        Collection[ValidationError | PathBuildingError] | None
+    ) = None
     """
     Attribute certificate validation errors.
 
@@ -494,7 +487,7 @@ class CAdESSignerAttributeAssertions:
 
 @dataclass(frozen=True)
 class SignerAttributeStatus:
-    ac_attrs: Optional[CertifiedAttributes] = None
+    ac_attrs: CertifiedAttributes | None = None
     """
     Certified attributes sourced from valid attribute certificates embedded into
     the ``SignedData``'s ``certificates`` field and the CAdES-style
@@ -513,9 +506,9 @@ class SignerAttributeStatus:
         in the AC. See also :attr:`cades_signer_attrs`.
     """
 
-    ac_validation_errs: Optional[
-        Collection[Union[PathValidationError, PathBuildingError]]
-    ] = None
+    ac_validation_errs: (
+        Collection[PathValidationError | PathBuildingError] | None
+    ) = None
     """
     Errors encountered while validating attribute certificates embedded into
     the ``SignedData``'s ``certificates`` field and the CAdES-style
@@ -525,7 +518,7 @@ class SignerAttributeStatus:
     validation was provided.
     """
 
-    cades_signer_attrs: Optional[CAdESSignerAttributeAssertions] = None
+    cades_signer_attrs: CAdESSignerAttributeAssertions | None = None
     """
     Information extracted and validated from the signed ``signer-attrs-v2``
     attribute defined in CAdES.
@@ -598,8 +591,10 @@ def _describe_timestamp_qualification_status(qr):
         [
             "The time stamping authority's certificate is qualified. ",
             is_qtst,
-            f"The associated qualified trusted service provider is "
-            f"{sd.base_info.service_name}.",
+            (
+                f"The associated qualified trusted service provider is "
+                f"{sd.base_info.service_name}."
+            ),
             describe_key_mgmt_methodology(qr.status.qc_key_security),
             describe_qc_type(qr.status.qc_type),
         ]
@@ -613,20 +608,20 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
     timing information embedded inside.
     """
 
-    signer_reported_dt: Optional[datetime] = None
+    signer_reported_dt: datetime | None = None
     """
     Signer-reported signing time, if present in the signature.
 
     Generally speaking, this timestamp should not be taken as fact.
     """
 
-    timestamp_validity: Optional[TimestampSignatureStatus] = None
+    timestamp_validity: TimestampSignatureStatus | None = None
     """
     Validation status of the signature timestamp token embedded in this
     signature, if present.
     """
 
-    content_timestamp_validity: Optional[TimestampSignatureStatus] = None
+    content_timestamp_validity: TimestampSignatureStatus | None = None
     """
     Validation status of the content timestamp token embedded in this
     signature, if present.
@@ -670,11 +665,11 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
         yield from super().summary_fields()
 
         if self.timestamp_validity is not None:
-            yield 'TIMESTAMP_TOKEN<%s>' % (
+            yield 'TIMESTAMP_TOKEN<{}>'.format(
                 self.timestamp_validity.summary(delimiter='|')
             )
         if self.content_timestamp_validity is not None:
-            yield 'CONTENT_TIMESTAMP_TOKEN<%s>' % (
+            yield 'CONTENT_TIMESTAMP_TOKEN<{}>'.format(
                 self.content_timestamp_validity.summary(delimiter='|')
             )
         if (
@@ -686,7 +681,7 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
     def pretty_print_details(self):
         return format_pretty_print_details(self)
 
-    def pretty_print_sections(self) -> List[Tuple[str, str]]:
+    def pretty_print_sections(self) -> list[tuple[str, str]]:
         cert: x509.Certificate = self.signing_cert
 
         # TODO add section about ACs
@@ -756,8 +751,10 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
                 sig_q_status_report = "\n".join(
                     [
                         "The signer's certificate is qualified.",
-                        f"The associated qualified trusted service provider is "
-                        f"{sd.base_info.service_name}.",
+                        (
+                            f"The associated qualified trusted service provider is "
+                            f"{sd.base_info.service_name}."
+                        ),
                         describe_key_mgmt_methodology(
                             sig_q_status.qc_key_security
                         ),
@@ -812,12 +809,12 @@ class SignatureCoverageLevel(OrderedEnum):
 
 @dataclass(frozen=True)
 class ModificationInfo:
-    coverage: Optional[SignatureCoverageLevel] = None
+    coverage: SignatureCoverageLevel | None = None
     """
     Indicates how much of the document is covered by the signature.
     """
 
-    diff_result: Optional[Union[DiffResult, SuspiciousModification]] = None
+    diff_result: DiffResult | SuspiciousModification | None = None
     """
     Result of the difference analysis run on the file:
 
@@ -829,7 +826,7 @@ class ModificationInfo:
       by the difference policy will be stored in this attribute.
     """
 
-    docmdp_ok: Optional[bool] = None
+    docmdp_ok: bool | None = None
     """
     Indicates whether the signature's
     :attr:`~.ModificationInfo.modification_level` is in line with the document
@@ -839,7 +836,7 @@ class ModificationInfo:
     """
 
     @property
-    def modification_level(self) -> Optional[ModificationLevel]:
+    def modification_level(self) -> ModificationLevel | None:
         """
         Indicates the degree to which the document was modified after the
         signature was applied.
@@ -873,7 +870,7 @@ class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
     Records whether the signature form field has seed values.
     """
 
-    seed_value_constraint_error: Optional[SigSeedValueValidationError] = None
+    seed_value_constraint_error: SigSeedValueValidationError | None = None
     """
     Records the reason for failure if the signature field's seed value
     constraints didn't validate.
@@ -980,7 +977,7 @@ class DocumentTimestampStatus(ModificationInfo, TimestampSignatureStatus):
 
 def format_pretty_print_details(
     status: StandardCMSSignatureStatus,
-    extra_sections: Iterable[Tuple[str, str]] = (),
+    extra_sections: Iterable[tuple[str, str]] = (),
 ) -> str:
     def fmt_section(hdr, body):
         return '\n'.join((hdr, '-' * len(hdr), body, '\n'))

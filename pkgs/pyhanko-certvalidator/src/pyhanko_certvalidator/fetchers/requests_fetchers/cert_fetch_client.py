@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, Union
+from collections.abc import Iterable
 
 import requests
 from asn1crypto import cms, x509
@@ -62,7 +62,7 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
         return await self._perform_fetch(url, task)
 
     def fetch_cert_issuers(
-        self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+        self, cert: x509.Certificate | cms.AttributeCertificateV2
     ):
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='certificate')

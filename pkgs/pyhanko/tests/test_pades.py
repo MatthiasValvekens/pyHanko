@@ -1,7 +1,7 @@
 import asyncio
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import Iterable
 
 import pytest
 from asn1crypto import cms, core, tsp
@@ -143,7 +143,7 @@ def test_pades_flag():
         signer=FROM_CA,
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, _sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
     # the original file is a PDF 1.7 file
@@ -160,7 +160,7 @@ def test_pades_pdf2():
         signer=FROM_CA,
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, _sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
     assert '/Extensions' not in r.root
@@ -181,7 +181,7 @@ def test_pades_revinfo_dummydata():
         signer=FROM_CA,
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, _sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
@@ -223,7 +223,7 @@ def test_pades_revinfo_ts_dummydata():
         timestamper=DUMMY_TS,
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, _sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
@@ -253,7 +253,7 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
         timestamper=DUMMY_HTTP_TS,
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, _sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 

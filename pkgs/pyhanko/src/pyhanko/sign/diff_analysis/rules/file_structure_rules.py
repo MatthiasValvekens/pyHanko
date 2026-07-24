@@ -1,4 +1,4 @@
-from typing import Iterable, Tuple
+from collections.abc import Iterable
 
 from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 
@@ -38,7 +38,7 @@ class CatalogModificationRule(QualifiedWhitelistRule):
 
     def apply_qualified(
         self, old: HistoricalResolver, new: HistoricalResolver
-    ) -> Iterable[Tuple[ModificationLevel, ReferenceUpdate]]:
+    ) -> Iterable[tuple[ModificationLevel, ReferenceUpdate]]:
         old_root = old.root
         new_root = new.root
         # first, check if the keys in the document catalog are unchanged

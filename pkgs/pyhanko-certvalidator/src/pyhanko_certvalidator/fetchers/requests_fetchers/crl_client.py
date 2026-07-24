@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, Union
+from collections.abc import Iterable
 
 import requests
 from asn1crypto import cms, crl, pem, x509
@@ -23,7 +23,7 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
 
     async def fetch(
         self,
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert: x509.Certificate | cms.AttributeCertificateV2,
         *,
         use_deltas=True,
     ):

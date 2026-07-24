@@ -429,7 +429,7 @@ def test_zero_width_error():
     box = layout.BoxConstraints(width=100, height=100)
     stamp = TextStamp(writer=w, style=style, box=box)
 
-    inn_commands, (inn_width, inn_height) = stamp._inner_layout_natural_size()
+    _inn_commands, (inn_width, _inn_height) = stamp._inner_layout_natural_size()
     assert inn_width == 0
 
     # ...this shouldn't throw a division by zero error

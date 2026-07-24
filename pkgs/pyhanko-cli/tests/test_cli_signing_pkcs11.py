@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 import pkcs11
 import pytest
@@ -111,7 +111,7 @@ def _pkcs11_setup_config_pull_certs(p11_test_config: P11TestConfig):
 
 def _pkcs11_setup_config_read_certs_from_file(
     p11_test_config: P11TestConfig,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     with open('interm.crt', 'wb') as certf:
         certf.write(p11_test_config.cert_chain[1].dump())
     test_cfg = {

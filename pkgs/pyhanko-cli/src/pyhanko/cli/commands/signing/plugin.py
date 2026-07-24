@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime
-from typing import Dict, List, Optional
 
 import click
 import tzlocal
@@ -22,7 +21,7 @@ from pyhanko.sign.timestamps import HTTPTimeStamper
 
 
 def _ensure_field_visible(
-    handler: PdfHandler, name: Optional[str], will_create: bool
+    handler: PdfHandler, name: str | None, will_create: bool
 ):
     # verify if the resulting signature will be a visible one
     prefix = "You seem to be trying to create a visible signature"
@@ -65,7 +64,7 @@ def _callback_logic(
     ctx = click.get_current_context()
     cli_ctx: CLIContext = ctx.obj
 
-    timestamp_url: Optional[str] = cli_ctx.timestamp_url
+    timestamp_url: str | None = cli_ctx.timestamp_url
     if timestamp_url is not None:
         timestamper = HTTPTimeStamper(timestamp_url)
     else:
@@ -136,7 +135,7 @@ def command_from_plugin(plugin: SigningCommandPlugin) -> click.Command:
         with pyhanko_exception_manager():
             _callback_logic(plugin, infile, outfile, **kwargs)
 
-    params: List[click.Parameter] = [
+    params: list[click.Parameter] = [
         click.Argument(('infile',), type=readable_file),
         click.Argument(('outfile',), type=writable_file),
     ]
@@ -151,7 +150,7 @@ def command_from_plugin(plugin: SigningCommandPlugin) -> click.Command:
 
 
 def preconfigured_identity_command(
-    plugins_by_name: Dict[str, click.Command],
+    plugins_by_name: dict[str, click.Command],
 ) -> click.Command:
 
     def _callback(*, identity: str, infile: str, outfile: str):

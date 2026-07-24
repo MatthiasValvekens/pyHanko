@@ -323,7 +323,7 @@ def test_double_sig_adobe_reader(infile_name):
     # The last one involves a double signature where both fields were created
     # by Adobe Reader.
 
-    infile = BytesIO(read_all('%s/%s' % (PDF_DATA_DIR, infile_name)))
+    infile = BytesIO(read_all(f'{PDF_DATA_DIR}/{infile_name}'))
     r = PdfFileReader(infile)
 
     s = r.embedded_signatures[0]
@@ -1461,7 +1461,7 @@ def test_delete_signature():
     # This should invalidate the remaining one.
     w = IncrementalPdfFileWriter(out)
     sig_fields = fields.enumerate_sig_fields(w)
-    field_name, sig_obj, sig_field = next(sig_fields)
+    field_name, _sig_obj, sig_field = next(sig_fields)
     assert field_name == 'Sig1'
     del sig_field.get_object()['/V']
     w.mark_update(sig_field)

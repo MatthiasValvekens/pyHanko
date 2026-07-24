@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional, Set
 
 from asn1crypto import x509
 from pyhanko.config.api import (
@@ -29,14 +29,14 @@ class KeyUsageConstraints(ConfigurableMixin):
         Bring extended key usage semantics in line with :rfc:`5280` (PKIX).
     """
 
-    key_usage: Optional[Iterable[str]] = None
+    key_usage: Iterable[str] | None = None
     """
     All or some (depending on :attr:`match_all_key_usage`) of these key usage
     extensions must be present in the signer's certificate.
     If not set or empty, all key usages are considered acceptable.
     """
 
-    key_usage_forbidden: Optional[Iterable[str]] = None
+    key_usage_forbidden: Iterable[str] | None = None
     """
     These key usages must not be present in the signer's certificate.
 
@@ -45,7 +45,7 @@ class KeyUsageConstraints(ConfigurableMixin):
         compatibility with certificate seed value settings in ISO 32000.
     """
 
-    extd_key_usage: Optional[Iterable[str]] = None
+    extd_key_usage: Iterable[str] | None = None
     """
     List of acceptable key purposes that can appear in an extended key
     usage extension in the signer's certificate, if such an extension is at all
@@ -121,7 +121,7 @@ class KeyUsageConstraints(ConfigurableMixin):
         )
         self.validate_asserted_key_usage(cert_ku | extra)
 
-    def validate_asserted_key_usage(self, asserted_key_usages: Set[str]):
+    def validate_asserted_key_usage(self, asserted_key_usages: set[str]):
         if not self.key_usage:
             return
 
@@ -130,7 +130,7 @@ class KeyUsageConstraints(ConfigurableMixin):
         # check blacklisted key usages (ISO 32k)
         forbidden_ku = asserted_key_usages & key_usage_forbidden
         if forbidden_ku:
-            rephrased = map(lambda s: s.replace('_', ' '), forbidden_ku)
+            rephrased = (s.replace('_', ' ') for s in forbidden_ku)
             raise InvalidCertificateError(
                 "The active key usage policy explicitly bans certificates "
                 f"used for {', '.join(rephrased)}."
@@ -139,7 +139,7 @@ class KeyUsageConstraints(ConfigurableMixin):
         # check required key usage extension values
         need_all_ku = self.match_all_key_usages
         if not _match_usages(key_usage, asserted_key_usages, need_all_ku):
-            rephrased = map(lambda s: s.replace('_', ' '), key_usage)
+            rephrased = (s.replace('_', ' ') for s in key_usage)
             raise InvalidCertificateError(
                 "The active key usage policy requires "
                 f"{'' if need_all_ku else 'at least one of '}the key "
@@ -155,7 +155,7 @@ class KeyUsageConstraints(ConfigurableMixin):
         self.validate_asserted_extended_key_usage(cert_eku | extra)
 
     def validate_asserted_extended_key_usage(
-        self, asserted_key_usages: Set[str]
+        self, asserted_key_usages: set[str]
     ):
         if self.extd_key_usage is None:
             return
@@ -180,7 +180,7 @@ class KeyUsageConstraints(ConfigurableMixin):
             extd_key_usage, asserted_key_usages, need_all=False
         ):
             if extd_key_usage:
-                rephrased = map(lambda s: s.replace('_', ' '), extd_key_usage)
+                rephrased = (s.replace('_', ' ') for s in extd_key_usage)
                 ok_list = f"Relevant key purposes are {', '.join(rephrased)}."
             else:
                 ok_list = "There are no acceptable extended key usages."

@@ -107,7 +107,7 @@ def test_handle_bad_nonce():
     from pyhanko_testing_commons.test_utils.signing_commons import DUMMY_TS
 
     message = b'Hello world!'
-    nonce, req = DUMMY_TS.request_cms(
+    _nonce, req = DUMMY_TS.request_cms(
         hashlib.sha256(message).digest(), 'sha256'
     )
     response = DUMMY_TS.request_tsa_response(req)

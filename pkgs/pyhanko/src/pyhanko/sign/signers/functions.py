@@ -3,7 +3,6 @@ This module defines pyHanko's high-level API entry points.
 """
 
 from datetime import datetime
-from typing import Optional
 
 import tzlocal
 from asn1crypto import cms
@@ -23,8 +22,8 @@ def sign_pdf(
     pdf_out: BasePdfFileWriter,
     signature_meta: PdfSignatureMetadata,
     signer: Signer,
-    timestamper: Optional[TimeStamper] = None,
-    new_field_spec: Optional[SigFieldSpec] = None,
+    timestamper: TimeStamper | None = None,
+    new_field_spec: SigFieldSpec | None = None,
     existing_fields_only=False,
     bytes_reserved=None,
     in_place=False,
@@ -94,8 +93,8 @@ async def async_sign_pdf(
     pdf_out: BasePdfFileWriter,
     signature_meta: PdfSignatureMetadata,
     signer: Signer,
-    timestamper: Optional[TimeStamper] = None,
-    new_field_spec: Optional[SigFieldSpec] = None,
+    timestamper: TimeStamper | None = None,
+    new_field_spec: SigFieldSpec | None = None,
     existing_fields_only=False,
     bytes_reserved=None,
     in_place=False,
@@ -167,7 +166,7 @@ def embed_payload_with_cms(
     payload: embed.EmbeddedFileObject,
     cms_obj: cms.ContentInfo,
     extension='.sig',
-    file_name: Optional[str] = None,
+    file_name: str | None = None,
     file_spec_kwargs=None,
     cms_file_spec_kwargs=None,
 ):

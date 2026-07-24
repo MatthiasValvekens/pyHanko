@@ -1,8 +1,6 @@
-from typing import List
-
 from pyhanko.cli import launch
 
-__all__: List[str] = []
+__all__: list[str] = []
 
 
 if __name__ == '__main__':

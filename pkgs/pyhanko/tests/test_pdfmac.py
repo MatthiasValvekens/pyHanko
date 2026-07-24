@@ -12,9 +12,9 @@ import itertools
 import os
 import re
 import typing
+from collections.abc import Callable
 from functools import wraps
 from io import BytesIO
-from typing import Callable, Optional, Type
 
 import pytest
 from asn1crypto import cms, core
@@ -67,7 +67,7 @@ from requests_mock import Mocker
 DUMMY_PASSWORD = "secret"
 
 
-GENERATED_TEST_OUTPUTS: Optional[str] = None
+GENERATED_TEST_OUTPUTS: str | None = None
 
 
 def _dummy_decrypt(r: PdfFileReader, ignore_mac=False):
@@ -201,7 +201,7 @@ class EncryptionType(enum.Enum):
 
 def init_sample_doc(
     encryption_type: EncryptionType,
-    writer_class: Type[PdfFileWriter] = PdfFileWriter,
+    writer_class: type[PdfFileWriter] = PdfFileWriter,
 ):
     w = writer_class(stream_xrefs=False)
 
@@ -239,7 +239,7 @@ def init_sample_doc(
 
 
 def pdfmac_with_handler(
-    error_message: str, only_location: Optional[MacLocation] = None
+    error_message: str, only_location: MacLocation | None = None
 ):
     """
     Decorator to set up a test (or multiple tests) based on an alternative
@@ -259,7 +259,7 @@ def pdfmac_with_handler(
         @pdfmac_known_bad_case(error_message)
         @shallow_wraps(test_fun)
         def _wrap(location: MacLocation, encryption_type: EncryptionType):
-            handler_cls: Type[pdfmac.PdfMacTokenHandler] = test_fun()
+            handler_cls: type[pdfmac.PdfMacTokenHandler] = test_fun()
             w = init_sample_doc(encryption_type)
             w._mac_handler_cls = handler_cls
 
@@ -1142,13 +1142,13 @@ def test_mac_location_unsupported():
 @pdfmac_known_bad_case("Failed to retrieve standalone MAC value")
 @pytest.mark.parametrize('encryption_type', list(EncryptionType))
 def test_mac_wrong_type(encryption_type):
-    region_start_lazy: Optional[Callable[[], int]] = None
+    region_start_lazy: Callable[[], int] | None = None
 
     def manipulate(_w, value):
         nonlocal region_start_lazy
         # we have to get a little creative here, since overriding the /MAC
         # field directly will break the serialisation logic
-        region_start_lazy = lambda: value['/ByteRange'].first_region_len  # noqa
+        region_start_lazy = lambda: value['/ByteRange'].first_region_len
 
     out = _manipulate_standalone(encryption_type, manipulator=manipulate)
 

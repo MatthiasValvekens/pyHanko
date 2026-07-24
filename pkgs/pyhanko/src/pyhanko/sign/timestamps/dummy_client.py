@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional, Set
 
 import tzlocal
 from asn1crypto import algos, cms, core, keys, tsp, x509
@@ -28,8 +27,8 @@ class DummyTimeStamper(TimeStamper):
         self,
         tsa_cert: x509.Certificate,
         tsa_key: keys.PrivateKeyInfo,
-        certs_to_embed: Optional[CertificateStore] = None,
-        fixed_dt: Optional[datetime] = None,
+        certs_to_embed: CertificateStore | None = None,
+        fixed_dt: datetime | None = None,
         include_nonce=True,
         override_md=None,
     ):
@@ -130,7 +129,7 @@ class DummyTimeStamper(TimeStamper):
                 'signature': signature,
             }
         )
-        certs: Set[x509.Certificate] = set(self.certs_to_embed)
+        certs: set[x509.Certificate] = set(self.certs_to_embed)
         certs.add(self.tsa_cert)
         return {
             # must use v3 to get access to the EncapsulatedContentInfo construct

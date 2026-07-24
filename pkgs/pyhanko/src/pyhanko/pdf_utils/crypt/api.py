@@ -1,6 +1,7 @@
 import enum
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Type
+from typing import Optional
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt.cred_ser import SerialisableCredential
@@ -44,7 +45,7 @@ class AuthResult:
     Authentication status after the authentication attempt.
     """
 
-    permission_flags: Optional[PdfPermissions] = None
+    permission_flags: PdfPermissions | None = None
     """
     Granular permission flags. The precise meaning depends on the security
     handler.
@@ -55,7 +56,7 @@ class AuthResult:
     Status of PDF MAC validation.
     """
 
-    mac_failure_reason: Optional[str] = None
+    mac_failure_reason: str | None = None
     """
     Reason for PDF MAC validation failure in human-readable form.
     """
@@ -150,8 +151,8 @@ class SecurityHandler:
         compatibility with certain implementations.
     """
 
-    __registered_subclasses: Dict[str, Type['SecurityHandler']] = {}
-    _known_crypt_filters: Dict[generic.NameObject, 'CryptFilterBuilder'] = {}
+    __registered_subclasses: dict[str, type['SecurityHandler']] = {}
+    _known_crypt_filters: dict[generic.NameObject, 'CryptFilterBuilder'] = {}
 
     def __init__(
         self,
@@ -160,7 +161,7 @@ class SecurityHandler:
         crypt_filter_config: 'CryptFilterConfiguration',
         encrypt_metadata=True,
         compat_entries=True,
-        kdf_salt: Optional[bytes] = None,
+        kdf_salt: bytes | None = None,
     ):
         self.version = version
         crypt_filter_config.set_security_handler(self)
@@ -169,7 +170,7 @@ class SecurityHandler:
         self.crypt_filter_config = crypt_filter_config
         self.encrypt_metadata = encrypt_metadata
         self._compat_entries = compat_entries
-        self._credential: Optional[SerialisableCredential] = None
+        self._credential: SerialisableCredential | None = None
         self._kdf_salt = kdf_salt
 
     def __init_subclass__(cls, **kwargs):
@@ -180,7 +181,7 @@ class SecurityHandler:
             cls._known_crypt_filters = dict(cls._known_crypt_filters)
 
     @staticmethod
-    def register(cls: Type['SecurityHandler']):
+    def register(cls: type['SecurityHandler']):
         """
         Register a security handler class.
         Intended to be used as a decorator on subclasses.
@@ -256,7 +257,7 @@ class SecurityHandler:
         """
         raise NotImplementedError
 
-    def extract_credential(self) -> Optional[SerialisableCredential]:
+    def extract_credential(self) -> SerialisableCredential | None:
         """
         Extract a serialisable credential for later use, if the security handler
         supports it. It should allow the security handler to be unlocked
@@ -276,7 +277,7 @@ class SecurityHandler:
             return None
 
     @classmethod
-    def support_generic_subfilters(cls) -> Set[str]:
+    def support_generic_subfilters(cls) -> set[str]:
         """
         Indicates the generic ``/SubFilter`` values that this security handler
         supports.
@@ -461,7 +462,7 @@ class SecurityHandler:
     ):
         cls._known_crypt_filters[method] = factory
 
-    def get_min_pdf_version(self) -> Optional[Tuple[int, int]]:
+    def get_min_pdf_version(self) -> tuple[int, int] | None:
         v = self.version
         if v >= SecurityHandlerVersion.AES256:
             return 2, 0
@@ -471,7 +472,7 @@ class SecurityHandler:
             return 1, 4
         return None
 
-    def get_extensions(self) -> List[DeveloperExtension]:
+    def get_extensions(self) -> list[DeveloperExtension]:
         exts = []
         if self.pdf_mac_enabled:
             from .pdfmac import ISO32004
@@ -499,7 +500,7 @@ class CryptFilter:
     """
 
     _handler: Optional['SecurityHandler'] = None
-    _shared_key: Optional[bytes] = None
+    _shared_key: bytes | None = None
     _embedded_only = False
 
     def _set_security_handler(self, handler):
@@ -532,7 +533,7 @@ class CryptFilter:
         """
         raise NotImplementedError
 
-    def get_extensions(self) -> Optional[List[DeveloperExtension]]:
+    def get_extensions(self) -> list[DeveloperExtension] | None:
         """
         Get applicable developer extensions for this crypt filter.
         """
@@ -762,7 +763,7 @@ class CryptFilterConfiguration:
 
     def __init__(
         self,
-        crypt_filters: Dict[str, CryptFilter],
+        crypt_filters: dict[str, CryptFilter],
         default_stream_filter=IDENTITY,
         default_string_filter=IDENTITY,
         default_file_filter=None,
@@ -898,10 +899,10 @@ CryptFilterBuilder = Callable[[generic.DictionaryObject, bool], CryptFilter]
 
 
 def build_crypt_filter(
-    reg: Dict[generic.NameObject, CryptFilterBuilder],
+    reg: dict[generic.NameObject, CryptFilterBuilder],
     cfdict: generic.DictionaryObject,
     acts_as_default: bool,
-) -> Optional[CryptFilter]:
+) -> CryptFilter | None:
     """
     Interpret a crypt filter dictionary for a security handler.
 

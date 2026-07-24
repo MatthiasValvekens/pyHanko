@@ -1,6 +1,6 @@
 import abc
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Iterable, Optional
 
 from asn1crypto import algos, cms, core, tsp, x509
 from asn1crypto import pdf as asn1_pdf
@@ -48,7 +48,7 @@ class CMSAttributeProvider:
         """
         raise NotImplementedError
 
-    async def get_attribute(self, dry_run=False) -> Optional[cms.CMSAttribute]:
+    async def get_attribute(self, dry_run=False) -> cms.CMSAttribute | None:
         value = await self.build_attr_value(dry_run=dry_run)
         if value is not None:
             return simple_cms_attribute(self.attribute_type, value)
@@ -113,7 +113,7 @@ class AdobeRevinfoProvider(CMSAttributeProvider):
 
     async def build_attr_value(
         self, dry_run=False
-    ) -> Optional[asn1_pdf.RevocationInfoArchival]:
+    ) -> asn1_pdf.RevocationInfoArchival | None:
         return self.value
 
 

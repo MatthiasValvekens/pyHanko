@@ -1,5 +1,3 @@
-from typing import Optional
-
 from asn1crypto import keys, pem, x509
 from cryptography.hazmat.primitives import serialization
 
@@ -69,7 +67,7 @@ def load_cert_from_pemder(cert_file):
 
 
 def load_private_key_from_pemder(
-    key_file, passphrase: Optional[bytes]
+    key_file, passphrase: bytes | None
 ) -> keys.PrivateKeyInfo:
     """
     A convenience function to load PEM/DER-encoded keys from files.
@@ -87,7 +85,7 @@ def load_private_key_from_pemder(
 
 
 def load_private_key_from_pemder_data(
-    key_bytes: bytes, passphrase: Optional[bytes]
+    key_bytes: bytes, passphrase: bytes | None
 ) -> keys.PrivateKeyInfo:
     """
     A convenience function to load PEM/DER-encoded keys from binary data.

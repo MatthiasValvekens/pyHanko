@@ -1,7 +1,7 @@
 import contextlib
 import dataclasses
 import os
-from typing import ContextManager, List, Optional
+from typing import ContextManager
 
 import click
 from pyhanko.cli._ctx import CLIContext
@@ -43,7 +43,7 @@ class PKCS11Plugin(SigningCommandPlugin):
     def is_available(self) -> bool:
         return pkcs11_available
 
-    def click_options(self) -> List[click.Option]:
+    def click_options(self) -> list[click.Option]:
         return [
             click.Option(
                 ('--lib',),
@@ -135,7 +135,7 @@ def _pkcs11_signer_context(
     from pyhanko.sign import pkcs11
 
     if p11_setup:
-        cli_config: Optional[CLIConfig] = ctx.config
+        cli_config: CLIConfig | None = ctx.config
         if cli_config is None:
             raise click.ClickException(
                 "The --p11-setup option requires a configuration file"

@@ -1,5 +1,6 @@
 from collections import defaultdict
-from typing import Iterable, Optional, Set
+from collections.abc import Iterable
+from typing import Optional
 
 from asn1crypto import x509
 
@@ -264,8 +265,7 @@ class PolicyTreeRoot:
             if depth == 0:
                 yield child
             else:
-                for grandchild in child.at_depth(depth - 1):
-                    yield grandchild
+                yield from child.at_depth(depth - 1)
 
     def walk_up(self, depth):
         """
@@ -282,8 +282,7 @@ class PolicyTreeRoot:
 
         for child in list(self.children):
             if depth != 0:
-                for grandchild in child.walk_up(depth - 1):
-                    yield grandchild
+                yield from child.walk_up(depth - 1)
             yield child
 
     def nodes_in_current_domain(self) -> Iterable['PolicyTreeNode']:
@@ -307,7 +306,7 @@ class PolicyTreeNode(PolicyTreeRoot):
         self,
         valid_policy: str,
         qualifier_set: x509.PolicyQualifierInfos,
-        expected_policy_set: Set[str],
+        expected_policy_set: set[str],
     ):
         """
         :param valid_policy:

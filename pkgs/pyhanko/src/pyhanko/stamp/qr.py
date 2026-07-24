@@ -1,6 +1,5 @@
 import enum
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils import content, generic, layout
@@ -98,7 +97,7 @@ class QRStampStyle(TextStampStyle):
     This parameter will be replaced with the URL that the QR code points to.
     """
 
-    qr_inner_size: Optional[int] = None
+    qr_inner_size: int | None = None
     """
     Size of the QR code in the inner layout. By default, this is in user units,
     but if the stamp has a fully defined bounding box, it may be rescaled
@@ -112,7 +111,7 @@ class QRStampStyle(TextStampStyle):
     Position of the QR code relative to the text box.
     """
 
-    qr_inner_content: Optional[content.PdfContent] = None
+    qr_inner_content: content.PdfContent | None = None
     """
     Inner graphics content to be included in the QR code (experimental).
     """
@@ -152,7 +151,7 @@ class QRStamp(TextStamp):
         url: str,
         style: QRStampStyle,
         text_params=None,
-        box: Optional[layout.BoxConstraints] = None,
+        box: layout.BoxConstraints | None = None,
     ):
         super().__init__(writer, style, text_params=text_params, box=box)
         self.url = url
@@ -166,7 +165,7 @@ class QRStamp(TextStamp):
         # choose a reasonable default based on the QR code's relative position
         return style.qr_position.value
 
-    def _inner_layout_natural_size(self) -> Tuple[List[bytes], Tuple[int, int]]:
+    def _inner_layout_natural_size(self) -> tuple[list[bytes], tuple[int, int]]:
         (
             text_commands,
             (

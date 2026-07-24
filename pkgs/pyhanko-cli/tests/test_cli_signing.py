@@ -1,7 +1,6 @@
 import asyncio
 import getpass
 import itertools
-from typing import Optional
 
 import click
 import pytest
@@ -47,9 +46,7 @@ def unencrypted_p12(pki_arch, post_validate):
     return fname
 
 
-def _write_user_key(
-    pki_arch: PKIArchitecture, passphrase: Optional[bytes] = None
-):
+def _write_user_key(pki_arch: PKIArchitecture, passphrase: bytes | None = None):
     key = pki_arch.key_set.get_private_key(KeyLabel('signer1'))
     key_handle = serialization.load_der_private_key(key.dump(), password=None)
     pem_bytes = key_handle.private_bytes(
@@ -79,7 +76,7 @@ def encrypted_user_key(pki_arch, post_validate):
 
 
 def test_cli_addsig_pemder(cli_runner, cert_chain, user_key):
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -104,7 +101,7 @@ def test_cli_addsig_pemder(cli_runner, cert_chain, user_key):
 
 def test_cli_addsig_pemder_without_nopass(cli_runner, cert_chain, user_key):
     # expect a warning, but no errors
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -346,11 +343,11 @@ def test_cli_addsig_pemder_with_setup_encrypted_key(
         extra = {}
     else:
         args = []
-        extra = dict(
-            obj=CLIContext(
+        extra = {
+            "obj": CLIContext(
                 ux=UXContext(prompter=DummyPrompter(DUMMY_PASSPHRASE))
             )
-        )
+        }
 
     _write_config(cfg)
     result = cli_runner.invoke(
@@ -615,11 +612,11 @@ def test_cli_addsig_p12_with_setup(cli_runner, p12_keys, passphrase_loc):
     if passphrase_loc == 'config':
         cfg['pkcs12-setups']['test']['pfx_passphrase'] = DUMMY_PASSPHRASE
     elif passphrase_loc == 'prompt':
-        extra = dict(
-            obj=CLIContext(
+        extra = {
+            "obj": CLIContext(
                 ux=UXContext(prompter=DummyPrompter(DUMMY_PASSPHRASE))
             )
-        )
+        }
     elif passphrase_loc == 'file':
         args = ['--passfile', 'passfile']
         with open('passfile', 'w') as pf:
@@ -799,7 +796,7 @@ def test_cli_sign_pkcs12_visible_while_creating_field(
 def test_cli_sign_visible_no_style(
     cli_runner, cert_chain, user_key, post_validate
 ):
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -829,7 +826,7 @@ def test_cli_sign_visible_with_style(
         'stamp-styles': {'test': {'type': 'text', 'background': '__stamp__'}}
     }
     _write_config(cfg)
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -860,7 +857,7 @@ def test_cli_sign_visible_with_qr_style(
 ):
     cfg = {'stamp-styles': {'test': {'type': 'qr', 'background': '__stamp__'}}}
     _write_config(cfg)
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -894,7 +891,7 @@ def test_cli_sign_visible_with_qr_style_omit_stamp_url(
 ):
     cfg = {'stamp-styles': {'test': {'type': 'qr', 'background': '__stamp__'}}}
     _write_config(cfg)
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -921,7 +918,7 @@ def test_cli_sign_visible_with_qr_style_omit_stamp_url(
 
 
 def test_cli_add_field_then_sign(cli_runner, cert_chain, user_key):
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     intermediate_file_path = 'presign.pdf'
     result = cli_runner.invoke(
         cli_root,
@@ -959,7 +956,7 @@ def test_cli_add_field_then_sign(cli_runner, cert_chain, user_key):
 
 
 def test_cli_sign_implied_field(cli_runner, cert_chain, user_key):
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     with open(INPUT_PATH, 'wb') as f:
         f.write(MINIMAL_ONE_FIELD)
     result = cli_runner.invoke(
@@ -1190,7 +1187,7 @@ def test_cli_sign_visible_with_custom_default_style(
         },
     }
     _write_config(cfg)
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -1230,7 +1227,7 @@ def test_cli_sign_visible_with_default_style_and_others_in_config(
         },
     }
     _write_config(cfg)
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -1267,7 +1264,7 @@ def test_cli_sign_visible_with_undefined_default_style(
         },
     }
     _write_config(cfg)
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [
@@ -1294,7 +1291,7 @@ def test_cli_sign_visible_with_undefined_default_style(
 def test_cli_sign_visible_with_style_but_no_config(
     cli_runner, cert_chain, user_key
 ):
-    root_cert, interm_cert, user_cert = cert_chain
+    _root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
         cli_root,
         [

@@ -1,7 +1,6 @@
 import getpass
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
 
 from pyhanko.cli.config import CLIConfig
 from pyhanko.sign.fields import SigFieldSpec
@@ -9,10 +8,10 @@ from pyhanko.sign.signers import PdfSignatureMetadata
 from pyhanko.stamp import BaseStampStyle
 
 __all__ = [
-    'PasswordPrompter',
-    'GetpassPrompter',
-    'UXContext',
     'CLIContext',
+    'GetpassPrompter',
+    'PasswordPrompter',
+    'UXContext',
 ]
 
 
@@ -75,12 +74,12 @@ class CLIContext:
     optional.
     """
 
-    sig_settings: Optional[PdfSignatureMetadata] = None
+    sig_settings: PdfSignatureMetadata | None = None
     """
     The settings that will be used to produce a new signature.
     """
 
-    config: Optional[CLIConfig] = None
+    config: CLIConfig | None = None
     """
     Values for CLI configuration settings.
     """
@@ -90,23 +89,23 @@ class CLIContext:
     Whether signing operations should use existing fields only.
     """
 
-    timestamp_url: Optional[str] = None
+    timestamp_url: str | None = None
     """
     Endpoint URL for the timestamping service to use.
     """
 
-    stamp_style: Optional[BaseStampStyle] = None
+    stamp_style: BaseStampStyle | None = None
     """
     Stamp style to use for generating visual signature appearances, if
     applicable.
     """
 
-    stamp_url: Optional[str] = None
+    stamp_url: str | None = None
     """
     For QR stamp styles, defines the URL used to generate the QR code.
     """
 
-    new_field_spec: Optional[SigFieldSpec] = None
+    new_field_spec: SigFieldSpec | None = None
     """
     Field spec used to generate new signature fields, if applicable.
     """

@@ -6,7 +6,6 @@ import abc
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import FrozenSet, Optional
 
 from asn1crypto import algos, keys
 
@@ -274,7 +273,7 @@ class CertRevTrustPolicy:
     The revocation checking policy requirements.
     """
 
-    freshness: Optional[timedelta] = None
+    freshness: timedelta | None = None
     """
     Freshness interval. If not specified, this defaults to the distance
     between ``thisUpdate`` and ``nextUpdate`` for the given piece of revocation
@@ -288,7 +287,7 @@ class CertRevTrustPolicy:
     Defines the methodology used to evaluate the freshness of revocation info.
     """
 
-    expected_post_expiry_revinfo_time: Optional[timedelta] = None
+    expected_post_expiry_revinfo_time: timedelta | None = None
     """
     Duration for which the issuing CA is expected to supply status information
     after a certificate expires.
@@ -310,8 +309,8 @@ class CertRevTrustPolicy:
 
 
 def intersect_policy_sets(
-    a_pols: FrozenSet[str], b_pols: FrozenSet[str]
-) -> FrozenSet[str]:
+    a_pols: frozenset[str], b_pols: frozenset[str]
+) -> frozenset[str]:
     """
     Intersect two sets of policies, taking into account the special
     'any_policy'.
@@ -329,9 +328,7 @@ def intersect_policy_sets(
 
     if a_any and b_any:
         return frozenset(['any_policy'])
-    elif a_any:
-        return b_pols
-    elif b_any:
+    elif a_any or b_any:
         return b_pols
     else:
         return b_pols & a_pols
@@ -387,7 +384,7 @@ class PKIXValidationParams:
     when it appears.
     """
 
-    initial_permitted_subtrees: Optional[PKIXSubtrees] = None
+    initial_permitted_subtrees: PKIXSubtrees | None = None
     """
     Set of permitted subtrees for each name type, indicating restrictions
     to impose on subject names (and alternative names) in the certification
@@ -398,7 +395,7 @@ class PKIXValidationParams:
     certificates.
     """
 
-    initial_excluded_subtrees: Optional[PKIXSubtrees] = None
+    initial_excluded_subtrees: PKIXSubtrees | None = None
     """
     Set of excluded subtrees for each name type, indicating restrictions
     to impose on subject names (and alternative names) in the certification
@@ -460,13 +457,13 @@ class AlgorithmUsageConstraint:
     Flag indicating whether the algorithm can be used.
     """
 
-    not_allowed_after: Optional[datetime] = None
+    not_allowed_after: datetime | None = None
     """
     Date indicating when the algorithm became unavailable (given the relevant
     choice of parameters, if applicable).
     """
 
-    failure_reason: Optional[str] = None
+    failure_reason: str | None = None
     """
     A human-readable description of the failure reason, if applicable.
     """
@@ -481,7 +478,7 @@ class AlgorithmUsagePolicy(abc.ABC):
     """
 
     def digest_algorithm_allowed(
-        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+        self, algo: algos.DigestAlgorithm, moment: datetime | None
     ) -> AlgorithmUsageConstraint:
         """
         Determine if the indicated digest algorithm can be used at the point
@@ -500,8 +497,8 @@ class AlgorithmUsagePolicy(abc.ABC):
     def signature_algorithm_allowed(
         self,
         algo: algos.SignedDigestAlgorithm,
-        moment: Optional[datetime],
-        public_key: Optional[keys.PublicKeyInfo],
+        moment: datetime | None,
+        public_key: keys.PublicKeyInfo | None,
     ) -> AlgorithmUsageConstraint:
         """
         Determine if the indicated signature algorithm (including the associated
@@ -564,7 +561,7 @@ class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
         self.dsa_key_size_threshold = dsa_key_size_threshold
 
     def digest_algorithm_allowed(
-        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+        self, algo: algos.DigestAlgorithm, moment: datetime | None
     ) -> AlgorithmUsageConstraint:
         return AlgorithmUsageConstraint(
             algo['algorithm'].native not in self.weak_hash_algos
@@ -573,8 +570,8 @@ class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
     def signature_algorithm_allowed(
         self,
         algo: algos.SignedDigestAlgorithm,
-        moment: Optional[datetime],
-        public_key: Optional[keys.PublicKeyInfo],
+        moment: datetime | None,
+        public_key: keys.PublicKeyInfo | None,
     ) -> AlgorithmUsageConstraint:
         try:
             algo_name = algo.signature_algo
@@ -622,14 +619,14 @@ class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
 
 class AcceptAllAlgorithms(AlgorithmUsagePolicy):
     def digest_algorithm_allowed(
-        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+        self, algo: algos.DigestAlgorithm, moment: datetime | None
     ) -> AlgorithmUsageConstraint:
         return AlgorithmUsageConstraint(allowed=True)
 
     def signature_algorithm_allowed(
         self,
         algo: algos.SignedDigestAlgorithm,
-        moment: Optional[datetime],
-        public_key: Optional[keys.PublicKeyInfo],
+        moment: datetime | None,
+        public_key: keys.PublicKeyInfo | None,
     ) -> AlgorithmUsageConstraint:
         return AlgorithmUsageConstraint(allowed=True)

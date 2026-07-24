@@ -4,7 +4,7 @@ Module defining pyHanko's standard difference policy implementation.
 
 import logging
 from collections import defaultdict
-from typing import Iterator, List, Optional, Union
+from collections.abc import Iterator
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
@@ -141,7 +141,7 @@ def _is_id(old_object: generic.PdfObject, new_object: generic.PdfObject):
 
         return all(
             _is_id(old_object.raw_get(k), new_object.raw_get(k))
-            for k in new_object.keys()
+            for k in new_object
         )
     raise NotImplementedError
 
@@ -182,8 +182,8 @@ class StandardDiffPolicy(DiffPolicy):
 
     def __init__(
         self,
-        global_rules: List[QualifiedWhitelistRule],
-        form_rule: Optional[FormUpdatingRule],
+        global_rules: list[QualifiedWhitelistRule],
+        form_rule: FormUpdatingRule | None,
         reject_object_freeing=True,
         ignore_orphaned_objects=True,
         ignore_identical_objects=True,
@@ -198,8 +198,8 @@ class StandardDiffPolicy(DiffPolicy):
         self,
         old: HistoricalResolver,
         new: HistoricalResolver,
-        field_mdp_spec: Optional[FieldMDPSpec] = None,
-        doc_mdp: Optional[MDPPerm] = None,
+        field_mdp_spec: FieldMDPSpec | None = None,
+        doc_mdp: MDPPerm | None = None,
     ) -> DiffResult:
         if doc_mdp == MDPPerm.ANNOTATE:
             logger.warning(
@@ -256,11 +256,11 @@ class StandardDiffPolicy(DiffPolicy):
                 elif upd_type == ApprovalType.APPROVE_RELATIVE_CONTEXT:
                     # approve all usages that match the relative context,
                     # keep the rest
-                    usages = set(
+                    usages = {
                         ctx
                         for ctx in usages
                         if ctx.relative_view != _upd.context_checked
-                    )
+                    }
                 else:
                     # Last case: path-level approval
                     # remove the path that has just been cleared from
@@ -318,13 +318,13 @@ class StandardDiffPolicy(DiffPolicy):
 
         xref_cache = old.reader.xrefs
         if self.ignore_identical_objects:
-            identical_objs = set(
+            identical_objs = {
                 unex_ref
                 for unex_ref in unexplained_lta
                 if xref_cache.get_historical_ref(unex_ref, old.revision)
                 is not None
                 and _is_id(old(unex_ref), new(unex_ref))
-            )
+            }
             if identical_objs:
                 logger.debug(
                     f"Found identical overridden objects between revisions "
@@ -339,7 +339,7 @@ class StandardDiffPolicy(DiffPolicy):
             msg = misc.LazyJoin(
                 '\n',
                 (
-                    '%s:%s...' % (repr(x), repr(x.get_object())[:300])
+                    f'{x!r}:{repr(x.get_object())[:300]}...'
                     for x in unexplained_annot
                 ),
             )
@@ -363,7 +363,7 @@ class StandardDiffPolicy(DiffPolicy):
                     f"in revision {new.revision} without precise "
                     "justification:\n" + '\n'.join(unexplained_overrides)
                 )
-                err_msg = "%s\n%s" % (err_msg, unchecked_paths_msg)
+                err_msg = f"{err_msg}\n{unchecked_paths_msg}"
                 logger.debug(unchecked_paths_msg)
 
             raise SuspiciousModification(err_msg)
@@ -381,10 +381,10 @@ class StandardDiffPolicy(DiffPolicy):
     def review_file(
         self,
         reader: PdfFileReader,
-        base_revision: Union[int, HistoricalResolver],
-        field_mdp_spec: Optional[FieldMDPSpec] = None,
-        doc_mdp: Optional[MDPPerm] = None,
-    ) -> Union[DiffResult, SuspiciousModification]:
+        base_revision: int | HistoricalResolver,
+        field_mdp_spec: FieldMDPSpec | None = None,
+        doc_mdp: MDPPerm | None = None,
+    ) -> DiffResult | SuspiciousModification:
         """
         Implementation of :meth:`.DiffPolicy.review_file` that reviews
         each intermediate revision between the base revision and the current one

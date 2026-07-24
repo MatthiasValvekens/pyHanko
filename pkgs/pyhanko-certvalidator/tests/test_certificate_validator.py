@@ -1,5 +1,3 @@
-# coding: utf-8
-
 import pytest
 from freezegun import freeze_time
 from pyhanko_certvalidator import (

@@ -1,6 +1,5 @@
 import logging
 from dataclasses import replace
-from typing import Optional, Tuple
 
 from . import generic, layout
 from .content import AppearanceContent
@@ -11,10 +10,10 @@ from .text import TextBox, TextBoxStyle
 from .writer import BasePdfFileWriter
 
 __all__ = [
-    'get_single_field_annot',
-    'enumerate_fields_in',
     'annot_width_height',
+    'enumerate_fields_in',
     'find_existing_empty_field',
+    'get_single_field_annot',
     'populate_static_text_field',
 ]
 
@@ -87,9 +86,7 @@ def enumerate_fields_in(
         except KeyError:
             continue
         fq_name = (
-            field_name
-            if not parent_name
-            else ("%s.%s" % (parent_name, field_name))
+            field_name if not parent_name else (f"{parent_name}.{field_name}")
         )
         explicitly_requested = with_name is not None and fq_name == with_name
         child_requested = explicitly_requested or (
@@ -138,7 +135,7 @@ def enumerate_fields_in(
 
 def annot_width_height(
     annot_dict: generic.DictionaryObject,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Internal function to compute the width and height of an annotation.
 
@@ -169,7 +166,7 @@ class TextFieldContent(AppearanceContent):
         writer: BasePdfFileWriter,
         text_content: str,
         text_style: TextBoxStyle,
-        box: Optional[layout.BoxConstraints] = None,
+        box: layout.BoxConstraints | None = None,
     ):
         self._text_content = text_content
         box_layout = (
@@ -229,7 +226,7 @@ def find_existing_empty_field(
     )
 
     try:
-        field_name, value, field_ref = next(candidates)
+        field_name, _value, field_ref = next(candidates)
     except StopIteration:
         raise FormFillingError(
             f'No empty text field with name {field_name} found.'

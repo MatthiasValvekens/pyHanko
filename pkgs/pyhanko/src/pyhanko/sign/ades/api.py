@@ -1,6 +1,6 @@
 import enum
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 from asn1crypto import cms
 from pyhanko.sign.timestamps import TimeStamper
@@ -66,7 +66,7 @@ class CAdESSignedAttrSpec:
     Class that controls signed CAdES attributes on a PDF signature.
     """
 
-    commitment_type: Optional[CommitmentTypeIndication] = None
+    commitment_type: CommitmentTypeIndication | None = None
     """
     Signature commitment type. Can be one of the standard values, or a custom
     one.
@@ -83,7 +83,7 @@ class CAdESSignedAttrSpec:
         content proves that the signature existed *before* said point in time.
     """
 
-    signature_policy_identifier: Optional[SignaturePolicyIdentifier] = None
+    signature_policy_identifier: SignaturePolicyIdentifier | None = None
     """
     Signature policy identifier to embed into the signature.
     
@@ -95,7 +95,7 @@ class CAdESSignedAttrSpec:
         provisions of the signature policy are adhered to.
     """
 
-    signer_attributes: Optional[SignerAttrSpec] = None
+    signer_attributes: SignerAttrSpec | None = None
     """
     Settings for signer's attributes, to be included in a
     ``signer-attributes-v2`` attribute on the signature.
@@ -105,7 +105,7 @@ class CAdESSignedAttrSpec:
         self,
         message_digest,
         md_algorithm,
-        timestamper: Optional[TimeStamper] = None,
+        timestamper: TimeStamper | None = None,
     ):
         if self.timestamp_content and timestamper is not None:
             yield TSTProvider(

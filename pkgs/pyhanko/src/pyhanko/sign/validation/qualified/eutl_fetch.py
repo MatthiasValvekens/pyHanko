@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
 
 import aiohttp
 from aiohttp import ClientTimeout
@@ -62,7 +61,7 @@ class InMemoryTLCache(TLCache):
     """
 
     def __init__(self: 'InMemoryTLCache'):
-        self._cache: Dict[str, str] = {}
+        self._cache: dict[str, str] = {}
 
     def __getitem__(self, key: str) -> str:
         return self._cache[key]
@@ -73,7 +72,7 @@ class InMemoryTLCache(TLCache):
 
 class FileSystemTLCache(TLCache):
     def __init__(self, cache_path: Path, expire_after: timedelta):
-        self._cache: Dict[str, Tuple[datetime, str]] = {}
+        self._cache: dict[str, tuple[datetime, str]] = {}
         self._root = cache_path
         self._expire_after = expire_after
         if not cache_path.exists():
@@ -101,7 +100,7 @@ class FileSystemTLCache(TLCache):
         try:
             with cached_file_path.open('r') as inf:
                 content = inf.read()
-        except IOError as e:
+        except OSError as e:
             logger.warning(
                 f"Failed to access cached file at {cached_file_path}: {e}",
                 exc_info=e,
@@ -159,7 +158,7 @@ async def _get(uri: str, client: aiohttp.ClientSession) -> str:
             return await response.text()
         except aiohttp.ClientError as e:
             if isinstance(e, aiohttp.ClientResponseError) and e.status < 500:
-                raise e
+                raise
             last_error = e
             if attempt < FETCH_TRIES - 1:
                 await asyncio.sleep(delay_s)
@@ -169,7 +168,7 @@ async def _get(uri: str, client: aiohttp.ClientSession) -> str:
 
 
 async def _fetch(
-    cache: Optional[TLCache], uri: str, client: aiohttp.ClientSession
+    cache: TLCache | None, uri: str, client: aiohttp.ClientSession
 ):
     if cache is None:
         return await _get(uri, client)
@@ -188,10 +187,10 @@ async def _fetch(
 async def bootstrap_lotl_signers(
     latest_lotl_xml: str,
     client: aiohttp.ClientSession,
-    bootstrap_lotl_tlso_certs: Optional[List[x509.Certificate]] = None,
-    cache: Optional[TLCache] = None,
+    bootstrap_lotl_tlso_certs: list[x509.Certificate] | None = None,
+    cache: TLCache | None = None,
     anchor: int = 1,
-) -> List[x509.Certificate]:
+) -> list[x509.Certificate]:
     """
     Perform the bootstrapping process specified in
     Article 4 of Commission Implementing Decision (EU) 2015/1505 to determine
@@ -276,7 +275,7 @@ async def bootstrap_lotl_signers(
 
 async def fetch_lotl(
     client: aiohttp.ClientSession,
-    cache: Optional[TLCache] = None,
+    cache: TLCache | None = None,
     url=EU_LOTL_LOCATION,
 ):
     """
@@ -298,13 +297,13 @@ async def fetch_lotl(
 
 
 async def lotl_to_registry(
-    lotl_xml: Optional[str],
+    lotl_xml: str | None,
     client: aiohttp.ClientSession,
-    lotl_tlso_certs: Optional[List[x509.Certificate]] = None,
-    cache: Optional[TLCache] = None,
-    registry: Optional[TSPRegistry] = None,
-    only_territories: Optional[Set[str]] = None,
-) -> Tuple[TSPRegistry, List[TSPServiceParsingError]]:
+    lotl_tlso_certs: list[x509.Certificate] | None = None,
+    cache: TLCache | None = None,
+    registry: TSPRegistry | None = None,
+    only_territories: set[str] | None = None,
+) -> tuple[TSPRegistry, list[TSPServiceParsingError]]:
     """
     Populate a :class:`.TSPRegistry` instance from a list-of-the-lists XML
     payload, validating the signatures on the trusted lists in the process.

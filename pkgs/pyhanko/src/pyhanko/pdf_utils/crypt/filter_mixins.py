@@ -1,7 +1,6 @@
 import abc
 import secrets
 import struct
-from typing import List, Optional
 
 import cryptography.exceptions
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -242,5 +241,5 @@ class AESGCMCryptFilterMixin(CryptFilter, abc.ABC):
             raise misc.PdfReadError("Invalid GCM tag")
         return plaintext
 
-    def get_extensions(self) -> Optional[List[DeveloperExtension]]:
+    def get_extensions(self) -> list[DeveloperExtension] | None:
         return [ISO32003]

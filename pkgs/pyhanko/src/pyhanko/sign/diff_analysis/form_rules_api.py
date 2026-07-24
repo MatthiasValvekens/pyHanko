@@ -5,8 +5,8 @@ In principle, these aren't relevant to the high-level validation API.
 """
 
 import logging
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass
-from typing import Dict, Generator, Iterable, List, Optional, Set, Tuple
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
@@ -38,7 +38,7 @@ class FormUpdate(ReferenceUpdate):
     is locked by the FieldMDP policy currently in force.
     """
 
-    field_name: Optional[str] = None
+    field_name: str | None = None
     """
     The relevant field's fully qualified name, or ``None`` if there's either
     no obvious associated field, or if there are multiple reasonable candidates.
@@ -71,24 +71,24 @@ class FieldComparisonSpec:
     The (fully qualified) form field name.
     """
 
-    old_field_ref: Optional[generic.Reference]
+    old_field_ref: generic.Reference | None
     """
     A reference to the field's dictionary in the old revision, if present.
     """
 
-    new_field_ref: Optional[generic.Reference]
+    new_field_ref: generic.Reference | None
     """
     A reference to the field's dictionary in the new revision, if present.
     """
 
-    old_canonical_path: Optional[RawPdfPath]
+    old_canonical_path: RawPdfPath | None
     """
     Path from the trailer through the AcroForm structure to this field (in the
     older revision). If the field is new, set to ``None``.
     """
 
     @property
-    def old_field(self) -> Optional[generic.DictionaryObject]:
+    def old_field(self) -> generic.DictionaryObject | None:
         """
         :return:
             The field's dictionary in the old revision, if present, otherwise
@@ -102,7 +102,7 @@ class FieldComparisonSpec:
         return field
 
     @property
-    def new_field(self) -> Optional[generic.DictionaryObject]:
+    def new_field(self) -> generic.DictionaryObject | None:
         """
         :return:
             The field's dictionary in the new revision, if present, otherwise
@@ -115,16 +115,16 @@ class FieldComparisonSpec:
         assert isinstance(field, generic.DictionaryObject)
         return field
 
-    def expected_contexts(self) -> Set[Context]:
+    def expected_contexts(self) -> set[Context]:
         old_field_ref = self.old_field_ref
         if old_field_ref is None:
             return set()
         # these are the paths where we expect the form field to be referred to
         paths = self._old_annotation_paths()
-        contexts: Set[Context] = set(
+        contexts: set[Context] = {
             Context.from_absolute(old_field_ref.get_pdf_handler(), path)
             for path in paths
-        )
+        }
         struct_context = self._find_in_structure_tree()
         if struct_context is not None:
             contexts.add(struct_context)
@@ -137,7 +137,7 @@ class FieldComparisonSpec:
             )
         return contexts
 
-    def _find_in_structure_tree(self) -> Optional[Context]:
+    def _find_in_structure_tree(self) -> Context | None:
         # collect paths (0 or 1) through which this field appears
         #  in the file's structure tree.
 
@@ -227,7 +227,7 @@ class FieldComparisonContext:
     Context for a form diffing operation.
     """
 
-    field_specs: Dict[str, FieldComparisonSpec]
+    field_specs: dict[str, FieldComparisonSpec]
     """
     Dictionary mapping field names to :class:`.FieldComparisonSpec` objects.
     """
@@ -250,7 +250,7 @@ class FieldMDPRule:
 
     def apply(
         self, context: FieldComparisonContext
-    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    ) -> Iterable[tuple[ModificationLevel, FormUpdate]]:
         """
         Apply the rule to the given :class:`.FieldComparisonContext`.
 
@@ -262,18 +262,18 @@ class FieldMDPRule:
 
 
 def _list_fields(
-    old_fields: Optional[generic.PdfObject],
-    new_fields: Optional[generic.PdfObject],
-    old_path: Optional[RawPdfPath],
+    old_fields: generic.PdfObject | None,
+    new_fields: generic.PdfObject | None,
+    old_path: RawPdfPath | None,
     parent_name="",
     inherited_ft=None,
-) -> Generator[Tuple[str, FieldComparisonSpec], None, None]:
+) -> Generator[tuple[str, FieldComparisonSpec], None, None]:
     """
     Recursively construct a list of field names, together with their
     "incarnations" in either revision.
     """
 
-    def _make_list(lst: Optional[generic.PdfObject], exc):
+    def _make_list(lst: generic.PdfObject | None, exc):
         if not isinstance(lst, generic.ArrayObject):
             raise exc("Field list is not an array.")
         names_seen = set()
@@ -321,7 +321,7 @@ def _list_fields(
     old_fields_by_name = dict(_make_list(old_fields, misc.PdfReadError))
     new_fields_by_name = dict(_make_list(new_fields, SuspiciousModification))
 
-    names: Set[str] = set()
+    names: set[str] = set()
     names.update(old_fields_by_name.keys())
     names.update(new_fields_by_name.keys())
 
@@ -406,7 +406,7 @@ class FormUpdatingRule:
     """
 
     def __init__(
-        self, field_rules: List[FieldMDPRule], ignored_acroform_keys=None
+        self, field_rules: list[FieldMDPRule], ignored_acroform_keys=None
     ):
         self.field_rules = field_rules
         self.ignored_acroform_keys = (
@@ -417,7 +417,7 @@ class FormUpdatingRule:
 
     def apply(
         self, old: HistoricalResolver, new: HistoricalResolver
-    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    ) -> Iterable[tuple[ModificationLevel, FormUpdate]]:
         """
         Evaluate changes in the document's form between two revisions.
 
@@ -462,7 +462,7 @@ class FormUpdatingRule:
         dr_context = Context.from_absolute(
             old, RawPdfPath('/Root', '/AcroForm', '/DR')
         )
-        old_dr, new_dr = yield from qualify_transforming(
+        _old_dr, new_dr = yield from qualify_transforming(
             ModificationLevel.FORM_FILLING,
             compare_key_refs('/DR', old, old_acroform, new_acroform),
             transform=FormUpdate.curry_ref(

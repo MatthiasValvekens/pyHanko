@@ -1,7 +1,5 @@
 """Utilities common to reading and writing PDF files."""
 
-from typing import Tuple
-
 from . import generic, misc
 from .metadata.model import DocumentMetadata
 from .misc import PdfError
@@ -79,7 +77,7 @@ class PdfHandler:
         return root
 
     @property
-    def document_id(self) -> Tuple[bytes, bytes]:
+    def document_id(self) -> tuple[bytes, bytes]:
         raise NotImplementedError
 
     # TODO write tests specifically for this helper function

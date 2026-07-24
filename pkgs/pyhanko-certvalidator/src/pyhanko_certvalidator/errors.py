@@ -1,9 +1,9 @@
-# coding: utf-8
 from datetime import datetime
-from typing import List, Optional, Type, TypeVar
+from typing import TypeVar
 
 from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
+from typing_extensions import Self
 
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.path import ValidationPath
@@ -37,8 +37,8 @@ class CRLValidationIndeterminateError(CRLValidationError):
     def __init__(
         self,
         msg: str,
-        failures: List[str],
-        suspect_stale: Optional[datetime] = None,
+        failures: list[str],
+        suspect_stale: datetime | None = None,
     ):
         self.msg = msg
         self.failures = failures
@@ -58,8 +58,8 @@ class OCSPValidationIndeterminateError(OCSPValidationError):
     def __init__(
         self,
         msg: str,
-        failures: List[str],
-        suspect_stale: Optional[datetime] = None,
+        failures: list[str],
+        suspect_stale: datetime | None = None,
     ):
         self.msg = msg
         self.failures = failures
@@ -82,9 +82,7 @@ TPathErr = TypeVar('TPathErr', bound='PathValidationError')
 
 class PathValidationError(ValidationError):
     @classmethod
-    def from_state(
-        cls: Type[TPathErr], msg: str, proc_state: ValProcState
-    ) -> TPathErr:
+    def from_state(cls, msg: str, proc_state: ValProcState) -> Self:
         return cls(msg, proc_state=proc_state)
 
     def __init__(self, msg: str, *, proc_state: ValProcState):
@@ -198,9 +196,7 @@ class InvalidCertificateError(ValidationError):
 
 
 class DisallowedAlgorithmError(PathValidationError):
-    def __init__(
-        self, *args, banned_since: Optional[datetime] = None, **kwargs
-    ):
+    def __init__(self, *args, banned_since: datetime | None = None, **kwargs):
         self.banned_since = banned_since
         super().__init__(*args, **kwargs)
 
@@ -209,7 +205,7 @@ class DisallowedAlgorithmError(PathValidationError):
         cls,
         msg: str,
         proc_state: ValProcState,
-        banned_since: Optional[datetime] = None,
+        banned_since: datetime | None = None,
     ) -> 'DisallowedAlgorithmError':
         return cls(msg, banned_since=banned_since, proc_state=proc_state)
 

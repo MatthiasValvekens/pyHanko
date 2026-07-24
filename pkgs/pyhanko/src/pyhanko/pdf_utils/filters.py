@@ -87,7 +87,7 @@ def _png_decode(data: memoryview, columns):
                 result_row[i] = (x + y) % 256
         else:
             # unsupported PNG filter
-            raise NotImplementedError("Unsupported PNG filter %r" % filter_byte)
+            raise NotImplementedError(f"Unsupported PNG filter {filter_byte!r}")
         prev_result = result_row
         output.write(result_row)
     return output.getvalue()
@@ -123,7 +123,7 @@ class FlateDecode(Decoder, metaclass=Singleton):
         else:
             # unsupported predictor
             raise NotImplementedError(
-                "Unsupported flatedecode predictor %r" % predictor
+                f"Unsupported flatedecode predictor {predictor!r}"
             )
 
     def encode(self, data, decode_params=None):

@@ -8,17 +8,19 @@ classes.
 """
 
 import os
+from collections.abc import Callable, Generator, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from io import BytesIO
-from typing import Callable, Generator, Iterable, Optional, TypeVar, Union
+from typing import TypeVar
 
 from pyhanko_certvalidator.util import CancelableAsyncIterator, ConsList
 
 __all__ = [
     'DEFAULT_CHUNK_SIZE',
     'ConsList',
+    'FormFillingError',
     'IndirectObjectExpected',
     'OrderedEnum',
     'PdfError',
@@ -26,7 +28,6 @@ __all__ = [
     'PdfStreamError',
     'PdfStrictReadError',
     'PdfWriteError',
-    'FormFillingError',
     'Singleton',
     'StringWithLanguage',
     'assert_writable_and_random_access',
@@ -82,7 +83,7 @@ PDF_WHITESPACE = b' \n\r\t\f\x00'
 PDF_DELIMITERS = b'()<>[]{}/%'
 
 
-def read_until_whitespace(stream, maxchars: Optional[int] = None) -> bytes:
+def read_until_whitespace(stream, maxchars: int | None = None) -> bytes:
     """
     Reads non-whitespace characters and returns them.
     Stops upon encountering whitespace, or, if ``maxchars`` is not ``None``,
@@ -267,8 +268,8 @@ class StringWithLanguage:
     """
 
     value: str
-    lang_code: Optional[str] = None
-    country_code: Optional[str] = None
+    lang_code: str | None = None
+    country_code: str | None = None
 
     def __str__(self):
         return self.value
@@ -289,7 +290,7 @@ class PdfStrictReadError(PdfReadError):
 
 
 class IndirectObjectExpected(PdfReadError):
-    def __init__(self, msg: Optional[str] = None):
+    def __init__(self, msg: str | None = None):
         super().__init__(msg=msg or "indirect object expected")
 
 
@@ -432,8 +433,8 @@ def _as_gen(x: Iterable[X]) -> Generator[X, None, None]:
 
 
 def chunk_stream(
-    temp_buffer: Union[bytearray, memoryview], stream, max_read=None
-) -> Iterable[Union[bytearray, memoryview]]:
+    temp_buffer: bytearray | memoryview, stream, max_read=None
+) -> Iterable[bytearray | memoryview]:
     total_read = 0
     while max_read is None or total_read < max_read:
         # clamp the input buffer if necessary
@@ -448,7 +449,7 @@ def chunk_stream(
             return
 
         # clamp the output as well, if necessary
-        to_feed: Union[bytearray, memoryview]
+        to_feed: bytearray | memoryview
         if bytes_read < len(read_buffer):
             to_feed = memoryview(read_buffer)[:bytes_read]
         else:
@@ -488,7 +489,7 @@ def assert_writable_and_random_access(output):
     #  case, the write error would only happen *after* the signing/updating
     #  operations are done. We want to avoid that scenario.
     if not output.writable():
-        raise IOError("Output buffer is not writable")  # pragma: nocover
+        raise OSError("Output buffer is not writable")  # pragma: nocover
     return output.seekable() and output.readable()
 
 

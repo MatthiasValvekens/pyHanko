@@ -1,6 +1,5 @@
 import struct
 from hashlib import md5
-from typing import Union
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.crypt._util import rc4_encrypt
@@ -61,7 +60,7 @@ def derive_legacy_file_key(
     return md5_hash[:keylen]
 
 
-def legacy_normalise_pw(password: Union[str, bytes]) -> bytes:
+def legacy_normalise_pw(password: str | bytes) -> bytes:
     if isinstance(password, str):
         return generic.encode_pdfdocencoding(password[:32])
     else:

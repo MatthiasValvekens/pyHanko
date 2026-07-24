@@ -5,7 +5,8 @@ ETSI TS 119 102-2 reporting functionality.
     This feature is incubating and subject to API changes.
 """
 
-from typing import Any, Dict, Iterable, Optional, cast
+from collections.abc import Iterable
+from typing import Any, cast
 
 from asn1crypto import cms, tsp
 from cryptography.hazmat.primitives import hashes
@@ -83,7 +84,7 @@ def _summarise_attrs(
     signed_attrs = embedded_sig.signer_info['signed_attrs']
 
     # signing_time (SASigningTimeType)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     claimed_time = embedded_sig.self_reported_timestamp or (
         api_status.timestamp_validity.timestamp
         if api_status.timestamp_validity
@@ -319,7 +320,7 @@ def _generate_report(
     }[status.ades_subindic.status]
     validation_time = api_status.validation_time
     assert validation_time is not None
-    best_sig_time: Optional[ts_11910202.POEType] = None
+    best_sig_time: ts_11910202.POEType | None = None
     if isinstance(status, AdESWithTimeValidationResult):
         best_sig_time = ts_11910202.POEType(
             poetime=XmlDateTime.from_datetime(status.best_signature_time),

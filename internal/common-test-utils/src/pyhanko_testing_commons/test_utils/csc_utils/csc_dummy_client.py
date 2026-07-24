@@ -1,5 +1,4 @@
 import asyncio
-from typing import List
 
 import aiohttp
 from pyhanko.sign.general import SigningError
@@ -22,7 +21,7 @@ class CSCDummyClientAuthManager(CSCAuthorizationManager):
         self.waste_time = waste_time
 
     async def authorize_signature(
-        self, hash_b64s: List[str]
+        self, hash_b64s: list[str]
     ) -> CSCAuthorizationInfo:
         self.authorizations_requested += 1
         session_info = self.csc_session_info

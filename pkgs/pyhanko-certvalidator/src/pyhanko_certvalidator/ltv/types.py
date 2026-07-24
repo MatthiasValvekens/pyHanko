@@ -1,7 +1,6 @@
 import abc
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone, tzinfo
-from typing import Optional
 
 __all__ = [
     'IssuedItemContainer',
@@ -19,7 +18,7 @@ class ValidationTimingInfo:
     point_in_time_validation: bool
 
     @classmethod
-    def now(cls, tz: Optional[tzinfo] = None) -> 'ValidationTimingInfo':
+    def now(cls, tz: tzinfo | None = None) -> 'ValidationTimingInfo':
         now = datetime.now(tz=tz or timezone.utc)
         return ValidationTimingInfo(
             validation_time=now,
@@ -52,7 +51,7 @@ class IssuedItemContainer(abc.ABC):
     """
 
     @property
-    def issuance_date(self) -> Optional[datetime]:
+    def issuance_date(self) -> datetime | None:
         """
         The issuance date of the item.
         """

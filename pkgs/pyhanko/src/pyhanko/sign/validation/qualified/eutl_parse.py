@@ -1,20 +1,13 @@
 import itertools
 import logging
 import sys
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import resources
 from typing import (
     Any,
-    FrozenSet,
-    Generator,
-    Iterable,
-    List,
-    Optional,
-    Set,
-    Tuple,
     TypeVar,
-    Union,
 )
 
 from asn1crypto import x509
@@ -114,7 +107,7 @@ if sys.version_info >= (3, 14):
 
 
 def _service_name_from_intl_string(
-    intl_string: Optional[ts_119612.InternationalNamesType],
+    intl_string: ts_119612.InternationalNamesType | None,
 ) -> str:
     return (
         _extract_from_intl_string(intl_string.name)
@@ -124,8 +117,8 @@ def _service_name_from_intl_string(
 
 
 def _extract_from_intl_string(
-    intl_string: Tuple[
-        Union[ts_119612.MultiLangStringType, ts_119612.MultiLangNormStringType],
+    intl_string: tuple[
+        ts_119612.MultiLangStringType | ts_119612.MultiLangNormStringType,
         ...,
     ],
 ):
@@ -139,7 +132,7 @@ def _extract_from_intl_string(
 T = TypeVar('T')
 
 
-def _required(thing: Optional[T], descr: str) -> T:
+def _required(thing: T | None, descr: str) -> T:
     if thing is None:
         raise TSPServiceParsingError(f"{descr} must be provided")
     return thing
@@ -153,7 +146,7 @@ def _as_certs(sdi: ts_119612.ServiceDigitalIdentity):
 
 
 def _process_criteria_list(
-    criteria: Optional[ts_119612_sie.CriteriaListType],
+    criteria: ts_119612_sie.CriteriaListType | None,
 ) -> CriteriaList:
     entries = frozenset(_process_criteria_list_entries(criteria))
     if entries:
@@ -172,7 +165,7 @@ def _parse_xades_oid(oid: xades.ObjectIdentifierType) -> str:
 
 
 def _process_criteria_list_entries(
-    criteria_list: Optional[ts_119612_sie.CriteriaListType],
+    criteria_list: ts_119612_sie.CriteriaListType | None,
 ) -> Generator[Criterion, None, None]:
     if not criteria_list:
         return
@@ -294,7 +287,7 @@ def _interpret_service_info_for_tsp(
 
 def _interpret_historical_service_info_for_ca(
     service_info: ts_119612.ServiceHistoryInstance,
-    next_update_at: Optional[datetime],
+    next_update_at: datetime | None,
 ):
     certs = list(
         _as_certs(
@@ -305,7 +298,7 @@ def _interpret_historical_service_info_for_ca(
         )
     )
     service_name = _service_name_from_intl_string(service_info.service_name)
-    qualifications: FrozenSet[Qualification] = frozenset()
+    qualifications: frozenset[Qualification] = frozenset()
     expired_revinfo_date = None
     additional_info = []
     extensions_xml = (
@@ -313,7 +306,7 @@ def _interpret_historical_service_info_for_ca(
         if service_info.service_information_extensions
         else ()
     )
-    asi_qc_type: Set[QcCertType] = set()
+    asi_qc_type: set[QcCertType] = set()
     for ext in extensions_xml:
         for ext_content in ext.content:
             if isinstance(ext_content, ts_119612_sie.Qualifications):
@@ -369,7 +362,7 @@ def _interpret_historical_service_info_for_ca(
 
 def _interpret_historical_service_info_for_qtst(
     service_info: ts_119612.ServiceHistoryInstance,
-    next_update_at: Optional[datetime],
+    next_update_at: datetime | None,
 ):
     # todo dedupe
     certs = list(
@@ -381,8 +374,8 @@ def _interpret_historical_service_info_for_qtst(
         )
     )
     service_name = _service_name_from_intl_string(service_info.service_name)
-    qualifications: FrozenSet[Qualification] = frozenset()
-    additional_info: List[AdditionalServiceInformation] = []
+    qualifications: frozenset[Qualification] = frozenset()
+    additional_info: list[AdditionalServiceInformation] = []
     extensions_xml = (
         service_info.service_information_extensions.extension
         if service_info.service_information_extensions
@@ -514,7 +507,7 @@ def _interpret_service_info_for_tsps(
 class _RestrictedLxmlEventHandler(LxmlEventHandler):
     # Disable xinclude support and entity resolution
 
-    def parse(self, source: Any, ns_map: dict[Optional[str], str]) -> Any:
+    def parse(self, source: Any, ns_map: dict[str | None, str]) -> Any:
         if isinstance(source, (etree._ElementTree, etree._Element)):
             ctx = etree.iterwalk(source, EVENTS)
         else:
@@ -546,7 +539,7 @@ def _raw_tl_parse(tl_xml: str) -> ts_119612.TrustServiceStatusList:
 
 def read_qualified_service_definitions(
     tl_xml: str,
-) -> Generator[QualifiedServiceInformation, None, List[TSPServiceParsingError]]:
+) -> Generator[QualifiedServiceInformation, None, list[TSPServiceParsingError]]:
     """
     Internal function to read qualified service definitions from a trusted list
     payload (does not include signature validation).
@@ -573,8 +566,8 @@ def read_qualified_service_definitions(
 
 
 def trust_list_to_registry_unsafe(
-    tl_xml: str, registry: Optional[TSPRegistry] = None
-) -> Tuple[TSPRegistry, List[TSPServiceParsingError]]:
+    tl_xml: str, registry: TSPRegistry | None = None
+) -> tuple[TSPRegistry, list[TSPServiceParsingError]]:
     """
     Parse a trusted list (ETSI TS 119 612) into a :class:`TSPRegistry`.
 
@@ -606,7 +599,7 @@ def trust_list_to_registry_unsafe(
 def _verify_xml(
     tl_xml: str,
     tlso_cert: x509.Certificate,
-    validation_time: Optional[datetime],
+    validation_time: datetime | None,
 ):
     tl_xml_bytes = tl_xml.encode('utf8')
     verifier = XAdESVerifier()
@@ -633,7 +626,7 @@ def _verify_xml(
 def _validate_and_extract_tl_data(
     tl_xml: str,
     tlso_cert: x509.Certificate,
-    validation_time: Optional[datetime],
+    validation_time: datetime | None,
 ) -> str:
     verify_results = _verify_xml(tl_xml, tlso_cert, validation_time)
     tl_signed_xml = None
@@ -661,8 +654,8 @@ def _validate_and_extract_tl_data(
 
 def _validate_and_extract_tl_data_multiple_certs(
     tl_xml: str,
-    tlso_cert_candidates: List[x509.Certificate],
-    validation_time: Optional[datetime],
+    tlso_cert_candidates: list[x509.Certificate],
+    validation_time: datetime | None,
 ) -> str:
     # sort the issuer certs by newest first
     sorted_candidates = sorted(
@@ -695,9 +688,9 @@ def _validate_and_extract_tl_data_multiple_certs(
 
 def trust_list_to_registry(
     tl_xml: str,
-    tlso_certs: List[x509.Certificate],
-    registry: Optional[TSPRegistry] = None,
-) -> Tuple[TSPRegistry, List[TSPServiceParsingError]]:
+    tlso_certs: list[x509.Certificate],
+    registry: TSPRegistry | None = None,
+) -> tuple[TSPRegistry, list[TSPServiceParsingError]]:
     """
     Validate and parse a trusted list (ETSI TS 119 612) into a :class:`TSPRegistry`.
 
@@ -757,13 +750,13 @@ class TLReference:
     Territory with which the references trusted list is assocated.
     """
 
-    tlso_certs: List[x509.Certificate]
+    tlso_certs: list[x509.Certificate]
     """
     Certificates that can be used to validate the signature
     on the referenced trusted list.
     """
 
-    scheme_rules: FrozenSet[str]
+    scheme_rules: frozenset[str]
     """
     URIs for scheme rules that apply to the referenced trusted list.
     """
@@ -771,9 +764,9 @@ class TLReference:
 
 @dataclass(frozen=True)
 class LOTLParseResult:
-    references: List[TLReference]
-    errors: List[TSPServiceParsingError]
-    pivot_urls: List[str]
+    references: list[TLReference]
+    errors: list[TSPServiceParsingError]
+    pivot_urls: list[str]
     claimed_date_issued: datetime
 
 
@@ -861,13 +854,13 @@ def parse_lotl_unsafe(
     )
 
 
-def _lotl_certs_file(fname: str) -> List[x509.Certificate]:
+def _lotl_certs_file(fname: str) -> list[x509.Certificate]:
     pkg_files = resources.files("pyhanko.sign.validation.qualified")
     data = pkg_files.joinpath("lotl-certs", fname).read_bytes()
     return list(load_certs_from_pemder_data(data))
 
 
-def latest_known_lotl_tlso_certs() -> List[x509.Certificate]:
+def latest_known_lotl_tlso_certs() -> list[x509.Certificate]:
     """
     Retrieve the lastest known (at the time of the most recent pyHanko release)
     list of LOTL signer certs.
@@ -875,7 +868,7 @@ def latest_known_lotl_tlso_certs() -> List[x509.Certificate]:
     return _lotl_certs_file("latest.cert.pem")
 
 
-def ojeu_bootstrap_lotl_tlso_certs(anchor=1) -> List[x509.Certificate]:
+def ojeu_bootstrap_lotl_tlso_certs(anchor=1) -> list[x509.Certificate]:
     """
     Retrieve the list of certificates published
     in `OJ C 276, 16.8.2019 <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG>`_,
@@ -889,8 +882,8 @@ def ojeu_bootstrap_lotl_tlso_certs(anchor=1) -> List[x509.Certificate]:
 
 def validate_and_parse_lotl(
     lotl_xml: str,
-    lotl_tlso_certs: Optional[List[x509.Certificate]] = None,
-    validation_time: Optional[datetime] = None,
+    lotl_tlso_certs: list[x509.Certificate] | None = None,
+    validation_time: datetime | None = None,
 ) -> LOTLParseResult:
     """
     Validate and parse a list-of-the-lists (LOTL).

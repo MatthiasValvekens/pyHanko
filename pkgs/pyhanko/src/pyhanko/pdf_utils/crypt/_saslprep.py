@@ -22,7 +22,7 @@ __all__ = ['saslprep']
 
 import stringprep
 import unicodedata
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 
 # RFC4013 section 2.3 prohibited output.
 _PROHIBITED = (

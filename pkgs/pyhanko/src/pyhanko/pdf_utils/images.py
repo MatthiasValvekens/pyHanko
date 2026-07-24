@@ -17,7 +17,6 @@ The image data handling is done by
 """
 
 import uuid
-from typing import Optional, Union
 
 from . import generic
 from .content import PdfContent, PdfResources, ResourceType
@@ -75,12 +74,12 @@ def pil_image(img: Image.Image, writer: BasePdfFileWriter):
         # finally, convert to RBG or L as appropriate
         img = img.convert(img.mode[:-1])
 
-    clr_space: Union[generic.NameObject, generic.ArrayObject]
+    clr_space: generic.NameObject | generic.ArrayObject
     clr_space = (
         pdf_name('/DeviceGray') if img.mode == 'L' else pdf_name('/DeviceRGB')
     )
     if img.mode == 'P':
-        palette: Optional[ImagePalette] = img.palette
+        palette: ImagePalette | None = img.palette
         assert palette is not None
         palette_arr = palette.palette
         if palette.mode != 'RGB':  # pragma: nocover
@@ -128,12 +127,12 @@ class PdfImage(PdfContent):
 
     def __init__(
         self,
-        image: Union[Image.Image, str],
-        writer: Optional[BasePdfFileWriter] = None,
-        resources: Optional[PdfResources] = None,
-        name: Optional[str] = None,
+        image: Image.Image | str,
+        writer: BasePdfFileWriter | None = None,
+        resources: PdfResources | None = None,
+        name: str | None = None,
         opacity=None,
-        box: Optional[BoxConstraints] = None,
+        box: BoxConstraints | None = None,
     ):
         if isinstance(image, str):
             image = Image.open(image)
@@ -146,7 +145,7 @@ class PdfImage(PdfContent):
             # assume square pixels
             box = BoxConstraints(self.image.width, self.image.height)
         super().__init__(resources, writer=writer, box=box)
-        self._image_ref: Optional[IndirectObject] = None
+        self._image_ref: IndirectObject | None = None
 
     @property
     def image_ref(self) -> generic.IndirectObject:

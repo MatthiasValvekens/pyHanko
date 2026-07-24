@@ -45,7 +45,7 @@ from pyhanko_certvalidator.policy_decl import (
     FreshnessReqType,
 )
 
-__all__ = ['validate_signatures', 'ades_validate_signatures']
+__all__ = ['ades_validate_signatures', 'validate_signatures']
 
 
 def _assert_consistent_print_settings(pretty_print, executive_summary):
@@ -65,7 +65,7 @@ def _pretty_print_result(name, ix, status_str):
 
 
 def _print_summary_result(name, fingerprint, status_str):
-    click.echo('%s:%s:%s' % (name, fingerprint, status_str))
+    click.echo(f'{name}:{fingerprint}:{status_str}')
 
 
 def _signature_status(

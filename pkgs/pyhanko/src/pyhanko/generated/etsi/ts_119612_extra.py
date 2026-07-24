@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
 
 from .ts_119612 import (
     AnyType,
@@ -55,7 +54,7 @@ class X509CertificateLocation:
 
 @dataclass(frozen=True)
 class CertSubjectDNAttributeType:
-    attribute_oid: Tuple[ObjectIdentifierType, ...] = field(
+    attribute_oid: tuple[ObjectIdentifierType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "AttributeOID",
@@ -68,7 +67,7 @@ class CertSubjectDNAttributeType:
 
 @dataclass(frozen=True)
 class ExtendedKeyUsageType:
-    key_purpose_id: Tuple[ObjectIdentifierType, ...] = field(
+    key_purpose_id: tuple[ObjectIdentifierType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "KeyPurposeId",
@@ -81,7 +80,7 @@ class ExtendedKeyUsageType:
 
 @dataclass(frozen=True)
 class TakenOverByType:
-    uri: Optional[NonEmptyMultiLangURIType] = field(
+    uri: NonEmptyMultiLangURIType | None = field(
         default=None,
         metadata={
             "name": "URI",
@@ -90,7 +89,7 @@ class TakenOverByType:
             "required": True,
         },
     )
-    tspname: Optional[InternationalNamesType] = field(
+    tspname: InternationalNamesType | None = field(
         default=None,
         metadata={
             "name": "TSPName",
@@ -99,7 +98,7 @@ class TakenOverByType:
             "required": True,
         },
     )
-    scheme_operator_name: Optional[SchemeOperatorName] = field(
+    scheme_operator_name: SchemeOperatorName | None = field(
         default=None,
         metadata={
             "name": "SchemeOperatorName",
@@ -108,7 +107,7 @@ class TakenOverByType:
             "required": True,
         },
     )
-    scheme_territory: Optional[str] = field(
+    scheme_territory: str | None = field(
         default=None,
         metadata={
             "name": "SchemeTerritory",
@@ -117,7 +116,7 @@ class TakenOverByType:
             "required": True,
         },
     )
-    other_qualifier: Tuple[AnyType, ...] = field(
+    other_qualifier: tuple[AnyType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "OtherQualifier",

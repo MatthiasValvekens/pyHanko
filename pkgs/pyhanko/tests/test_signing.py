@@ -742,9 +742,9 @@ def test_sig_wrong_subfilter(wrong_subfilter):
     out = _tamper_with_sig_obj(tamper)
 
     r = PdfFileReader(out)
-    fq_name, sig_obj, sig_field = list(
-        fields.enumerate_sig_fields(r, filled_status=True)
-    )[0]
+    fq_name, _sig_obj, sig_field = next(
+        iter(fields.enumerate_sig_fields(r, filled_status=True))
+    )
     emb = EmbeddedPdfSignature(r, sig_field, fq_name)
     with pytest.raises(SignatureValidationError):
         val_trusted(emb)

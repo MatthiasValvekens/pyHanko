@@ -3,8 +3,8 @@ Asynchronous API for fetching OCSP responses, CRLs and certificates.
 """
 
 import abc
+from collections.abc import AsyncGenerator, Iterable
 from dataclasses import dataclass
-from typing import AsyncGenerator, Iterable, Union
 
 from asn1crypto import cms, crl, ocsp, x509
 
@@ -20,7 +20,7 @@ __all__ = [
     'OCSPFetcher',
 ]
 
-DEFAULT_USER_AGENT = 'pyhanko_certvalidator %s' % __version__
+DEFAULT_USER_AGENT = f'pyhanko_certvalidator {__version__}'
 
 
 class OCSPFetcher(abc.ABC):
@@ -28,7 +28,7 @@ class OCSPFetcher(abc.ABC):
 
     async def fetch(
         self,
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert: x509.Certificate | cms.AttributeCertificateV2,
         authority: Authority,
     ) -> ocsp.OCSPResponse:
         """
@@ -52,7 +52,7 @@ class OCSPFetcher(abc.ABC):
         raise NotImplementedError
 
     def fetched_responses_for_cert(
-        self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+        self, cert: x509.Certificate | cms.AttributeCertificateV2
     ) -> Iterable[ocsp.OCSPResponse]:
         """
         Return all responses fetched by this OCSP fetcher that are relevant
@@ -66,7 +66,7 @@ class CRLFetcher(abc.ABC):
 
     async def fetch(
         self,
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert: x509.Certificate | cms.AttributeCertificateV2,
         *,
         use_deltas=None,
     ) -> Iterable[crl.CertificateList]:
@@ -99,7 +99,7 @@ class CRLFetcher(abc.ABC):
         raise NotImplementedError
 
     def fetched_crls_for_cert(
-        self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+        self, cert: x509.Certificate | cms.AttributeCertificateV2
     ) -> Iterable[crl.CertificateList]:
         """
         Return all relevant fetched CRLs for the given certificate
@@ -118,7 +118,7 @@ class CertificateFetcher(abc.ABC):
     """Utility interface to fetch and cache certificates."""
 
     def fetch_cert_issuers(
-        self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+        self, cert: x509.Certificate | cms.AttributeCertificateV2
     ) -> AsyncGenerator[x509.Certificate, None]:
         """
         Fetches certificates from the authority information access extension of
@@ -210,7 +210,6 @@ class FetcherBackend(abc.ABC):
         Clean up the resources associated with this fetcher backend,
         asynchronously.
         """
-        pass
 
     async def __aenter__(self) -> Fetchers:
         return self.get_fetchers()

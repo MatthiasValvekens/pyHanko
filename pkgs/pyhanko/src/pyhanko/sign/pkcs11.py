@@ -8,8 +8,9 @@ import asyncio
 import binascii
 import logging
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 import pkcs11
 from asn1crypto import algos, core, x509
@@ -60,8 +61,8 @@ logger = logging.getLogger(__name__)
 
 
 def criteria_mismatches(
-    criteria: Optional[TokenCriteria], token: p11_types.Token
-) -> List[Tuple[str, str]]:
+    criteria: TokenCriteria | None, token: p11_types.Token
+) -> list[tuple[str, str]]:
     if criteria is None:
         return []
 
@@ -75,16 +76,16 @@ def criteria_mismatches(
 
 
 def criteria_satisfied_by(
-    criteria: Optional[TokenCriteria], token: p11_types.Token
+    criteria: TokenCriteria | None, token: p11_types.Token
 ) -> bool:
     return not criteria_mismatches(criteria, token)
 
 
 def find_token(
-    slots: List[p11_types.Slot],
-    slot_no: Optional[int] = None,
-    token_criteria: Optional[TokenCriteria] = None,
-) -> Optional[p11_types.Token]:
+    slots: list[p11_types.Slot],
+    slot_no: int | None = None,
+    token_criteria: TokenCriteria | None = None,
+) -> p11_types.Token | None:
     """
     Internal helper method to find a token.
 
@@ -144,17 +145,17 @@ class PKCS11SignatureOperationSpec:
     a key in a PKCS #11 token.
     """
 
-    sign_kwargs: Dict[str, Any]
+    sign_kwargs: dict[str, Any]
     """
     Keyword arguments to the ``sign`` function on the key handle.
     """
 
-    pre_sign_transform: Optional[Callable[[bytes], bytes]]
+    pre_sign_transform: Callable[[bytes], bytes] | None
     """
     An optional transformation to apply to the data prior to signing.
     """
 
-    post_sign_transform: Optional[Callable[[bytes], bytes]]
+    post_sign_transform: Callable[[bytes], bytes] | None
     """
     An optional transformation to apply to the data after signing.
     """
@@ -217,7 +218,7 @@ def select_pkcs11_signing_params(
     signature_mechanism: algos.SignedDigestAlgorithm,
     digest_algorithm: str,
     use_raw_mechanism: bool,
-    sign_kwargs: Dict[str, Any],
+    sign_kwargs: dict[str, Any],
 ) -> PKCS11SignatureOperationSpec:
     """
     Internal helper function to set up a PKCS #11 signing operation.
@@ -237,7 +238,7 @@ def select_pkcs11_signing_params(
 
     pre_sign_transform = None
     post_sign_transform = None
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
 
     try:
         signature_algo = signature_mechanism.signature_algo
@@ -321,10 +322,10 @@ def select_pkcs11_signing_params(
 
 def open_pkcs11_session(
     lib_location: str,
-    slot_no: Optional[int] = None,
-    token_label: Optional[str] = None,
-    token_criteria: Optional[TokenCriteria] = None,
-    user_pin: Union[str, object, None] = None,
+    slot_no: int | None = None,
+    token_label: str | None = None,
+    token_criteria: TokenCriteria | None = None,
+    user_pin: str | object | None = None,
 ) -> Session:
     """
     Open a PKCS#11 session
@@ -381,8 +382,8 @@ def open_pkcs11_session(
 def _format_pull_err_msg(
     object_kind: str,
     no_results: bool,
-    label: Optional[str] = None,
-    id_value: Optional[bytes] = None,
+    label: str | None = None,
+    id_value: bytes | None = None,
 ):
     info_strs = []
     if label is not None:
@@ -482,25 +483,25 @@ class PKCS11Signer(Signer):
         directly supported by pyHanko.
     """
 
-    default_cert_query_params: Dict[Attribute, Any]
-    default_key_query_params: Dict[Attribute, Any]
+    default_cert_query_params: dict[Attribute, Any]
+    default_key_query_params: dict[Attribute, Any]
 
     def __init__(
         self,
         pkcs11_session: Session,
-        cert_label: Optional[str] = None,
-        signing_cert: Optional[x509.Certificate] = None,
+        cert_label: str | None = None,
+        signing_cert: x509.Certificate | None = None,
         ca_chain=None,
-        key_label: Optional[str] = None,
+        key_label: str | None = None,
         prefer_pss=False,
         embed_roots=True,
         other_certs_to_pull=(),
         bulk_fetch=True,
-        key_id: Optional[bytes] = None,
-        cert_id: Optional[bytes] = None,
+        key_id: bytes | None = None,
+        cert_id: bytes | None = None,
         use_raw_mechanism=False,
-        signature_mechanism: Optional[algos.SignedDigestAlgorithm] = None,
-        base_sign_kwargs: Optional[Dict[str, Any]] = None,
+        signature_mechanism: algos.SignedDigestAlgorithm | None = None,
+        base_sign_kwargs: dict[str, Any] | None = None,
     ):
         """
         Initialise a PKCS11 signer.
@@ -519,7 +520,7 @@ class PKCS11Signer(Signer):
         else:
             self.bulk_fetch = bulk_fetch
         self.use_raw_mechanism = use_raw_mechanism
-        self._key_handle: Optional[SignMixin] = None
+        self._key_handle: SignMixin | None = None
         self._loaded = False
         self._sign_kwargs = base_sign_kwargs or {}
         self.__loading_event = None
@@ -562,7 +563,7 @@ class PKCS11Signer(Signer):
         return self._signing_cert
 
     # noinspection PyUnusedLocal
-    def sign_kwargs(self, data_to_sign: bytes) -> Dict[str, Any]:
+    def sign_kwargs(self, data_to_sign: bytes) -> dict[str, Any]:
         """
         Supply keyword arguments to pass to the :meth:`pkcs11.SignMixin.sign`
         method.
@@ -586,7 +587,7 @@ class PKCS11Signer(Signer):
         return self._sign_kwargs
 
     def _select_pkcs11_signing_params(
-        self, digest_algorithm: str, sign_kwargs: Dict[str, Any]
+        self, digest_algorithm: str, sign_kwargs: dict[str, Any]
     ) -> PKCS11SignatureOperationSpec:
         digest_algorithm = digest_algorithm.lower()
         return select_pkcs11_signing_params(
@@ -631,10 +632,10 @@ class PKCS11Signer(Signer):
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, _perform_signature)
 
-    def _load_other_certs(self) -> Set[x509.Certificate]:
+    def _load_other_certs(self) -> set[x509.Certificate]:
         return set(self.__pull())
 
-    def bulk_cert_fetch_params(self) -> Dict[Attribute, Any]:
+    def bulk_cert_fetch_params(self) -> dict[Attribute, Any]:
         """
         Search parameters to bulk fetch certificates from the token.
 
@@ -644,16 +645,16 @@ class PKCS11Signer(Signer):
 
     def single_cert_fetch_params(
         self,
-        label: Optional[str],
-        cert_id: Optional[bytes],
-    ) -> Dict[Attribute, Any]:
+        label: str | None,
+        cert_id: bytes | None,
+    ) -> dict[Attribute, Any]:
         """
         Search parameters to fetch a single certificate from the token.
 
         .. note:: Can be overridden in subclasses.
         """
 
-        query_params: Dict[Attribute, Any] = dict(
+        query_params: dict[Attribute, Any] = dict(
             self.default_cert_query_params
         )
         if label is not None:
@@ -662,13 +663,13 @@ class PKCS11Signer(Signer):
             query_params[Attribute.ID] = cert_id
         return query_params
 
-    def signing_key_fetch_params(self) -> Dict[Attribute, Any]:
+    def signing_key_fetch_params(self) -> dict[Attribute, Any]:
         """
         Search parameters to fetch the signing key from the token.
 
         .. note:: Can be overridden in subclasses.
         """
-        query_params: Dict[Attribute, Any] = dict(self.default_key_query_params)
+        query_params: dict[Attribute, Any] = dict(self.default_key_query_params)
         if self.key_label is not None:
             query_params[Attribute.LABEL] = self.key_label
         if self.key_id is not None:
@@ -678,8 +679,8 @@ class PKCS11Signer(Signer):
 
     def _pull_single_cert(
         self,
-        label: Optional[str],
-        cert_id: Optional[bytes],
+        label: str | None,
+        cert_id: bytes | None,
     ):
         query_params = self.single_cert_fetch_params(label, cert_id)
         q = self.pkcs11_session.get_objects(query_params)
@@ -798,10 +799,10 @@ class PKCS11SigningContext:
     """Context manager for PKCS#11 configurations."""
 
     def __init__(
-        self, config: PKCS11SignatureConfig, user_pin: Optional[str] = None
+        self, config: PKCS11SignatureConfig, user_pin: str | None = None
     ):
         self.config = config
-        self._session: Optional[Session] = None
+        self._session: Session | None = None
         self._user_pin = user_pin
 
     def _handle_pin(self):

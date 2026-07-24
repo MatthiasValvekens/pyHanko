@@ -7,7 +7,8 @@ for the original license.
 import logging
 import os
 import typing
-from typing import Dict, Iterable, List, Optional, Set, Tuple, Union, cast
+from collections.abc import Iterable
+from typing import cast
 
 from asn1crypto import x509
 from pyhanko.pdf_utils import generic
@@ -61,7 +62,7 @@ def init_xobject_dictionary(
     command_stream: bytes,
     box_width,
     box_height,
-    resources: Optional[generic.DictionaryObject] = None,
+    resources: generic.DictionaryObject | None = None,
 ) -> generic.StreamObject:
     """
     Helper function to initialise form XObject dictionaries.
@@ -114,27 +115,27 @@ class BasePdfFileWriter(PdfHandler):
 
     def __init__(
         self,
-        root: Union[generic.IndirectObject, generic.DictionaryObject],
-        info: Union[generic.IndirectObject, generic.DictionaryObject, None],
+        root: generic.IndirectObject | generic.DictionaryObject,
+        info: generic.IndirectObject | generic.DictionaryObject | None,
         document_id: generic.ArrayObject,
         obj_id_start: int = 0,
         stream_xrefs: bool = True,
     ):
-        self.objects: Dict[Tuple[int, int], generic.PdfObject] = {}
-        self.object_streams: List[ObjectStream] = list()
-        self.objs_in_streams: Dict[int, generic.PdfObject] = {}
+        self.objects: dict[tuple[int, int], generic.PdfObject] = {}
+        self.object_streams: list[ObjectStream] = []
+        self.objs_in_streams: dict[int, generic.PdfObject] = {}
         self._lastobj_id = obj_id_start
         self._resolves_objs_from: Iterable[PdfHandler] = (self,)
-        self._allocated_placeholders: Set[int] = set()
+        self._allocated_placeholders: set[int] = set()
 
         if isinstance(root, generic.IndirectObject):
             self._root = root
         else:
             self._root = self.add_object(root)
 
-        self.security_handler: Optional[SecurityHandler] = None
-        self._encrypt: Optional[generic.IndirectObject] = None
-        self._encrypt_key: Optional[bytes] = None
+        self.security_handler: SecurityHandler | None = None
+        self._encrypt: generic.IndirectObject | None = None
+        self._encrypt_key: bytes | None = None
         self._document_id = document_id
         self.stream_xrefs = stream_xrefs
         info_ref = None
@@ -148,7 +149,7 @@ class BasePdfFileWriter(PdfHandler):
         self._info = info_ref
         self._meta: DocumentMetadata = DocumentMetadata()
 
-        self._font_resources: Dict[str, 'FontSubsetCollection'] = {}
+        self._font_resources: dict[str, FontSubsetCollection] = {}
         self.digest_aware_write = False
         self._mac_handler_cls = None
 
@@ -181,20 +182,19 @@ class BasePdfFileWriter(PdfHandler):
         return self._meta.view_over(base)
 
     def ensure_output_version(self, version):
-        if self.output_version < version:
-            self.output_version = version
+        self.output_version = max(self.output_version, version)
 
     def set_info(
         self,
-        info: Union[generic.IndirectObject, generic.DictionaryObject, None],
-    ) -> Optional[generic.IndirectObject]:
+        info: generic.IndirectObject | generic.DictionaryObject | None,
+    ) -> generic.IndirectObject | None:
         """
         Set the ``/Info`` entry of the document trailer.
 
         :param info:
             The new ``/Info`` dictionary, as an indirect reference.
         """
-        new_info: Optional[generic.IndirectObject]
+        new_info: generic.IndirectObject | None
         if info is not None and not isinstance(info, generic.IndirectObject):
             self._info = new_info = self.add_object(info)
         else:
@@ -221,13 +221,11 @@ class BasePdfFileWriter(PdfHandler):
         raise NotImplementedError
 
     @property
-    def document_id(self) -> Tuple[bytes, bytes]:
+    def document_id(self) -> tuple[bytes, bytes]:
         id_arr = self._document_id
         return id_arr[0].original_bytes, id_arr[1].original_bytes
 
-    def mark_update(
-        self, obj_ref: Union[generic.Reference, generic.IndirectObject]
-    ):
+    def mark_update(self, obj_ref: generic.Reference | generic.IndirectObject):
         """
         Mark an object reference to be updated.
         This is only relevant for incremental updates, but is included
@@ -236,7 +234,6 @@ class BasePdfFileWriter(PdfHandler):
         :param obj_ref:
             An indirect object instance or a reference.
         """
-        pass
 
     def update_container(self, obj: generic.PdfObject):
         """
@@ -250,7 +247,6 @@ class BasePdfFileWriter(PdfHandler):
         :param obj:
             The object whose top-level container needs to be rewritten.
         """
-        pass
 
     @property
     def root_ref(self) -> generic.Reference:
@@ -265,7 +261,6 @@ class BasePdfFileWriter(PdfHandler):
         Signal that the document catalog should be written to the output.
         Equivalent to calling :meth:`mark_update` with :attr:`root_ref`.
         """
-        pass
 
     def register_extension(self, ext: DeveloperExtension):
         try:
@@ -407,7 +402,7 @@ class BasePdfFileWriter(PdfHandler):
         return generic.IndirectObject(idnum, 0, self)
 
     def add_object(
-        self, obj, obj_stream: Optional[ObjectStream] = None, idnum=None
+        self, obj, obj_stream: ObjectStream | None = None, idnum=None
     ) -> generic.IndirectObject:
         """
         Add a new object to this writer.
@@ -507,7 +502,7 @@ class BasePdfFileWriter(PdfHandler):
             obj = self.objects[ix]
             object_position_dict[ix] = stream.tell()
             stream.write(('%d %d obj\n' % (idnum, generation)).encode('ascii'))
-            handler: Optional[SecurityHandler] = None
+            handler: SecurityHandler | None = None
             if self.security_handler is not None:
                 assert self._encrypt is not None
                 if idnum != self._encrypt.idnum:
@@ -669,7 +664,7 @@ class BasePdfFileWriter(PdfHandler):
         else:
             # classical xref table
             xref_location = write_xref_table(
-                stream, cast(Dict[Tuple[int, int], int], object_positions)
+                stream, cast(dict[tuple[int, int], int], object_positions)
             )
             trailer[pdf_name('/Size')] = generic.NumberObject(
                 self._lastobj_id + 1
@@ -679,7 +674,7 @@ class BasePdfFileWriter(PdfHandler):
             trailer.write_to_stream(stream, None)
 
         # write xref table pointer and EOF
-        xref_pointer_string = '\nstartxref\n%s\n' % xref_location
+        xref_pointer_string = f'\nstartxref\n{xref_location}\n'
         stream.write(xref_pointer_string.encode('ascii') + b'%%EOF\n')
 
     def register_annotation(self, page_ref, annot_ref):
@@ -761,7 +756,7 @@ class BasePdfFileWriter(PdfHandler):
         return new_page_ref
 
     def import_object(
-        self, obj: generic.PdfObject, obj_stream: Optional[ObjectStream] = None
+        self, obj: generic.PdfObject, obj_stream: ObjectStream | None = None
     ) -> generic.PdfObject:
         """
         Deep-copy an object into this writer, dealing with resolving indirect
@@ -998,8 +993,8 @@ class BasePdfFileWriter(PdfHandler):
                 for key_, value_ in value.items():
                     if key_ in orig_value:
                         raise PdfError(
-                            'Naming conflict in resource of type %s: '
-                            'key %s occurs in both.' % (key, key_)
+                            f'Naming conflict in resource of type {key}: '
+                            f'key {key_} occurs in both.'
                         )
                     orig_value[key_] = value_
 
@@ -1121,7 +1116,7 @@ class PdfFileWriter(BasePdfFileWriter):
         )
         self._assign_security_handler(sh)
 
-    def encrypt_pubkey(self, recipients: List[x509.Certificate], **kwargs):
+    def encrypt_pubkey(self, recipients: list[x509.Certificate], **kwargs):
         """
         Mark this document to be encrypted with PDF 2.0 public key encryption.
         The certificates passed in should be RSA certificates.
@@ -1176,14 +1171,14 @@ class _ObjectImporter:
         self,
         source: PdfHandler,
         target: BasePdfFileWriter,
-        reference_map: Dict[generic.Reference, generic.IndirectObject],
-        obj_stream: Optional[ObjectStream],
+        reference_map: dict[generic.Reference, generic.IndirectObject],
+        obj_stream: ObjectStream | None,
     ):
         self.source = source
         self.target = target
         self.obj_stream = obj_stream
-        self.queued_references: List[
-            Tuple[generic.Reference, generic.Reference]
+        self.queued_references: list[
+            tuple[generic.Reference, generic.Reference]
         ] = []
         self.reference_map = reference_map
 
@@ -1303,7 +1298,7 @@ class _ObjectImporter:
 
 
 def copy_into_new_writer(
-    input_handler: PdfHandler, writer_kwargs: Optional[dict] = None
+    input_handler: PdfHandler, writer_kwargs: dict | None = None
 ) -> PdfFileWriter:
     """
     Copy all objects in a given PDF handler into a new :class:`.PdfFileWriter`.

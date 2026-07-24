@@ -776,7 +776,7 @@ def test_sv_subfilter_unsupported():
         flags=fields.SigSeedValFlags.SUBFILTER, subfilters=[PADES]
     )
     w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
-    field_name, _, sig_field = next(fields.enumerate_sig_fields(w))
+    _field_name, _, sig_field = next(fields.enumerate_sig_fields(w))
     sig_field = sig_field.get_object()
     sv_ref = sig_field.raw_get('/SV')
     w.mark_update(sv_ref)
@@ -809,7 +809,7 @@ def test_sv_subfilter_unsupported_partial():
         subfilters=[fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED, PADES],
     )
     w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
-    field_name, _, sig_field = next(fields.enumerate_sig_fields(w))
+    _field_name, _, sig_field = next(fields.enumerate_sig_fields(w))
     sig_field = sig_field.get_object()
     sv_ref = sig_field.raw_get('/SV')
     w.mark_update(sv_ref)

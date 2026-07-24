@@ -5,7 +5,8 @@ In principle, these aren't relevant to the high-level validation API.
 """
 
 import logging
-from typing import Callable, FrozenSet, Generator, Optional, Tuple, TypeVar
+from collections.abc import Callable, Generator
+from typing import TypeVar
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import PdfObject, Reference
@@ -25,7 +26,7 @@ __all__ = [
     'safe_whitelist',
 ]
 
-TwoVersions = Tuple[Optional[generic.PdfObject], Optional[generic.PdfObject]]
+TwoVersions = tuple[generic.PdfObject | None, generic.PdfObject | None]
 
 
 def assert_not_stream(obj):
@@ -135,7 +136,7 @@ OutRefUpd = TypeVar('OutRefUpd', bound=ReferenceUpdate, covariant=True)
 def qualify(
     level: ModificationLevel,
     rule_result: Generator[RefToUpd, None, R],
-) -> Generator[Tuple[ModificationLevel, RefToUpd], None, R]:
+) -> Generator[tuple[ModificationLevel, RefToUpd], None, R]:
     """
     This is a helper function for rule implementors.
     It attaches a fixed modification level to an existing reference update
@@ -181,7 +182,7 @@ def qualify_transforming(
     level: ModificationLevel,
     rule_result: Generator[QualifyIn, None, R],
     transform: Callable[[QualifyIn], OutRefUpd],
-) -> Generator[Tuple[ModificationLevel, OutRefUpd], None, R]:
+) -> Generator[tuple[ModificationLevel, OutRefUpd], None, R]:
     """
     This is a version of :func:`.qualify` that additionally allows
     a transformation to be applied to the output of the rule.
@@ -203,9 +204,9 @@ def qualify_transforming(
 
 
 def compare_dicts(
-    old_dict: Optional[PdfObject],
-    new_dict: Optional[PdfObject],
-    ignored: FrozenSet[str] = frozenset(),
+    old_dict: PdfObject | None,
+    new_dict: PdfObject | None,
+    ignored: frozenset[str] = frozenset(),
     raise_exc=True,
 ) -> bool:
     """

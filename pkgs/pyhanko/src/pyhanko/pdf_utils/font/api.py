@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
@@ -27,7 +26,7 @@ class FontSubsetCollection:
     Base postscript name of the font.
     """
 
-    subsets: Dict[Optional[str], 'FontEngine'] = field(default_factory=dict)
+    subsets: dict[str | None, 'FontEngine'] = field(default_factory=dict)
     """
     Dictionary mapping prefixes to subsets. ``None`` represents the full font.
     """
@@ -127,7 +126,6 @@ class FontEngine:
         Subsetting operations and the like should be carried out as part of
         this method.
         """
-        pass
 
 
 class FontEngineFactory:

@@ -3,7 +3,6 @@ Utility for writing incremental updates to existing PDF files.
 """
 
 import os
-from typing import Optional, Union
 
 from . import generic, misc
 from .crypt import EnvelopeKeyDecrypter
@@ -40,7 +39,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
     _force_write_when_empty = False
 
     def __init__(
-        self, input_stream, prev: Optional[PdfFileReader] = None, strict=True
+        self, input_stream, prev: PdfFileReader | None = None, strict=True
     ):
         self.input_stream = input_stream
         if prev is None:
@@ -65,8 +64,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             self.trailer['/Info'] = self._info
         self._resolves_objs_from = (self, prev)
         input_ver = self.prev.input_version
-        if input_ver > self.output_version:
-            self.output_version = input_ver
+        self.output_version = max(self.output_version, input_ver)
         self.ensure_output_version(self.__class__.output_version)
 
         self.security_handler = prev.security_handler
@@ -141,9 +139,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
                 ido, as_metadata_stream=as_metadata_stream
             )
 
-    def mark_update(
-        self, obj_ref: Union[generic.Reference, generic.IndirectObject]
-    ):
+    def mark_update(self, obj_ref: generic.Reference | generic.IndirectObject):
         ix = (obj_ref.generation, obj_ref.idnum)
         self.objects[ix] = obj_ref.get_object()
 
@@ -177,7 +173,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
 
     def set_info(
         self,
-        info: Optional[Union[generic.IndirectObject, generic.DictionaryObject]],
+        info: generic.IndirectObject | generic.DictionaryObject | None,
     ):
         info = super().set_info(info)
         if info is not None:

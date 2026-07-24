@@ -1,6 +1,5 @@
 import os
 import struct
-from typing import Optional
 
 from asn1crypto import cms, tsp
 from cryptography.hazmat.primitives import hashes
@@ -22,8 +21,6 @@ class TimestampRequestError(IOError):
     Raised when an error occurs while requesting a timestamp.
     """
 
-    pass
-
 
 def get_nonce():
     # generate a random 8-byte integer
@@ -41,7 +38,7 @@ def extract_ts_certs(ts_token, store: CertificateStore):
         assert isinstance(sid, cms.IssuerAndSerialNumber)
         return sid['issuer'].dump(), sid['serial_number'].native
 
-    ts_leaves = set(extract_ts_sid(si) for si in ts_signed_data['signer_infos'])
+    ts_leaves = {extract_ts_sid(si) for si in ts_signed_data['signer_infos']}
 
     for wrapped_c in ts_certs:
         c: cms.Certificate = wrapped_c.chosen
@@ -56,7 +53,7 @@ def dummy_digest(md_algorithm: str) -> bytes:
 
 
 def handle_tsp_response(
-    response: tsp.TimeStampResp, nonce: Optional[bytes]
+    response: tsp.TimeStampResp, nonce: bytes | None
 ) -> cms.ContentInfo:
     pki_status_info = response['status']
     if pki_status_info['status'].native != 'granted':

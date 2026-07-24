@@ -1,12 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
 
 __NAMESPACE__ = "http://www.w3.org/2000/09/xmldsig#"
 
 
 @dataclass(frozen=True)
 class CanonicalizationMethodType:
-    algorithm: Optional[str] = field(
+    algorithm: str | None = field(
         default=None,
         metadata={
             "name": "Algorithm",
@@ -14,7 +13,7 @@ class CanonicalizationMethodType:
             "required": True,
         },
     )
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -26,7 +25,7 @@ class CanonicalizationMethodType:
 
 @dataclass(frozen=True)
 class DSAKeyValueType:
-    p: Optional[bytes] = field(
+    p: bytes | None = field(
         default=None,
         metadata={
             "name": "P",
@@ -35,7 +34,7 @@ class DSAKeyValueType:
             "format": "base64",
         },
     )
-    q: Optional[bytes] = field(
+    q: bytes | None = field(
         default=None,
         metadata={
             "name": "Q",
@@ -44,7 +43,7 @@ class DSAKeyValueType:
             "format": "base64",
         },
     )
-    g: Optional[bytes] = field(
+    g: bytes | None = field(
         default=None,
         metadata={
             "name": "G",
@@ -53,7 +52,7 @@ class DSAKeyValueType:
             "format": "base64",
         },
     )
-    y: Optional[bytes] = field(
+    y: bytes | None = field(
         default=None,
         metadata={
             "name": "Y",
@@ -63,7 +62,7 @@ class DSAKeyValueType:
             "format": "base64",
         },
     )
-    j: Optional[bytes] = field(
+    j: bytes | None = field(
         default=None,
         metadata={
             "name": "J",
@@ -72,7 +71,7 @@ class DSAKeyValueType:
             "format": "base64",
         },
     )
-    seed: Optional[bytes] = field(
+    seed: bytes | None = field(
         default=None,
         metadata={
             "name": "Seed",
@@ -81,7 +80,7 @@ class DSAKeyValueType:
             "format": "base64",
         },
     )
-    pgen_counter: Optional[bytes] = field(
+    pgen_counter: bytes | None = field(
         default=None,
         metadata={
             "name": "PgenCounter",
@@ -94,7 +93,7 @@ class DSAKeyValueType:
 
 @dataclass(frozen=True)
 class DigestMethodType:
-    algorithm: Optional[str] = field(
+    algorithm: str | None = field(
         default=None,
         metadata={
             "name": "Algorithm",
@@ -102,7 +101,7 @@ class DigestMethodType:
             "required": True,
         },
     )
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -117,7 +116,7 @@ class DigestValue:
     class Meta:
         namespace = "http://www.w3.org/2000/09/xmldsig#"
 
-    value: Optional[bytes] = field(
+    value: bytes | None = field(
         default=None,
         metadata={
             "required": True,
@@ -154,28 +153,28 @@ class MgmtData:
 
 @dataclass(frozen=True)
 class ObjectType:
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",
             "type": "Attribute",
         },
     )
-    mime_type: Optional[str] = field(
+    mime_type: str | None = field(
         default=None,
         metadata={
             "name": "MimeType",
             "type": "Attribute",
         },
     )
-    encoding: Optional[str] = field(
+    encoding: str | None = field(
         default=None,
         metadata={
             "name": "Encoding",
             "type": "Attribute",
         },
     )
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -187,7 +186,7 @@ class ObjectType:
 
 @dataclass(frozen=True)
 class PGPDataType:
-    pgpkey_id: Optional[bytes] = field(
+    pgpkey_id: bytes | None = field(
         default=None,
         metadata={
             "name": "PGPKeyID",
@@ -197,7 +196,7 @@ class PGPDataType:
             "format": "base64",
         },
     )
-    pgpkey_packet: Tuple[bytes, ...] = field(
+    pgpkey_packet: tuple[bytes, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "PGPKeyPacket",
@@ -207,7 +206,7 @@ class PGPDataType:
             "format": "base64",
         },
     )
-    other_element: Tuple[object, ...] = field(
+    other_element: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -218,7 +217,7 @@ class PGPDataType:
 
 @dataclass(frozen=True)
 class RSAKeyValueType:
-    modulus: Optional[bytes] = field(
+    modulus: bytes | None = field(
         default=None,
         metadata={
             "name": "Modulus",
@@ -228,7 +227,7 @@ class RSAKeyValueType:
             "format": "base64",
         },
     )
-    exponent: Optional[bytes] = field(
+    exponent: bytes | None = field(
         default=None,
         metadata={
             "name": "Exponent",
@@ -242,7 +241,7 @@ class RSAKeyValueType:
 
 @dataclass(frozen=True)
 class SPKIDataType:
-    spkisexp: Tuple[bytes, ...] = field(
+    spkisexp: tuple[bytes, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SPKISexp",
@@ -253,7 +252,7 @@ class SPKIDataType:
             "format": "base64",
         },
     )
-    other_element: Tuple[object, ...] = field(
+    other_element: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -265,7 +264,7 @@ class SPKIDataType:
 
 @dataclass(frozen=True)
 class SignatureMethodType:
-    algorithm: Optional[str] = field(
+    algorithm: str | None = field(
         default=None,
         metadata={
             "name": "Algorithm",
@@ -273,7 +272,7 @@ class SignatureMethodType:
             "required": True,
         },
     )
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -292,7 +291,7 @@ class SignatureMethodType:
 
 @dataclass(frozen=True)
 class SignaturePropertyType:
-    target: Optional[str] = field(
+    target: str | None = field(
         default=None,
         metadata={
             "name": "Target",
@@ -300,14 +299,14 @@ class SignaturePropertyType:
             "required": True,
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",
             "type": "Attribute",
         },
     )
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -319,14 +318,14 @@ class SignaturePropertyType:
 
 @dataclass(frozen=True)
 class SignatureValueType:
-    value: Optional[bytes] = field(
+    value: bytes | None = field(
         default=None,
         metadata={
             "required": True,
             "format": "base64",
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",
@@ -337,7 +336,7 @@ class SignatureValueType:
 
 @dataclass(frozen=True)
 class TransformType:
-    algorithm: Optional[str] = field(
+    algorithm: str | None = field(
         default=None,
         metadata={
             "name": "Algorithm",
@@ -345,7 +344,7 @@ class TransformType:
             "required": True,
         },
     )
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -364,7 +363,7 @@ class TransformType:
 
 @dataclass(frozen=True)
 class X509IssuerSerialType:
-    x509_issuer_name: Optional[str] = field(
+    x509_issuer_name: str | None = field(
         default=None,
         metadata={
             "name": "X509IssuerName",
@@ -373,7 +372,7 @@ class X509IssuerSerialType:
             "required": True,
         },
     )
-    x509_serial_number: Optional[int] = field(
+    x509_serial_number: int | None = field(
         default=None,
         metadata={
             "name": "X509SerialNumber",
@@ -452,7 +451,7 @@ class Transform(TransformType):
 
 @dataclass(frozen=True)
 class X509DataType:
-    x509_issuer_serial: Tuple[X509IssuerSerialType, ...] = field(
+    x509_issuer_serial: tuple[X509IssuerSerialType, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "X509IssuerSerial",
@@ -461,7 +460,7 @@ class X509DataType:
             "sequence": 1,
         },
     )
-    x509_ski: Tuple[bytes, ...] = field(
+    x509_ski: tuple[bytes, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "X509SKI",
@@ -471,7 +470,7 @@ class X509DataType:
             "format": "base64",
         },
     )
-    x509_subject_name: Tuple[str, ...] = field(
+    x509_subject_name: tuple[str, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "X509SubjectName",
@@ -480,7 +479,7 @@ class X509DataType:
             "sequence": 1,
         },
     )
-    x509_certificate: Tuple[bytes, ...] = field(
+    x509_certificate: tuple[bytes, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "X509Certificate",
@@ -490,7 +489,7 @@ class X509DataType:
             "format": "base64",
         },
     )
-    x509_crl: Tuple[bytes, ...] = field(
+    x509_crl: tuple[bytes, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "X509CRL",
@@ -500,7 +499,7 @@ class X509DataType:
             "format": "base64",
         },
     )
-    other_element: Tuple[object, ...] = field(
+    other_element: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -512,7 +511,7 @@ class X509DataType:
 
 @dataclass(frozen=True)
 class KeyValueType:
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -536,7 +535,7 @@ class KeyValueType:
 
 @dataclass(frozen=True)
 class SignaturePropertiesType:
-    signature_property: Tuple[SignatureProperty, ...] = field(
+    signature_property: tuple[SignatureProperty, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "SignatureProperty",
@@ -545,7 +544,7 @@ class SignaturePropertiesType:
             "min_occurs": 1,
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",
@@ -556,7 +555,7 @@ class SignaturePropertiesType:
 
 @dataclass(frozen=True)
 class TransformsType:
-    transform: Tuple[Transform, ...] = field(
+    transform: tuple[Transform, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Transform",
@@ -593,7 +592,7 @@ class Transforms(TransformsType):
 
 @dataclass(frozen=True)
 class ReferenceType:
-    transforms: Optional[Transforms] = field(
+    transforms: Transforms | None = field(
         default=None,
         metadata={
             "name": "Transforms",
@@ -601,7 +600,7 @@ class ReferenceType:
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
         },
     )
-    digest_method: Optional[DigestMethod] = field(
+    digest_method: DigestMethod | None = field(
         default=None,
         metadata={
             "name": "DigestMethod",
@@ -610,7 +609,7 @@ class ReferenceType:
             "required": True,
         },
     )
-    digest_value: Optional[DigestValue] = field(
+    digest_value: DigestValue | None = field(
         default=None,
         metadata={
             "name": "DigestValue",
@@ -619,21 +618,21 @@ class ReferenceType:
             "required": True,
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",
             "type": "Attribute",
         },
     )
-    uri: Optional[str] = field(
+    uri: str | None = field(
         default=None,
         metadata={
             "name": "URI",
             "type": "Attribute",
         },
     )
-    type_value: Optional[str] = field(
+    type_value: str | None = field(
         default=None,
         metadata={
             "name": "Type",
@@ -644,7 +643,7 @@ class ReferenceType:
 
 @dataclass(frozen=True)
 class RetrievalMethodType:
-    transforms: Optional[Transforms] = field(
+    transforms: Transforms | None = field(
         default=None,
         metadata={
             "name": "Transforms",
@@ -652,14 +651,14 @@ class RetrievalMethodType:
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
         },
     )
-    uri: Optional[str] = field(
+    uri: str | None = field(
         default=None,
         metadata={
             "name": "URI",
             "type": "Attribute",
         },
     )
-    type_value: Optional[str] = field(
+    type_value: str | None = field(
         default=None,
         metadata={
             "name": "Type",
@@ -682,14 +681,14 @@ class RetrievalMethod(RetrievalMethodType):
 
 @dataclass(frozen=True)
 class KeyInfoType:
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",
             "type": "Attribute",
         },
     )
-    content: Tuple[object, ...] = field(
+    content: tuple[object, ...] = field(
         default_factory=tuple,
         metadata={
             "type": "Wildcard",
@@ -738,7 +737,7 @@ class KeyInfoType:
 
 @dataclass(frozen=True)
 class ManifestType:
-    reference: Tuple[Reference, ...] = field(
+    reference: tuple[Reference, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Reference",
@@ -747,7 +746,7 @@ class ManifestType:
             "min_occurs": 1,
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",
@@ -758,7 +757,7 @@ class ManifestType:
 
 @dataclass(frozen=True)
 class SignedInfoType:
-    canonicalization_method: Optional[CanonicalizationMethod] = field(
+    canonicalization_method: CanonicalizationMethod | None = field(
         default=None,
         metadata={
             "name": "CanonicalizationMethod",
@@ -767,7 +766,7 @@ class SignedInfoType:
             "required": True,
         },
     )
-    signature_method: Optional[SignatureMethod] = field(
+    signature_method: SignatureMethod | None = field(
         default=None,
         metadata={
             "name": "SignatureMethod",
@@ -776,7 +775,7 @@ class SignedInfoType:
             "required": True,
         },
     )
-    reference: Tuple[Reference, ...] = field(
+    reference: tuple[Reference, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Reference",
@@ -785,7 +784,7 @@ class SignedInfoType:
             "min_occurs": 1,
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",
@@ -814,7 +813,7 @@ class SignedInfo(SignedInfoType):
 
 @dataclass(frozen=True)
 class SignatureType:
-    signed_info: Optional[SignedInfo] = field(
+    signed_info: SignedInfo | None = field(
         default=None,
         metadata={
             "name": "SignedInfo",
@@ -823,7 +822,7 @@ class SignatureType:
             "required": True,
         },
     )
-    signature_value: Optional[SignatureValue] = field(
+    signature_value: SignatureValue | None = field(
         default=None,
         metadata={
             "name": "SignatureValue",
@@ -832,7 +831,7 @@ class SignatureType:
             "required": True,
         },
     )
-    key_info: Optional[KeyInfo] = field(
+    key_info: KeyInfo | None = field(
         default=None,
         metadata={
             "name": "KeyInfo",
@@ -840,7 +839,7 @@ class SignatureType:
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
         },
     )
-    object_value: Tuple[Object, ...] = field(
+    object_value: tuple[Object, ...] = field(
         default_factory=tuple,
         metadata={
             "name": "Object",
@@ -848,7 +847,7 @@ class SignatureType:
             "namespace": "http://www.w3.org/2000/09/xmldsig#",
         },
     )
-    id: Optional[str] = field(
+    id: str | None = field(
         default=None,
         metadata={
             "name": "Id",

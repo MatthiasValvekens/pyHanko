@@ -65,10 +65,10 @@ StatusType = TypeVar('StatusType', bound=SignatureStatus)
 def validate_cms_signature(
     signed_data: cms.SignedData,
     status_cls=SignatureStatus,
-    raw_digest: Optional[bytes] = None,
-    validation_context: Optional[ValidationContext] = None,
-    status_kwargs: Optional[dict] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
+    raw_digest: bytes | None = None,
+    validation_context: ValidationContext | None = None,
+    status_kwargs: dict | None = None,
+    key_usage_settings: KeyUsageConstraints | None = None,
     encap_data_invalid=False,
 ):
     """
@@ -121,11 +121,11 @@ def validate_cms_signature(
 
 
 def validate_detached_cms(
-    input_data: Union[bytes, IO, cms.ContentInfo, cms.EncapsulatedContentInfo],
+    input_data: bytes | IO | cms.ContentInfo | cms.EncapsulatedContentInfo,
     signed_data: cms.SignedData,
-    signer_validation_context: Optional[ValidationContext] = None,
-    ts_validation_context: Optional[ValidationContext] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
+    signer_validation_context: ValidationContext | None = None,
+    ts_validation_context: ValidationContext | None = None,
+    key_usage_settings: KeyUsageConstraints | None = None,
     chunk_size=misc.DEFAULT_CHUNK_SIZE,
     max_read=None,
 ) -> StandardCMSSignatureStatus:
@@ -182,10 +182,10 @@ def validate_detached_cms(
 
 def validate_pdf_signature(
     embedded_sig: EmbeddedPdfSignature,
-    signer_validation_context: Optional[ValidationContext] = None,
-    ts_validation_context: Optional[ValidationContext] = None,
-    diff_policy: Optional[DiffPolicy] = None,
-    key_usage_settings: Optional[KeyUsageConstraints] = None,
+    signer_validation_context: ValidationContext | None = None,
+    ts_validation_context: ValidationContext | None = None,
+    diff_policy: DiffPolicy | None = None,
+    key_usage_settings: KeyUsageConstraints | None = None,
     skip_diff: bool = False,
 ) -> PdfSignatureStatus:
     """
@@ -227,8 +227,8 @@ def validate_pdf_signature(
 
 def validate_pdf_timestamp(
     embedded_sig: EmbeddedPdfSignature,
-    validation_context: Optional[ValidationContext] = None,
-    diff_policy: Optional[DiffPolicy] = None,
+    validation_context: ValidationContext | None = None,
+    diff_policy: DiffPolicy | None = None,
     skip_diff: bool = False,
 ) -> DocumentTimestampStatus:
     """

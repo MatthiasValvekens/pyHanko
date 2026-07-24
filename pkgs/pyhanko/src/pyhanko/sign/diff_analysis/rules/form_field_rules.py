@@ -1,4 +1,4 @@
-from typing import Callable, Generator, Iterable, Tuple
+from collections.abc import Callable, Generator, Iterable
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import Reference
@@ -287,12 +287,12 @@ class SigFieldCreationRule(FieldMDPRule):
 
     def apply(
         self, context: FieldComparisonContext
-    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
-        deleted = set(
+    ) -> Iterable[tuple[ModificationLevel, FormUpdate]]:
+        deleted = {
             fq_name
             for fq_name, spec in context.field_specs.items()
             if spec.old_field_ref and not spec.new_field_ref
-        )
+        }
         if deleted:
             raise SuspiciousModification(
                 f"Fields {deleted} were deleted after signing."
@@ -310,11 +310,11 @@ class SigFieldCreationRule(FieldMDPRule):
         # (including the /Fields ref), so our only responsibility is to match
         # up the names of new fields
         approved_new_fields = set(all_new_refs.keys())
-        actual_new_fields = set(
+        actual_new_fields = {
             fq_name
             for fq_name, spec in context.field_specs.items()
             if spec.old_field_ref is None
-        )
+        }
 
         if actual_new_fields != approved_new_fields:
             raise SuspiciousModification(
@@ -518,7 +518,7 @@ class BaseFieldModificationRule(FieldMDPRule):
 
     def apply(
         self, context: FieldComparisonContext
-    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    ) -> Iterable[tuple[ModificationLevel, FormUpdate]]:
         for fq_name, spec in context.field_specs.items():
             yield from self.check_form_field(fq_name, spec, context)
 
@@ -527,7 +527,7 @@ class BaseFieldModificationRule(FieldMDPRule):
         fq_name: str,
         spec: FieldComparisonSpec,
         context: FieldComparisonContext,
-    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    ) -> Iterable[tuple[ModificationLevel, FormUpdate]]:
         """
         Investigate updates to a particular form field.
         This function is called by :meth:`apply` for every form field in
@@ -568,7 +568,7 @@ class SigFieldModificationRule(BaseFieldModificationRule):
         fq_name: str,
         spec: FieldComparisonSpec,
         context: FieldComparisonContext,
-    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    ) -> Iterable[tuple[ModificationLevel, FormUpdate]]:
         # deal with "freshly signed" signature fields,
         # i.e. those that are filled now, but weren't previously
         #  + newly created ones
@@ -725,7 +725,7 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
         fq_name: str,
         spec: FieldComparisonSpec,
         context: FieldComparisonContext,
-    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    ) -> Iterable[tuple[ModificationLevel, FormUpdate]]:
         if (
             spec.field_type == '/Sig'
             or not spec.new_field_ref

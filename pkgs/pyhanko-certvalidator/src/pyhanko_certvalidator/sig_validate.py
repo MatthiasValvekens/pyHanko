@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
-from typing import Optional
 
 from asn1crypto import algos
 from asn1crypto.keys import PublicKeyInfo
@@ -41,7 +40,7 @@ class SignatureValidationContext:
     executing the cryptographic validation process.
     """
 
-    contextual_md_algorithm: Optional[str] = None
+    contextual_md_algorithm: str | None = None
     """
     Digest algorithm inferred from context. Used when the digest
     algorithm cannot be derived from the ASN.1 data describing the

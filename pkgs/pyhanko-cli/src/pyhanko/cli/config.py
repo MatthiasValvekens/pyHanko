@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any
 
 import yaml
 from pyhanko.config.api import ConfigurableMixin
@@ -24,7 +24,7 @@ class Identity(ConfigurableMixin):
     Plugin name.
     """
 
-    parameters: Dict[str, str]
+    parameters: dict[str, str]
     """
     Plugin parameters.
     """
@@ -44,7 +44,7 @@ class CLIConfig:
     CLI configuration settings.
     """
 
-    validation_contexts: Dict[str, dict]
+    validation_contexts: dict[str, dict]
     """
     Named validation contexts. The values in this dictionary
     are themselves dictionaries that support the following keys:
@@ -72,7 +72,7 @@ class CLIConfig:
     :meth:`get_validation_context` instead.
     """
 
-    stamp_styles: Dict[str, dict]
+    stamp_styles: dict[str, dict]
     """
     Named stamp styles. The type of style is selected by the ``type`` key, which
     can be either ``qr`` or ``text`` (the default is ``text``).
@@ -96,7 +96,7 @@ class CLIConfig:
     The default value for this setting is ``default``.
     """
 
-    time_tolerance: Optional[timedelta]
+    time_tolerance: timedelta | None
     """
     Time drift tolerance (global default).
     """
@@ -107,13 +107,13 @@ class CLIConfig:
     (global default).
     """
 
-    cache_dir: Optional[str]
+    cache_dir: str | None
     """
     Location to store cached data. Derived from the platform's
     user cache dir by default.
     """
 
-    identities: Dict[str, Identity]
+    identities: dict[str, Identity]
     """
     List of identities (i.e. plugin parameters stored in config).
     """
@@ -135,7 +135,7 @@ class CLIConfig:
             )
 
     def get_signer_key_usages(
-        self, name: Optional[str] = None
+        self, name: str | None = None
     ) -> KeyUsageConstraints:
         """
         Get a set of key usage constraints for a given validation context.
@@ -172,8 +172,8 @@ class CLIConfig:
         return KeyUsageConstraints.from_config(policy_settings)
 
     def get_stamp_style(
-        self, name: Optional[str] = None
-    ) -> Union[TextStampStyle, QRStampStyle]:
+        self, name: str | None = None
+    ) -> TextStampStyle | QRStampStyle:
         """
         Retrieve a stamp style by name.
 
@@ -209,7 +209,7 @@ class CLIRootConfig:
     General CLI config.
     """
 
-    log_config: Dict[Optional[str], LogConfig]
+    log_config: dict[str | None, LogConfig]
     """
     Per-module logging configuration. The keys in this dictionary are
     module names, the :class:`.LogConfig` values define the logging settings.
@@ -217,7 +217,7 @@ class CLIRootConfig:
     The ``None`` key houses the configuration for the root logger, if any.
     """
 
-    plugin_endpoints: List[str]
+    plugin_endpoints: list[str]
     """
     List of plugin endpoints to load, of the form
     ``package.module:PluginClass``.
@@ -243,7 +243,7 @@ class CLIRootConfig:
 
 
 DEFAULT_VALIDATION_CONTEXT = DEFAULT_STAMP_STYLE = 'default'
-STAMP_STYLE_TYPES: Dict[str, Type[BaseStampStyle]] = {
+STAMP_STYLE_TYPES: dict[str, type[BaseStampStyle]] = {
     'qr': QRStampStyle,
     'text': TextStampStyle,
 }
@@ -267,13 +267,13 @@ def process_root_config_settings(config_dict: dict) -> dict:
     # logging config
     log_config_spec = config_dict.get('logging', {})
     log_config = parse_logging_config(log_config_spec)
-    return dict(
-        log_config=log_config,
-        plugin_endpoints=plugins,
-    )
+    return {
+        'log_config': log_config,
+        'plugin_endpoints': plugins,
+    }
 
 
-def parse_time_tolerance(config_dict: dict) -> Optional[timedelta]:
+def parse_time_tolerance(config_dict: dict) -> timedelta | None:
     time_tolerance_seconds: Any = config_dict.get('time-tolerance', None)
     if time_tolerance_seconds is None:
         return None
@@ -286,7 +286,7 @@ def parse_time_tolerance(config_dict: dict) -> Optional[timedelta]:
 
 def process_config_dict(config_dict: dict) -> dict:
     # validation context config
-    vcs: Dict[str, dict] = {DEFAULT_VALIDATION_CONTEXT: {}}
+    vcs: dict[str, dict] = {DEFAULT_VALIDATION_CONTEXT: {}}
     try:
         vc_specs = config_dict['validation-contexts']
         vcs.update(vc_specs)
@@ -322,13 +322,13 @@ def process_config_dict(config_dict: dict) -> dict:
     raw_identities = config_dict.get('identities', {})
     identities = {k: Identity.from_config(v) for k, v in raw_identities.items()}
 
-    return dict(
-        validation_contexts=vcs,
-        default_validation_context=default_vc,
-        time_tolerance=time_tolerance,
-        retroactive_revinfo=retroactive_revinfo,
-        stamp_styles=stamp_configs,
-        default_stamp_style=default_stamp_style,
-        cache_dir=cache_dir,
-        identities=identities,
-    )
+    return {
+        'validation_contexts': vcs,
+        'default_validation_context': default_vc,
+        'time_tolerance': time_tolerance,
+        'retroactive_revinfo': retroactive_revinfo,
+        'stamp_styles': stamp_configs,
+        'default_stamp_style': default_stamp_style,
+        'cache_dir': cache_dir,
+        'identities': identities,
+    }

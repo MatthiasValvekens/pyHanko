@@ -7,9 +7,10 @@ metadata management.
 """
 
 import enum
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Union
 
 from pyhanko.pdf_utils.misc import StringWithLanguage
 from pyhanko.version import __version__
@@ -80,7 +81,7 @@ class DocumentMetadata:
     The document's subject.
     """
 
-    keywords: List[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
     """
     Keywords associated with the document.
     """
@@ -94,19 +95,19 @@ class DocumentMetadata:
         which PDF processor(s) interacted with the file.
     """
 
-    created: Union[str, datetime, None] = None
+    created: str | datetime | None = None
     """
     The time when the document was created. To set it to the current time,
     specify ``now``.
     """
 
-    last_modified: Union[str, datetime, None] = "now"
+    last_modified: str | datetime | None = "now"
     """
     The time when the document was last modified. Defaults to the current time
     upon serialisation if not specified.
     """
 
-    xmp_extra: List['XmpStructure'] = field(default_factory=list)
+    xmp_extra: list['XmpStructure'] = field(default_factory=list)
     """
     Extra XMP metadata.
     """
@@ -157,7 +158,7 @@ class ExpandedName:
 
     def __str__(self):
         ns = self.ns
-        sep = '' if ns.endswith('/') or ns.endswith('#') else '/'
+        sep = '' if ns.endswith(('/', '#')) else '/'
         return f"{ns}{sep}{self.local_name}"
 
     def __repr__(self):
@@ -318,10 +319,10 @@ class Qualifiers:
         The qualifiers to model.
     """
 
-    _quals: Dict[ExpandedName, 'XmpValue']
-    _lang: Optional[str]
+    _quals: dict[ExpandedName, 'XmpValue']
+    _lang: str | None
 
-    def __init__(self, quals: Dict[ExpandedName, 'XmpValue']):
+    def __init__(self, quals: dict[ExpandedName, 'XmpValue']):
         self._quals = quals
         try:
             lang = quals[XML_LANG]
@@ -333,7 +334,7 @@ class Qualifiers:
             self._lang = None
 
     @classmethod
-    def of(cls, *lst: Tuple[ExpandedName, 'XmpValue']) -> 'Qualifiers':
+    def of(cls, *lst: tuple[ExpandedName, 'XmpValue']) -> 'Qualifiers':
         """
         Construct a :class:`.Qualifiers` object from a list of name-value pairs.
 
@@ -345,7 +346,7 @@ class Qualifiers:
         return Qualifiers({k: v for k, v in lst})
 
     @classmethod
-    def lang_as_qual(cls, lang: Optional[str]) -> 'Qualifiers':
+    def lang_as_qual(cls, lang: str | None) -> 'Qualifiers':
         """
         Construct a :class:`.Qualifiers` object that only wraps a language
         qualifier.
@@ -365,7 +366,7 @@ class Qualifiers:
 
     def iter_quals(
         self, with_lang: bool = True
-    ) -> Iterable[Tuple[ExpandedName, 'XmpValue']]:
+    ) -> Iterable[tuple[ExpandedName, 'XmpValue']]:
         """
         Iterate over all qualifiers.
 
@@ -378,7 +379,7 @@ class Qualifiers:
             yield XML_LANG, XmpValue(self._lang)
 
     @property
-    def lang(self) -> Optional[str]:
+    def lang(self) -> str | None:
         """
         Retrieve the language qualifier, if any.
         """
@@ -448,11 +449,11 @@ class XmpStructure:
     # isomorphic to Qualifiers, but we keep them separate to stay
     # closer to the spec (and this one doesn't special-case anything)
 
-    def __init__(self, fields: Dict[ExpandedName, 'XmpValue']):
-        self._fields: Dict[ExpandedName, XmpValue] = fields
+    def __init__(self, fields: dict[ExpandedName, 'XmpValue']):
+        self._fields: dict[ExpandedName, XmpValue] = fields
 
     @classmethod
-    def of(cls, *lst: Tuple[ExpandedName, 'XmpValue']) -> 'XmpStructure':
+    def of(cls, *lst: tuple[ExpandedName, 'XmpValue']) -> 'XmpStructure':
         """
         Construct an :class:`.XmpStructure` from a list of name-value pairs.
 
@@ -466,7 +467,7 @@ class XmpStructure:
     def __getitem__(self, item):
         return self._fields[item]
 
-    def __iter__(self) -> Iterator[Tuple[ExpandedName, 'XmpValue']]:
+    def __iter__(self) -> Iterator[tuple[ExpandedName, 'XmpValue']]:
         yield from self._fields.items()
 
     def __len__(self) -> int:
@@ -518,7 +519,7 @@ class XmpArray:
     The type of the array.
     """
 
-    entries: List[XmpValue]
+    entries: list[XmpValue]
     """
     The entries in the array.
     """

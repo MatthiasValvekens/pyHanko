@@ -1,8 +1,8 @@
 import enum
 import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address
-from typing import Callable, Dict, Iterable, List, Optional, Set, Union
 
 from asn1crypto import x509
 from uritools import urisplit
@@ -63,7 +63,7 @@ def email_tree_contains(base: str, other: str):
     # use rpartition instead of rsplit to deal with the case where there's no @
     # uniformly
     base_mailbox, _, base_host_or_domain = base.rpartition('@')
-    other_mailbox, _, other_host_or_domain = other.rpartition('@')
+    _other_mailbox, _, other_host_or_domain = other.rpartition('@')
 
     if base_mailbox:
         # only exact match
@@ -98,9 +98,7 @@ class GeneralNameType(enum.Enum):
     @property
     def check_membership(
         self,
-    ) -> Optional[
-        Callable[[Union[str, x509.Name], Union[str, x509.Name]], bool]
-    ]:
+    ) -> Callable[[str | x509.Name, str | x509.Name], bool] | None:
         return _name_type_checkers.get(self, None)
 
     @classmethod
@@ -154,7 +152,7 @@ def _enumerate_names_in_cert(cert: x509.Certificate):
 class _StringOrName:
     # Wrapper class for hashing purposes. Not for external use.
 
-    def __init__(self, value: Union[str, x509.Name]):
+    def __init__(self, value: str | x509.Name):
         self.value = value
 
     @property
@@ -175,11 +173,11 @@ class _StringOrName:
 @dataclass(frozen=True)
 class NameSubtree:
     name_type: GeneralNameType
-    tree_base: Optional[_StringOrName]
+    tree_base: _StringOrName | None
     min: int = 0
-    max: Optional[int] = None
+    max: int | None = None
 
-    def __contains__(self, item: Union[str, x509.Name]) -> bool:
+    def __contains__(self, item: str | x509.Name) -> bool:
         if self.tree_base is None:  # special value: accept all certs
             return True
 
@@ -197,7 +195,7 @@ class NameSubtree:
         return checker(self.tree_base.value, item)
 
     @classmethod
-    def from_name(cls, name_type: GeneralNameType, name: Union[str, x509.Name]):
+    def from_name(cls, name_type: GeneralNameType, name: str | x509.Name):
         return NameSubtree(name_type=name_type, tree_base=_StringOrName(name))
 
     @classmethod
@@ -224,7 +222,7 @@ class NameSubtree:
 
 
 # a subtree collection as used in the PKIX validation algorithm
-PKIXSubtrees = Dict[GeneralNameType, Set[NameSubtree]]
+PKIXSubtrees = dict[GeneralNameType, set[NameSubtree]]
 
 
 def x509_names_to_subtrees(names: Iterable[x509.Name]) -> PKIXSubtrees:
@@ -258,11 +256,11 @@ def process_general_subtrees(subtrees: x509.GeneralSubtrees) -> PKIXSubtrees:
 class NameConstraintValidationResult:
     def __init__(
         self,
-        failing_name_type: Optional[GeneralNameType] = None,
-        failing_name: Union[str, x509.Name, None] = None,
+        failing_name_type: GeneralNameType | None = None,
+        failing_name: str | x509.Name | None = None,
     ):
-        self.failing_name_type: Optional[GeneralNameType] = failing_name_type
-        self.failing_name: Union[str, x509.Name, None] = failing_name
+        self.failing_name_type: GeneralNameType | None = failing_name_type
+        self.failing_name: str | x509.Name | None = failing_name
 
     def __bool__(self):
         return self.failing_name_type is None
@@ -292,7 +290,7 @@ class PermittedSubtrees:
         # which seems to be what most implementations do.
 
         # We deep-copy the initial permitted subtrees
-        trees: Dict[GeneralNameType, List[Set[NameSubtree]]] = {
+        trees: dict[GeneralNameType, list[set[NameSubtree]]] = {
             name_type: [set(initial_permitted_subtrees.get(name_type, ()))]
             for name_type in GeneralNameType
         }

@@ -6,9 +6,9 @@ OTF parsing and subsetting, and on HarfBuzz (via ``uharfbuzz``) for shaping.
 
 import logging
 from binascii import hexlify
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.font.api import (
@@ -45,19 +45,19 @@ pdf_string = generic.pdf_string
 
 
 def _format_simple_glyphline_from_buffer(
-    buf, cid_width_callback: Callable[[int], Tuple[int, int]]
+    buf, cid_width_callback: Callable[[int], tuple[int, int]]
 ):
     total_len = 0
     info: hb.GlyphInfo
     pos: hb.GlyphPosition
-    subsgmt_cids: List[int] = []
+    subsgmt_cids: list[int] = []
     tj_adjust = 0
-    current_tj_segments: List[str] = []
+    current_tj_segments: list[str] = []
 
     def _emit_subsegment():
         nonlocal subsgmt_cids
         current_tj_segments.append(
-            f"<{''.join('%04x' % cid for cid in subsgmt_cids)}>"
+            f"<{''.join(f'{cid:04x}' for cid in subsgmt_cids)}>"
         )
         subsgmt_cids = []
         if tj_adjust:
@@ -92,7 +92,7 @@ def _format_simple_glyphline_from_buffer(
 
 def _format_cid_glyphline_from_buffer(
     buf,
-    cid_width_callback: Callable[[int], Tuple[int, int]],
+    cid_width_callback: Callable[[int], tuple[int, int]],
     units_per_em: int,
     font_size: float,
     vertical: bool,
@@ -163,11 +163,11 @@ def _format_cid_glyphline_from_buffer(
     return b' '.join(commands), (total_x_len, total_y_len)
 
 
-def _gids_by_cluster(buf) -> Iterable[Tuple[int, Optional[int], List[int]]]:
+def _gids_by_cluster(buf) -> Iterable[tuple[int, int | None, list[int]]]:
     # assumes that the first cluster is 0
 
     cur_cluster = 0
-    cur_cluster_glyphs: List[int] = []
+    cur_cluster_glyphs: list[int] = []
     gi: hb.GlyphInfo
     for gi in buf.glyph_infos:
         if gi.cluster != cur_cluster:
@@ -402,10 +402,10 @@ class GlyphAccumulator(FontEngine):
         # the 'head' table is mandatory
         self.units_per_em = tt['head'].unitsPerEm
 
-        self._glyphs: Dict[int, Tuple[int, int]] = {}
+        self._glyphs: dict[int, tuple[int, int]] = {}
         self._glyph_set = tt.getGlyphSet(preferCFF=True)
 
-        self._cid_to_unicode: Dict[int, str] = {}
+        self._cid_to_unicode: dict[int, str] = {}
         self.__reverse_cmap = None
         self.ot_language_tag = _check_ot_tag(ot_language_tag)
         self.ot_script_tag = _check_ot_tag(ot_script_tag)
@@ -428,7 +428,7 @@ class GlyphAccumulator(FontEngine):
             self.__reverse_cmap = self.tt['cmap'].buildReversed()
         return self.__reverse_cmap
 
-    def _get_cid_and_width(self, glyph_id: int) -> Tuple[int, int]:
+    def _get_cid_and_width(self, glyph_id: int) -> tuple[int, int]:
         try:
             return self._glyphs[glyph_id]
         except KeyError:
@@ -584,7 +584,7 @@ class GlyphAccumulator(FontEngine):
         stream.compress()
         return stream
 
-    def _extract_subset(self, options: Optional[subset.Options] = None):
+    def _extract_subset(self, options: subset.Options | None = None):
         if options is None:
             options = subset.Options(layout_closure=False)
             options.drop_tables += ['GPOS', 'GDEF', 'GSUB']
@@ -664,7 +664,7 @@ class CIDFont(generic.DictionaryObject):
 
         self.subset_prefix = subset_prefix
 
-        ps_name = '%s+%s' % (subset_prefix, base_ps_name)
+        ps_name = f'{subset_prefix}+{base_ps_name}'
 
         self.name = ps_name
         self.ros = registry, ordering, supplement
@@ -728,7 +728,7 @@ class CIDFontType0(CIDFont):
             base_ps_name,
             subset_prefix,
         )
-        td.rawDict['FullName'] = '%s+%s' % (self.subset_prefix, self.name)
+        td.rawDict['FullName'] = f'{self.subset_prefix}+{self.name}'
 
     def set_font_file(self, writer: BasePdfFileWriter):
         stream_buf = BytesIO()
@@ -834,25 +834,25 @@ class GlyphAccumulatorFactory(FontEngineFactory):
     Font size.
     """
 
-    ot_script_tag: Optional[str] = None
+    ot_script_tag: str | None = None
     """
     OpenType script tag to use. Will be guessed by HarfBuzz if not
     specified.
     """
 
-    ot_language_tag: Optional[str] = None
+    ot_language_tag: str | None = None
     """
     OpenType language tag to use. Defaults to the default language system
     for the current script.
     """
 
-    writing_direction: Optional[str] = None
+    writing_direction: str | None = None
     """
     Writing direction, one of 'ltr', 'rtl', 'ttb' or 'btt'.
     Will be guessed by HarfBuzz if not specified.
     """
 
-    bcp47_lang_code: Optional[str] = None
+    bcp47_lang_code: str | None = None
     """
     BCP 47 language code to tag strings with.
     """

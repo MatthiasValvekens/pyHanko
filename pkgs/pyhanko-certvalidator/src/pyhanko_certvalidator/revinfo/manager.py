@@ -1,11 +1,5 @@
+from collections.abc import Iterable
 from datetime import datetime
-from typing import (
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Set,
-)
 
 from asn1crypto import crl, ocsp, x509
 
@@ -56,26 +50,26 @@ class RevinfoManager:
         crls: Iterable[CRLContainer],
         ocsps: Iterable[OCSPContainer],
         assertions: Iterable[NonRevokedStatusAssertion] = (),
-        fetchers: Optional[Fetchers] = None,
+        fetchers: Fetchers | None = None,
     ):
         self._certificate_registry = certificate_registry
         self._poe_manager = poe_manager
 
-        self._revocation_certs: Dict[bytes, x509.Certificate] = {}
-        self._crl_issuer_map: Dict[bytes, x509.Certificate] = {}
+        self._revocation_certs: dict[bytes, x509.Certificate] = {}
+        self._crl_issuer_map: dict[bytes, x509.Certificate] = {}
 
-        self._crls: List[CRLContainer] = []
+        self._crls: list[CRLContainer] = []
         if crls:
             self._crls = sort_freshest_first(crls)
 
-        self._ocsps: List[OCSPContainer] = []
+        self._ocsps: list[OCSPContainer] = []
         if ocsps:
             self._ocsps = ocsps = sort_freshest_first(ocsps)
             for ocsp_response in ocsps:
                 self._extract_ocsp_certs(ocsp_response)
 
         self._fetchers = fetchers
-        self._assertions: Dict[bytes, NonRevokedStatusAssertion] = {
+        self._assertions: dict[bytes, NonRevokedStatusAssertion] = {
             assertion.cert_sha256: assertion for assertion in assertions
         }
 
@@ -101,7 +95,7 @@ class RevinfoManager:
         return self._fetchers is not None
 
     @property
-    def crls(self) -> List[crl.CertificateList]:
+    def crls(self) -> list[crl.CertificateList]:
         """
         A list of all cached :class:`crl.CertificateList` objects
         """
@@ -112,7 +106,7 @@ class RevinfoManager:
         return list(self._fetchers.crl_fetcher.fetched_crls()) + raw_crls
 
     @property
-    def ocsps(self) -> List[ocsp.OCSPResponse]:
+    def ocsps(self) -> list[ocsp.OCSPResponse]:
         """
         A list of all cached :class:`ocsp.OCSPResponse` objects
         """
@@ -124,7 +118,7 @@ class RevinfoManager:
         return list(self._fetchers.ocsp_fetcher.fetched_responses()) + raw_ocsps
 
     @property
-    def new_revocation_certs(self) -> List[x509.Certificate]:
+    def new_revocation_certs(self) -> list[x509.Certificate]:
         """
         A list of newly-fetched :class:`x509.Certificate` objects that were
         obtained from OCSP responses and CRLs
@@ -181,7 +175,7 @@ class RevinfoManager:
 
         self._crl_issuer_map[certificate_list.signature] = cert
 
-    def check_crl_issuer(self, certificate_list) -> Optional[x509.Certificate]:
+    def check_crl_issuer(self, certificate_list) -> x509.Certificate | None:
         """
         Checks to see if the certificate that signed a certificate list has
         been found
@@ -196,7 +190,7 @@ class RevinfoManager:
 
         return self._crl_issuer_map.get(certificate_list.signature)
 
-    def currently_available_crls(self) -> List[CRLContainer]:
+    def currently_available_crls(self) -> list[CRLContainer]:
         """
         .. versionadded:: 0.27.0
 
@@ -211,7 +205,7 @@ class RevinfoManager:
             result.extend(CRLContainer(crl_data) for crl_data in crls)
         return result
 
-    async def fetch_crls(self, cert) -> List[CRLContainer]:
+    async def fetch_crls(self, cert) -> list[CRLContainer]:
         """
         .. versionadded:: 0.27.0
 
@@ -234,7 +228,7 @@ class RevinfoManager:
         conts = [CRLContainer(crl_data) for crl_data in crls]
         return conts
 
-    async def async_retrieve_crls(self, cert) -> List[CRLContainer]:
+    async def async_retrieve_crls(self, cert) -> list[CRLContainer]:
         """
         .. versionadded:: 0.20.0
 
@@ -251,7 +245,7 @@ class RevinfoManager:
 
     async def async_retrieve_ocsps(
         self, cert, authority: Authority
-    ) -> List[OCSPContainer]:
+    ) -> list[OCSPContainer]:
         """
         .. versionadded:: 0.20.0
 
@@ -293,7 +287,7 @@ class RevinfoManager:
 
         return ocsps + self._ocsps
 
-    def evict_ocsps(self, hashes_to_evict: Set[bytes]):
+    def evict_ocsps(self, hashes_to_evict: set[bytes]):
         """
         Internal API to eliminate local OCSP records from consideration.
 
@@ -307,7 +301,7 @@ class RevinfoManager:
 
         self._ocsps = list(filter(p, self._ocsps))
 
-    def evict_crls(self, hashes_to_evict: Set[bytes]):
+    def evict_crls(self, hashes_to_evict: set[bytes]):
         """
         Internal API to eliminate local CRLs from consideration.
 

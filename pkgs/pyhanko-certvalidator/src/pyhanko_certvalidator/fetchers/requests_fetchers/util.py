@@ -1,5 +1,5 @@
 from asyncio import to_thread
-from typing import Awaitable
+from collections.abc import Awaitable
 
 import requests
 

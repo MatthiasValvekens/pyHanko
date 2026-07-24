@@ -58,7 +58,7 @@ class HTTPTimeStamper(TimeStamper):
                     auth=self.auth,
                     timeout=self.timeout,
                 )
-            except IOError as e:
+            except OSError as e:
                 raise TimestampRequestError(
                     'Error in communication with timestamp server',
                 ) from e

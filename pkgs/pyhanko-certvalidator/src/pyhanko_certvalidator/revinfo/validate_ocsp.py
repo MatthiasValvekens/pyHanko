@@ -1,7 +1,6 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Union
 
 from asn1crypto import cms, crl, x509
 from asn1crypto.crl import CRLReason
@@ -79,7 +78,7 @@ async def _validate_delegated_ocsp_provenance(
         # throw an error
         raise PathValidationError.from_state(
             "Recursion detected in OCSP responder authorisation check for "
-            "responder certificate %s." % responder_cert.subject.human_friendly,
+            f"responder certificate {responder_cert.subject.human_friendly}.",
             proc_state,
         )
 
@@ -168,7 +167,7 @@ class _OCSPErrs(Errors):
 
 
 def _match_ocsp_certid(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     issuer: Authority,
     ocsp_response: OCSPContainer,
     errs: _OCSPErrs,
@@ -232,7 +231,7 @@ def _identify_responder_cert(
     ocsp_response: OCSPContainer,
     cert_store: CertificateCollection,
     errs: _OCSPErrs,
-) -> Optional[x509.Certificate]:
+) -> x509.Certificate | None:
     # To verify the response as legitimate, the responder cert must be located
 
     # prioritise the certificates included with the response, if there
@@ -276,7 +275,7 @@ def _identify_responder_cert(
 
 def _precheck_ocsp_responder_auth(
     responder_cert: x509.Certificate, issuer: Authority, is_pkc: bool
-) -> Optional[bool]:
+) -> bool | None:
     """
     This function checks OCSP conditions that don't require path validation
     to pass. If ``None`` is returned, path validation is necessary to proceed.
@@ -350,7 +349,7 @@ async def _check_ocsp_authorisation(
 def _check_ocsp_status(
     ocsp_response: OCSPContainer,
     proc_state: ValProcState,
-    control_time: Optional[datetime],
+    control_time: datetime | None,
 ) -> bool:
     cert_response = ocsp_response.extract_single_response()
     if cert_response is None:
@@ -410,12 +409,12 @@ def _verify_ocsp_signature(
 
 
 def _assess_ocsp_relevance(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     issuer: Authority,
     ocsp_response: OCSPContainer,
     cert_store: CertificateCollection,
     errs: _OCSPErrs,
-) -> Optional[x509.Certificate]:
+) -> x509.Certificate | None:
     matched = _match_ocsp_certid(
         cert, issuer=issuer, ocsp_response=ocsp_response, errs=errs
     )
@@ -431,7 +430,7 @@ def _assess_ocsp_relevance(
 
 
 async def _handle_single_ocsp_resp(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     issuer: Authority,
     path: ValidationPath,
     ocsp_response: OCSPContainer,
@@ -499,10 +498,10 @@ async def _handle_single_ocsp_resp(
 
 
 async def verify_ocsp_response(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     path: ValidationPath,
     validation_context: ValidationContext,
-    proc_state: Optional[ValProcState] = None,
+    proc_state: ValProcState | None = None,
 ):
     """
     Verifies an OCSP response, checking to make sure the certificate has not
@@ -596,23 +595,23 @@ class OCSPCollectionResult:
     validation purposes.
     """
 
-    responses: List[OCSPResponseOfInterest]
+    responses: list[OCSPResponseOfInterest]
     """
     List of potentially relevant OCSP responses.
     """
 
-    failure_msgs: List[str]
+    failure_msgs: list[str]
     """
     List of failure messages, for error reporting purposes.
     """
 
 
 async def collect_relevant_responses_with_paths(
-    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    cert: x509.Certificate | cms.AttributeCertificateV2,
     path: ValidationPath,
     revinfo_manager: RevinfoManager,
     control_time: datetime,
-    proc_state: Optional[ValProcState] = None,
+    proc_state: ValProcState | None = None,
 ) -> OCSPCollectionResult:
     """
     Collect potentially relevant OCSP responses with the associated validation

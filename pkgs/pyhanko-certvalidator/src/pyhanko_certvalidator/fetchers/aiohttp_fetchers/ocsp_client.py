@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, Union
+from collections.abc import Iterable
 
 import aiohttp
 from asn1crypto import cms, ocsp, x509
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
     def __init__(
         self,
-        session: Union[aiohttp.ClientSession, LazySession],
+        session: aiohttp.ClientSession | LazySession,
         user_agent=None,
         per_request_timeout=10,
         certid_hash_algo='sha1',
@@ -38,7 +38,7 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
 
     async def fetch(
         self,
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert: x509.Certificate | cms.AttributeCertificateV2,
         authority: Authority,
     ) -> ocsp.OCSPResponse:
         tag = (issuer_serial(cert), authority.hashable)
@@ -56,7 +56,7 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
 
     async def _fetch(
         self,
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert: x509.Certificate | cms.AttributeCertificateV2,
         authority: Authority,
     ):
         ocsp_request = format_ocsp_request(

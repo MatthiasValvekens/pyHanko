@@ -5,7 +5,7 @@ protocol for embedding CMS payloads into PDF signature objects.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import IO, Optional
+from typing import IO
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
@@ -78,7 +78,7 @@ def _get_or_create_sigfield(
     field_name,
     pdf_out: BasePdfFileWriter,
     existing_fields_only,
-    new_field_spec: Optional[SigFieldSpec] = None,
+    new_field_spec: SigFieldSpec | None = None,
 ):
     root = pdf_out.root
     if field_name is None:
@@ -103,8 +103,7 @@ def _get_or_create_sigfield(
         if others:
             raise SigningError(
                 'There are several empty signature fields. Please specify '
-                'a field name. The options are %s, %s.'
-                % (found_field_name, others)
+                f'a field name. The options are {found_field_name}, {others}.'
             )
     else:
         # grab or create a sig field
@@ -162,12 +161,12 @@ class SigMDPSetup:
     be the first one.
     """
 
-    field_lock: Optional[FieldMDPSpec] = None
+    field_lock: FieldMDPSpec | None = None
     """
     Field lock information to write to the signature reference dictionary.
     """
 
-    docmdp_perms: Optional[MDPPerm] = None
+    docmdp_perms: MDPPerm | None = None
     """
     DocMDP permissions to write to the signature reference dictionary.
     """
@@ -236,12 +235,12 @@ class SigAppearanceSetup:
     Timestamp to show in the signature appearance.
     """
 
-    name: Optional[str]
+    name: str | None
     """
     Signer name to show in the signature appearance.
     """
 
-    text_params: Optional[dict] = None
+    text_params: dict | None = None
     """
     Additional text interpolation parameters to pass to the underlying
     stamp style.
@@ -297,12 +296,12 @@ class SigObjSetup:
     CMS object.
     """
 
-    mdp_setup: Optional[SigMDPSetup] = None
+    mdp_setup: SigMDPSetup | None = None
     """
     Optional DocMDP settings, see :class:`.SigMDPSetup`.
     """
 
-    appearance_setup: Optional[SigAppearanceSetup] = None
+    appearance_setup: SigAppearanceSetup | None = None
     """
     Optional appearance settings, see :class:`.SigAppearanceSetup`.
     """
@@ -340,7 +339,7 @@ class SigIOSetup:
     digest function if the input stream does not support ``memoryview``.
     """
 
-    output: Optional[IO] = None
+    output: IO | None = None
     """
     Write the output to the specified output stream. If ``None``, write to a 
     new :class:`.BytesIO` object. Default is ``None``.
@@ -360,12 +359,12 @@ class PdfCMSEmbedder:
         :class:`.SigFieldSpec` to use when creating new fields on-the-fly.
     """
 
-    def __init__(self, new_field_spec: Optional[SigFieldSpec] = None):
+    def __init__(self, new_field_spec: SigFieldSpec | None = None):
         self.new_field_spec = new_field_spec
 
     def write_cms(
         self,
-        field_name: Optional[str],
+        field_name: str | None,
         writer: BasePdfFileWriter,
         existing_fields_only=False,
     ):

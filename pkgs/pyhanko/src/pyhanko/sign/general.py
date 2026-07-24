@@ -9,8 +9,9 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 import hashlib
 import logging
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import IO, Iterable, List, Optional, Tuple, Union
+from typing import IO
 
 from asn1crypto import algos, cms, tsp, x509
 from asn1crypto.algos import SignedDigestAlgorithm
@@ -106,7 +107,7 @@ class MultivaluedAttributeError(ValueError):
     pass
 
 
-def find_cms_attribute(attrs: Optional[Iterable[cms.CMSAttribute]], name: str):
+def find_cms_attribute(attrs: Iterable[cms.CMSAttribute] | None, name: str):
     """
     .. deprecated:: 0.35.0
 
@@ -136,7 +137,7 @@ def find_cms_attribute(attrs: Optional[Iterable[cms.CMSAttribute]], name: str):
 
 
 def find_cms_attribute_iter(
-    attrs: Optional[Iterable[cms.CMSAttribute]], name: str
+    attrs: Iterable[cms.CMSAttribute] | None, name: str
 ):
     """
     .. versionadded:: 0.35.0
@@ -161,7 +162,7 @@ def find_cms_attribute_iter(
 
 
 def find_unique_cms_attribute(
-    attrs: Optional[Iterable[cms.CMSAttribute]], name: str
+    attrs: Iterable[cms.CMSAttribute] | None, name: str
 ):
     """
     Find and return a unique CMS attribute value of a given type.
@@ -276,7 +277,7 @@ def as_signing_certificate_v2(
 
 
 def check_ess_certid(
-    cert: x509.Certificate, certid: Union[tsp.ESSCertID, tsp.ESSCertIDv2]
+    cert: x509.Certificate, certid: tsp.ESSCertID | tsp.ESSCertIDv2
 ):
     """
     Match an ``ESSCertID`` value against a certificate.
@@ -308,7 +309,7 @@ def check_ess_certid(
 
 
 def match_issuer_serial(
-    expected_issuer_serial: Union[cms.IssuerAndSerialNumber, tsp.IssuerSerial],
+    expected_issuer_serial: cms.IssuerAndSerialNumber | tsp.IssuerSerial,
     cert: x509.Certificate,
 ) -> bool:
     """
@@ -369,8 +370,6 @@ class UnacceptableSignerError(SigningError):
     """
     Error raised when a signer was judged unacceptable.
     """
-
-    pass
 
 
 def get_cms_hash_algo_for_mechanism(mech: SignedDigestAlgorithm) -> str:
@@ -448,12 +447,12 @@ class SignedDataCerts:
     The certificate identified as the signer's certificate.
     """
 
-    other_certs: List[x509.Certificate]
+    other_certs: list[x509.Certificate]
     """
     Other (public-key) certificates included in the signed data object.
     """
 
-    attribute_certs: List[cms.AttributeCertificateV2]
+    attribute_certs: list[cms.AttributeCertificateV2]
     """
     Attribute certificates included in the signed data object.
     """
@@ -548,7 +547,7 @@ def byte_range_digest(
     byte_range: Iterable[int],
     md_algorithm: str,
     chunk_size=misc.DEFAULT_CHUNK_SIZE,
-) -> Tuple[int, bytes]:
+) -> tuple[int, bytes]:
     """
     Internal API to compute byte range digests. Potentially dangerous if used
     without due caution.

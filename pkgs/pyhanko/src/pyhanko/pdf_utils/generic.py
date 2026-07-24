@@ -14,10 +14,11 @@ import logging
 import os
 import re
 import typing
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from typing import Any, Callable, Iterator, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from .misc import (
     IndirectObjectExpected,
@@ -49,6 +50,7 @@ __all__ = [
     'NameObject',
     'NullObject',
     'NumberObject',
+    'OperatorLiteral',
     'PdfObject',
     'Reference',
     'StreamObject',
@@ -59,7 +61,6 @@ __all__ = [
     'pdf_name',
     'pdf_string',
     'read_object',
-    'OperatorLiteral',
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -332,7 +333,7 @@ def read_object(
 class PdfObject:
     """Superclass for all PDF objects."""
 
-    container_ref: Optional[Dereferenceable] = None
+    container_ref: Dereferenceable | None = None
     """
     For objects read from a file, `container_ref` points to the unique
     addressable object containing this object.
@@ -383,7 +384,7 @@ class PdfObject:
         self,
         stream,
         handler: Optional['SecurityHandler'] = None,
-        container_ref: Optional[Reference] = None,
+        container_ref: Reference | None = None,
     ):
         """
         Abstract method to render this object to an output stream.
@@ -465,9 +466,8 @@ class BooleanObject(PdfObject):
         word = stream.read(4)
         if word == b"true":
             return BooleanObject(True)
-        elif word == b"fals":
-            if stream.read(1) == b"e":
-                return BooleanObject(False)
+        elif word == b"fals" and stream.read(1) == b"e":
+            return BooleanObject(False)
         raise PdfReadError('Could not read Boolean object')
 
     def __bool__(self):
@@ -623,7 +623,7 @@ class IndirectObject(PdfObject, Dereferenceable):
         return self.reference.generation
 
     def __repr__(self):
-        return "IndirectObject(%r, %r)" % (self.idnum, self.generation)
+        return f"IndirectObject({self.idnum!r}, {self.generation!r})"
 
     # TODO I'm starting to think that making indirect objects hashable
     #  is a bad idea. Think about that for a bit, I might just be getting
@@ -677,7 +677,7 @@ class IndirectObject(PdfObject, Dereferenceable):
         if r != b"R":
             pos = hex(stream.tell())
             raise PdfReadError(
-                "Error reading indirect object reference at byte %s" % pos
+                f"Error reading indirect object reference at byte {pos}"
             )
         try:
             idnum, generation = int(idnum_str), int(generation_str)
@@ -770,7 +770,7 @@ class NumberObject(int, PdfObject):
 
 
 def pdf_string(
-    string: Union[str, bytes, bytearray],
+    string: str | bytes | bytearray,
 ) -> Union['ByteStringObject', 'TextStringObject']:
     """
     Encode a string as a :class:`.TextStringObject` if possible,
@@ -976,7 +976,7 @@ class TextStringEncoding(enum.Enum):
             bom, enc = self.value
             return bom + string.encode(enc)
 
-    def decode(self, string: Union[bytes, bytearray]) -> str:
+    def decode(self, string: bytes | bytearray) -> str:
         """
         Decode a string with BOM.
 
@@ -995,7 +995,7 @@ class TextStringEncoding(enum.Enum):
             return string.decode('utf-16')
 
 
-def _guess_enc_by_bom(encoded: Union[bytes, bytearray]) -> TextStringEncoding:
+def _guess_enc_by_bom(encoded: bytes | bytearray) -> TextStringEncoding:
     if encoded.startswith(codecs.BOM_UTF16_BE):
         return TextStringEncoding.UTF16BE
     elif encoded.startswith(codecs.BOM_UTF16_LE):
@@ -1015,12 +1015,12 @@ class TextStringObject(str, PdfObject):
     PDF text string object.
     """
 
-    autodetected_encoding: Optional[TextStringEncoding] = None
+    autodetected_encoding: TextStringEncoding | None = None
     """
     Autodetected encoding when parsing the file.
     """
 
-    force_output_encoding: Optional[TextStringEncoding] = None
+    force_output_encoding: TextStringEncoding | None = None
     """
     Output encoding to use when serialising the string.
     The default is to try PDFDocEncoding first, and fall back to UTF-16BE.
@@ -1181,7 +1181,7 @@ class NameObject(str, PdfObject):
                 or not (0x21 <= cur_byte <= 0x7E)
                 or not is_regular_character(cur_byte)
             ):
-                stream.write('#{:X}'.format(cur_byte).encode('ascii'))
+                stream.write(f'#{cur_byte:X}'.encode('ascii'))
             else:
                 # no convenient syntax for writing a single byte...
                 as_bytes = bytes((cur_byte,))
@@ -1239,7 +1239,7 @@ def _maybe_read_stream_payload(stream, data, handler):
             else:
                 raise PdfReadError(
                     "Unable to find 'endstream' marker after "
-                    "stream at byte %s." % hex(orig_endstream_pos)
+                    f"stream at byte {hex(orig_endstream_pos)}."
                 )
     else:
         stream.seek(pos)
@@ -1266,7 +1266,7 @@ class DictionaryObject(dict, PdfObject):
 
     def raw_get(
         self,
-        key: Union[NameObject, str],
+        key: NameObject | str,
         decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT,
     ):
         """
@@ -1372,8 +1372,8 @@ class DictionaryObject(dict, PdfObject):
         tmp = stream.read(2)
         if tmp != b"<<":
             raise PdfReadError(
-                "Dictionary read error at byte 0x%s: "
-                "stream must begin with '<<'" % hex(stream.tell())
+                f"Dictionary read error at byte 0x{hex(stream.tell())}: "
+                "stream must begin with '<<'"
             )
         data = {}
         handler = container_ref.get_pdf_handler()
@@ -1387,8 +1387,7 @@ class DictionaryObject(dict, PdfObject):
                 key = NameObject.read_from_stream(stream)
             except Exception as ex:
                 raise PdfReadError(
-                    "Failed to read dictionary key at byte 0x%s; expected PDF name"
-                    % hex(stream.tell())
+                    f"Failed to read dictionary key at byte 0x{hex(stream.tell())}; expected PDF name"
                 ) from ex
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
@@ -1400,7 +1399,7 @@ class DictionaryObject(dict, PdfObject):
             else:
                 err = (
                     "Multiple definitions in dictionary at byte "
-                    "%s for key %s" % (hex(stream.tell()), key)
+                    f"{hex(stream.tell())} for key {key}"
                 )
                 if handler.strict:
                     raise PdfStrictReadError(err)
@@ -1471,9 +1470,9 @@ class StreamObject(DictionaryObject):
 
     def __init__(
         self,
-        dict_data: Optional[dict] = None,
-        stream_data: Optional[bytes] = None,
-        encoded_data: Optional[bytes] = None,
+        dict_data: dict | None = None,
+        stream_data: bytes | None = None,
+        encoded_data: bytes | None = None,
         handler: Optional['SecurityHandler'] = None,
     ):
         super().__init__(dict_data)
@@ -1546,7 +1545,7 @@ class StreamObject(DictionaryObject):
             pdf_name('/Crypt'), params=params, allow_duplicates=True
         )
 
-    def _filters(self) -> Iterator[Tuple[str, Optional[dict]]]:
+    def _filters(self) -> Iterator[tuple[str, dict | None]]:
         try:
             filter_arr = self[pdf_name('/Filter')]
         except KeyError:
@@ -1605,7 +1604,7 @@ class StreamObject(DictionaryObject):
                 yield decoder, params
             except KeyError:
                 raise NotImplementedError(
-                    "Filters of type %s are not supported." % filter_type
+                    f"Filters of type {filter_type} are not supported."
                 )
 
     def strip_filters(self):
@@ -1659,7 +1658,7 @@ class StreamObject(DictionaryObject):
         return self._encoded_data
 
     def apply_filter(
-        self, filter_name, params=None, allow_duplicates: Optional[bool] = True
+        self, filter_name, params=None, allow_duplicates: bool | None = True
     ):
         """
         Apply a new filter to this stream. This filter will be prepended
@@ -2116,7 +2115,7 @@ class DecryptedObjectProxy(PdfObject):
 
     def __init__(self, raw_object: PdfObject, handler):
         self.raw_object = raw_object
-        self._decrypted: Optional[PdfObject] = None
+        self._decrypted: PdfObject | None = None
         self.handler = handler
 
     @property
@@ -2145,9 +2144,7 @@ class DecryptedObjectProxy(PdfObject):
                 "Proxyable objects must have a container ref pointing to a "
                 f"numbered object, not '{container_ref}'."
             )  # pragma: nocover
-        if isinstance(obj, ByteStringObject) or isinstance(
-            obj, TextStringObject
-        ):
+        if isinstance(obj, (ByteStringObject, TextStringObject)):
             cf = handler.get_string_filter()
             local_key = cf.derive_object_key(
                 container_ref.idnum, container_ref.generation
@@ -2165,7 +2162,7 @@ class DecryptedObjectProxy(PdfObject):
             else:
                 decrypted = DictionaryObject(decrypted_entries)
         elif isinstance(obj, ArrayObject):
-            decrypted_map = map(lambda v: proxy_encrypted_obj(v, handler), obj)
+            decrypted_map = (proxy_encrypted_obj(v, handler) for v in obj)
             decrypted = ArrayObject(decrypted_map)
         else:  # pragma: nocover
             raise TypeError(f'Object of type {type(obj)} is not proxyable.')

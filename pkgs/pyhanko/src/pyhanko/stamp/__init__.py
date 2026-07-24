@@ -24,6 +24,7 @@ __all__ = [
     "BaseStamp",
     "BaseStampStyle",
     "CoordinateSystem",
+    "NoOpStampStyle",
     "QRPosition",
     "QRStamp",
     "QRStampStyle",
@@ -31,7 +32,6 @@ __all__ = [
     "StaticStampStyle",
     "TextStamp",
     "TextStampStyle",
-    "NoOpStampStyle",
     "qr_stamp_file",
     "text_stamp_file",
 ]

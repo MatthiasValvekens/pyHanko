@@ -1,8 +1,8 @@
 import hashlib
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import field as data_field
-from typing import Iterable, Optional
 
 from asn1crypto import crl as asn1_crl
 from asn1crypto import ocsp as asn1_ocsp
@@ -97,7 +97,7 @@ class DocumentSecurityStore:
 
     def __init__(
         self,
-        writer: Optional[BasePdfFileWriter],
+        writer: BasePdfFileWriter | None,
         certs=None,
         ocsps=None,
         crls=None,
@@ -189,7 +189,7 @@ class DocumentSecurityStore:
         :return:
             A name object to put into the DSS.
         """
-        ident = hashlib.sha1(contents).digest().hex().upper()
+        ident = hashlib.sha1(contents).hexdigest().upper()
         return pdf_name('/' + ident)
 
     def register_vri(self, identifier, *, certs=(), ocsps=(), crls=()):
@@ -486,7 +486,7 @@ class DocumentSecurityStore:
         validation_context=None,
         force_write: bool = False,
         embed_roots: bool = True,
-        file_credential: Optional[SerialisedCredential] = None,
+        file_credential: SerialisedCredential | None = None,
         strict: bool = True,
     ):
         """

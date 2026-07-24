@@ -1,8 +1,8 @@
 import logging
 import zoneinfo
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import datetime
-from typing import FrozenSet, Iterable, List, Optional, Set, Tuple, Union
 
 from asn1crypto import x509
 from pyhanko.sign.ades import qualified_asn1
@@ -53,8 +53,6 @@ UNQUALIFIED = QualifiedStatus(
 
 class QualificationPolicyError(SignatureValidationError):
     """Error triggered by a qualification policy violation."""
-
-    pass
 
 
 class QualificationAssessor:
@@ -120,7 +118,7 @@ class QualificationAssessor:
         prelim_status: QualifiedStatus,
         qualifications: Iterable[Qualification],
     ):
-        applicable_qualifiers: Set[Qualifier] = set()
+        applicable_qualifiers: set[Qualifier] = set()
         for qualification in qualifications:
             if not qualification.criteria_list.matches(cert):
                 continue
@@ -132,7 +130,7 @@ class QualificationAssessor:
     @staticmethod
     def _final_status(
         prelim_status: QualifiedStatus,
-        applicable_qualifiers: FrozenSet[Qualifier],
+        applicable_qualifiers: frozenset[Qualifier],
     ):
         # TODO explicitly check consistency / contradictory qualifiers
         # (for now we just use conservative defaults)
@@ -158,9 +156,7 @@ class QualificationAssessor:
             qc_type = prelim_status.qc_type
 
         key_mgmt: QcPrivateKeyManagementType
-        if not is_qualified:
-            key_mgmt = QcPrivateKeyManagementType.UNKNOWN
-        elif (
+        if not is_qualified or (
             Qualifier.NO_SSCD in applicable_qualifiers
             or Qualifier.NO_QSCD in applicable_qualifiers
         ):
@@ -181,7 +177,7 @@ class QualificationAssessor:
         )
 
     def check_entity_cert_qualified(
-        self, path: ValidationPath, moment: Optional[datetime] = None
+        self, path: ValidationPath, moment: datetime | None = None
     ) -> QualificationResult:
         """
         Evaluate the qualified status of a certificate (given a specific
@@ -222,8 +218,8 @@ class QualificationAssessor:
             elif PRE_EIDAS_QCP_POLICY in policy_oids:
                 prelim_status = replace(prelim_status, qualified=True)
 
-        statuses_found: List[
-            Tuple[QualifiedServiceInformation, QualifiedStatus]
+        statuses_found: list[
+            tuple[QualifiedServiceInformation, QualifiedStatus]
         ] = []
         for sd in self._registry.applicable_tsps_on_path(path, reference_time):
             # For this subtlety, see the hanging para in the beginning of
@@ -236,7 +232,7 @@ class QualificationAssessor:
             ):
                 statuses_found.append((sd, putative_status))
 
-        uniq_statuses = set(st for _, st in statuses_found)
+        uniq_statuses = {st for _, st in statuses_found}
         if len(statuses_found) == 1:
             # happy path
             return QualificationResult(
@@ -299,7 +295,7 @@ def enforce_requirements(
         service_type_uri = (
             qualification_result.service_definition.base_info.service_type
         )
-        service_type: Union[str, TrustedServiceType]
+        service_type: str | TrustedServiceType
         if isinstance(requirements.require_service_type, str):
             service_type = service_type_uri
         else:

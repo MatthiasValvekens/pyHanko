@@ -1,5 +1,4 @@
 import logging
-from typing import Optional, Tuple
 
 import click
 from pyhanko.sign import fields
@@ -35,14 +34,13 @@ def _index_page(page):
             return page_ix
     except ValueError:
         raise click.ClickException(
-            "Sig field parameter PAGE should be a nonzero integer, "
-            "not %s." % page
+            f"Sig field parameter PAGE should be a nonzero integer, not {page}."
         )
 
 
 def parse_field_location_spec(
     spec: str, require_full_spec: bool = True
-) -> Tuple[str, Optional[fields.SigFieldSpec]]:
+) -> tuple[str, fields.SigFieldSpec | None]:
     try:
         page, box, name = spec.split('/')
     except ValueError:

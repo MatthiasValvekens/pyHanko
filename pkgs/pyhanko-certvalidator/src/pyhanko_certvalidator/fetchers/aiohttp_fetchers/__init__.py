@@ -14,7 +14,7 @@ __all__ = ['AIOHttpFetcherBackend']
 class AIOHttpFetcherBackend(FetcherBackend):
     def __init__(
         self,
-        session: Optional[aiohttp.ClientSession] = None,
+        session: aiohttp.ClientSession | None = None,
         per_request_timeout=10,
     ):
         self.session = session or LazySession()

@@ -1,9 +1,8 @@
-# coding: utf-8
 import json
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable, List, Optional, Type
 
 import pytest
 from asn1crypto import crl, ocsp, x509
@@ -148,7 +147,7 @@ ERR_CLASSES = {
 
 @dataclass(frozen=True)
 class PKITSTestCaseErrorResult:
-    err_class: Type[Exception]
+    err_class: type[Exception]
     msg_regex: str
 
 
@@ -292,24 +291,24 @@ def test_multitasking_ocsp():
 @dataclass(frozen=True)
 class OCSPTestCase:
     name: str
-    roots: List[x509.Certificate]
+    roots: list[x509.Certificate]
     cert: x509.Certificate
-    ocsps: List[ocsp.OCSPResponse]
+    ocsps: list[ocsp.OCSPResponse]
     path_len: int
     moment: datetime
-    other_certs: List[x509.Certificate] = field(default_factory=list)
-    expected_error: Optional[PKITSTestCaseErrorResult] = None
+    other_certs: list[x509.Certificate] = field(default_factory=list)
+    expected_error: PKITSTestCaseErrorResult | None = None
 
     @classmethod
     def from_json(cls, obj: dict):
         roots = [load_cert_object('openssl-ocsp', obj['root'])]
-        kwargs = dict(
-            name=obj['name'],
-            cert=load_cert_object('openssl-ocsp', obj['cert']),
-            path_len=int(obj['path_len']),
-            moment=datetime.fromisoformat(obj['moment']),
-            roots=roots,
-        )
+        kwargs = {
+            "name": obj['name'],
+            "cert": load_cert_object('openssl-ocsp', obj['cert']),
+            "path_len": int(obj['path_len']),
+            "moment": datetime.fromisoformat(obj['moment']),
+            "roots": roots,
+        }
         kwargs['ocsps'] = [
             load_openssl_ors(filename) for filename in obj['ocsps']
         ]
@@ -388,14 +387,14 @@ class CannedTestInfo:
 class PKITSTestCase:
     test_info: CannedTestInfo
     cert: x509.Certificate
-    roots: List[x509.Certificate]
-    crls: List[crl.CertificateList]
+    roots: list[x509.Certificate]
+    crls: list[crl.CertificateList]
     path_len: int
-    path: Optional[ValidationPath] = None
+    path: ValidationPath | None = None
     check_revocation: bool = True
-    other_certs: List[x509.Certificate] = field(default_factory=list)
-    expected_error: Optional[PKITSTestCaseErrorResult] = None
-    pkix_params: Optional[PKIXValidationParams] = None
+    other_certs: list[x509.Certificate] = field(default_factory=list)
+    expected_error: PKITSTestCaseErrorResult | None = None
+    pkix_params: PKIXValidationParams | None = None
 
     @classmethod
     def from_json(cls, obj: dict):
@@ -404,17 +403,17 @@ class PKITSTestCase:
         if 'crls' in obj:
             crls.extend(load_nist_crl(crl_path) for crl_path in obj['crls'])
         cert = load_nist_cert(obj['cert'])
-        kwargs = dict(
-            test_info=CannedTestInfo(
+        kwargs = {
+            "test_info": CannedTestInfo(
                 test_id=int(obj['id']),
                 test_name=obj['name'],
             ),
-            cert=cert,
-            path_len=int(obj['path_len']),
-            check_revocation=bool(obj.get('revocation', True)),
-            roots=[root],
-            crls=crls,
-        )
+            "cert": cert,
+            "path_len": int(obj['path_len']),
+            "check_revocation": bool(obj.get('revocation', True)),
+            "roots": [root],
+            "crls": crls,
+        }
 
         kwargs['crls'] = crls
         if 'other_certs' in obj:
@@ -570,11 +569,11 @@ def test_nist_pkits_with_simulated_crl_downloads(test_case: PKITSTestCase):
 class PKITSUserNoticeTestCase:
     test_info: CannedTestInfo
     cert: x509.Certificate
-    roots: List[x509.Certificate]
-    crls: List[crl.CertificateList]
+    roots: list[x509.Certificate]
+    crls: list[crl.CertificateList]
     notice: str
-    other_certs: List[x509.Certificate] = field(default_factory=list)
-    pkix_params: Optional[PKIXValidationParams] = None
+    other_certs: list[x509.Certificate] = field(default_factory=list)
+    pkix_params: PKIXValidationParams | None = None
 
     @classmethod
     def from_json(cls, obj: dict):
@@ -582,16 +581,16 @@ class PKITSUserNoticeTestCase:
         crls = [load_nist_crl('TrustAnchorRootCRL.crl')]
         if 'crls' in obj:
             crls.extend(load_nist_crl(crl_path) for crl_path in obj['crls'])
-        kwargs = dict(
-            test_info=CannedTestInfo(
+        kwargs = {
+            "test_info": CannedTestInfo(
                 test_id=int(obj['id']),
                 test_name=obj['name'],
             ),
-            cert=load_nist_cert(obj['cert']),
-            roots=roots,
-            crls=crls,
-            notice=obj['notice'],
-        )
+            "cert": load_nist_cert(obj['cert']),
+            "roots": roots,
+            "crls": crls,
+            "notice": obj['notice'],
+        }
 
         kwargs['crls'] = crls
         if 'other_certs' in obj:
@@ -710,8 +709,6 @@ class MockRequestsCertificateFetcher(
         ('root', 'end', 'middle'),
         ('middle', 'root', 'end'),
         ('middle', 'end', 'root'),
-        ('root', 'end', 'middle'),
-        ('root', 'middle', 'end'),
     ],
 )
 @pytest.mark.asyncio

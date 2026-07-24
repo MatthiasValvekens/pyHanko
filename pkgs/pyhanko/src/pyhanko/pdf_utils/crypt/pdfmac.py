@@ -1,7 +1,7 @@
 import os
 import secrets
 from hmac import compare_digest
-from typing import Any, Dict, FrozenSet, Optional, Tuple, Type
+from typing import Any
 
 from asn1crypto import algos, cms, core
 from asn1crypto.core import VOID
@@ -106,7 +106,7 @@ class PdfMacTokenHandler:
         file_encryption_key: bytes,
         kdf_salt: bytes,
         auth_data: cms.AuthenticatedData,
-        allowed_mds: FrozenSet[str] = ALLOWED_MD_ALGS,
+        allowed_mds: frozenset[str] = ALLOWED_MD_ALGS,
     ):
         # First, check the declared MAC and digesting algorithms used
         mac_algo_obj: algos.HmacAlgorithm = auth_data['mac_algorithm']
@@ -180,7 +180,7 @@ class PdfMacTokenHandler:
 
     def _get_mac_keying_info(
         self, dry_run: bool
-    ) -> Tuple[bytes, cms.RecipientInfo]:
+    ) -> tuple[bytes, cms.RecipientInfo]:
         # Generate the actual MAC key, encrypt it and package it up in a PWRI
         if dry_run:
             mac_key = bytes(32)
@@ -208,9 +208,9 @@ class PdfMacTokenHandler:
         return mac_key, cms.RecipientInfo({'pwri': pwri})
 
     def _format_message(
-        self, document_digest: bytes, signature_digest: Optional[bytes]
-    ) -> Tuple[bytes, bytes]:
-        message_kwargs: Dict[str, Any] = {'data_digest': document_digest}
+        self, document_digest: bytes, signature_digest: bytes | None
+    ) -> tuple[bytes, bytes]:
+        message_kwargs: dict[str, Any] = {'data_digest': document_digest}
         if signature_digest is not None:
             message_kwargs['signature_digest'] = signature_digest
         message_kwargs['version'] = 0
@@ -260,7 +260,7 @@ class PdfMacTokenHandler:
         self,
         *,
         document_digest: bytes,
-        signature_digest: Optional[bytes],
+        signature_digest: bytes | None,
         dry_run: bool = False,
     ) -> cms.ContentInfo:
         mac_key, ri = self._get_mac_keying_info(dry_run=dry_run)
@@ -411,7 +411,7 @@ class PdfMacTokenHandler:
         *,
         auth_data: cms.AuthenticatedData,
         document_digest: bytes,
-        signature_digest: Optional[bytes],
+        signature_digest: bytes | None,
     ):
         encap_content = self._validate_and_extract_encap_content(auth_data)
 
@@ -423,7 +423,7 @@ class PdfMacTokenHandler:
 def _validate_pdf_mac_integrity_info(
     int_info: PdfMacIntegrityInfo,
     document_digest: bytes,
-    signature_digest: Optional[bytes],
+    signature_digest: bytes | None,
 ):
     claimed_data_digest = int_info['data_digest'].native
     if claimed_data_digest != document_digest:
@@ -513,7 +513,7 @@ def _extract_standalone_mac(
     return mac_ci
 
 
-def _extract_mac_in_sig(sig_dict, file_len) -> Tuple[cms.ContentInfo, bytes]:
+def _extract_mac_in_sig(sig_dict, file_len) -> tuple[cms.ContentInfo, bytes]:
     try:
         sig_bytes = extract_contents(sig_dict)
     except (KeyError, AttributeError, misc.PdfReadError):
@@ -549,8 +549,8 @@ def _extract_mac_in_sig(sig_dict, file_len) -> Tuple[cms.ContentInfo, bytes]:
 
 def validate_pdf_mac(
     reader: PdfFileReader,
-    allowed_mds: FrozenSet[str] = ALLOWED_MD_ALGS,
-    handler_cls: Type[PdfMacTokenHandler] = PdfMacTokenHandler,
+    allowed_mds: frozenset[str] = ALLOWED_MD_ALGS,
+    handler_cls: type[PdfMacTokenHandler] = PdfMacTokenHandler,
 ):
     try:
         ac_dict = reader.trailer_view.raw_get('/AuthCode')

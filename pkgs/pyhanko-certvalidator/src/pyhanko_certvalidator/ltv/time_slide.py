@@ -1,6 +1,6 @@
 import asyncio
+from collections.abc import Iterable
 from datetime import datetime, timedelta
-from typing import Iterable, List, Optional, Set, Tuple
 
 from asn1crypto import algos, keys, x509
 
@@ -44,7 +44,7 @@ async def ades_gather_prima_facie_revinfo(
     revinfo_manager: RevinfoManager,
     control_time: datetime,
     revocation_checking_rule: RevocationCheckingRule,
-) -> Tuple[List[CRLOfInterest], List[OCSPResponseOfInterest]]:
+) -> tuple[list[CRLOfInterest], list[OCSPResponseOfInterest]]:
     """
     Gather potentially relevant revocation information for the leaf
     certificate of a candidate validation path.
@@ -160,10 +160,10 @@ def _update_control_time_for_unrevoked(
 
 
 def _update_control_time(
-    revoked_date: Optional[datetime],
+    revoked_date: datetime | None,
     control_time: datetime,
     revinfo_container: RevinfoContainer,
-    algo_policy: Optional[AlgorithmUsagePolicy],
+    algo_policy: AlgorithmUsagePolicy | None,
     issuer_public_key: keys.PublicKeyInfo,
     val_proc_state: ValProcState,
 ):
@@ -187,7 +187,7 @@ async def _time_slide(
     init_control_time: datetime,
     revinfo_manager: RevinfoManager,
     rev_trust_policy: CertRevTrustPolicy,
-    algo_usage_policy: Optional[AlgorithmUsagePolicy],
+    algo_usage_policy: AlgorithmUsagePolicy | None,
     # TODO use policy objects
     time_tolerance: timedelta,
     cert_stack: ConsList[bytes],
@@ -263,9 +263,9 @@ async def _time_slide(
             # the control time accordingly
             # don't bother checking issuers that already appear
             # in the chain of trust that we're currently looking into
-            sub_path_skip_list: Set[bytes] = set(new_cert_stack) | set(
+            sub_path_skip_list: set[bytes] = set(new_cert_stack) | {
                 cert.dump() for cert in current_path
-            )
+            }
             sub_path_control_times = await asyncio.gather(
                 *(
                     _time_slide(
@@ -288,7 +288,7 @@ async def _time_slide(
             control_time = min([control_time, *sub_path_control_times])
 
             for candidate_crl_path in sub_paths:
-                revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
+                revoked_date, _revoked_reason = _check_cert_on_crl_and_delta(
                     crl_issuer=candidate_crl_path.path.leaf,
                     cert=cert,
                     certificate_list_cont=crl_of_interest.crl,
@@ -405,7 +405,7 @@ async def time_slide(
     init_control_time: datetime,
     revinfo_manager: RevinfoManager,
     rev_trust_policy: CertRevTrustPolicy,
-    algo_usage_policy: Optional[AlgorithmUsagePolicy],
+    algo_usage_policy: AlgorithmUsagePolicy | None,
     time_tolerance: timedelta,
 ) -> datetime:
     """

@@ -1,8 +1,9 @@
 import abc
 import enum
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, List, Optional, TypeVar, Union
+from typing import TypeVar, Union
 
 from asn1crypto import algos, crl, ocsp
 
@@ -83,13 +84,13 @@ class RevinfoUsability:
     The rating assigned.
     """
 
-    last_usable_at: Optional[datetime] = None
+    last_usable_at: datetime | None = None
     """
     The last date at which the revocation information could have been
     considered usable, if applicable.
     """
 
-    compared_to: Optional[datetime] = None
+    compared_to: datetime | None = None
     """
     Time to which the ``last_usable_at`` time was compared.
     """
@@ -119,7 +120,7 @@ class RevinfoContainer(IssuedItemContainer, abc.ABC):
     @property
     def revinfo_sig_mechanism_used(
         self,
-    ) -> Optional[algos.SignedDigestAlgorithm]:
+    ) -> algos.SignedDigestAlgorithm | None:
         """
         Extract the signature mechanism used to guarantee the authenticity
         of the revocation information, if applicable.
@@ -130,7 +131,7 @@ class RevinfoContainer(IssuedItemContainer, abc.ABC):
 RevInfoType = TypeVar('RevInfoType', bound=RevinfoContainer)
 
 
-def sort_freshest_first(lst: Iterable[RevInfoType]) -> List[RevInfoType]:
+def sort_freshest_first(lst: Iterable[RevInfoType]) -> list[RevInfoType]:
     """
     Sort a list of revocation information containers in freshest-first order.
 
@@ -167,8 +168,8 @@ def _freshness_delta(policy, this_update, next_update, time_tolerance):
 
 
 def _judge_revinfo(
-    this_update: Optional[datetime],
-    next_update: Optional[datetime],
+    this_update: datetime | None,
+    next_update: datetime | None,
     policy: CertRevTrustPolicy,
     timing_params: ValidationTimingParams,
 ) -> RevinfoUsability:
@@ -251,7 +252,7 @@ def _judge_revinfo(
 
 def _extract_basic_ocsp_response(
     ocsp_response,
-) -> Optional[ocsp.BasicOCSPResponse]:
+) -> ocsp.BasicOCSPResponse | None:
     # Make sure that we get a valid response back from the OCSP responder
     status = ocsp_response['response_status'].native
     if status != 'successful':
@@ -284,7 +285,7 @@ class OCSPContainer(RevinfoContainer):
     @classmethod
     def load_multi(
         cls, ocsp_response: ocsp.OCSPResponse
-    ) -> List['OCSPContainer']:
+    ) -> list['OCSPContainer']:
         """
         Turn an OCSP response object into one or more :class:`.OCSPContainer`
         objects. If a :class:`.OCSPContainer` contains more than one
@@ -309,7 +310,7 @@ class OCSPContainer(RevinfoContainer):
         ]
 
     @property
-    def issuance_date(self) -> Optional[datetime]:
+    def issuance_date(self) -> datetime | None:
         cert_response = self.extract_single_response()
         if cert_response is None:
             return None
@@ -332,7 +333,7 @@ class OCSPContainer(RevinfoContainer):
             timing_params=timing_params,
         )
 
-    def extract_basic_ocsp_response(self) -> Optional[ocsp.BasicOCSPResponse]:
+    def extract_basic_ocsp_response(self) -> ocsp.BasicOCSPResponse | None:
         """
         Extract the ``BasicOCSPResponse``, assuming there is one (i.e.
         the OCSP response is a standard, non-error response).
@@ -340,7 +341,7 @@ class OCSPContainer(RevinfoContainer):
 
         return _extract_basic_ocsp_response(self.ocsp_response_data)
 
-    def extract_single_response(self) -> Optional[ocsp.SingleResponse]:
+    def extract_single_response(self) -> ocsp.SingleResponse | None:
         """
         Extract the unique ``SingleResponse`` value identified by the
         index.
@@ -358,7 +359,7 @@ class OCSPContainer(RevinfoContainer):
     @property
     def revinfo_sig_mechanism_used(
         self,
-    ) -> Optional[algos.SignedDigestAlgorithm]:
+    ) -> algos.SignedDigestAlgorithm | None:
         basic_resp = self.extract_basic_ocsp_response()
         return None if basic_resp is None else basic_resp['signature_algorithm']
 
@@ -385,7 +386,7 @@ class CRLContainer(RevinfoContainer):
         )
 
     @property
-    def issuance_date(self) -> Optional[datetime]:
+    def issuance_date(self) -> datetime | None:
         tbs_cert_list = self.crl_data['tbs_cert_list']
         return tbs_cert_list['this_update'].native
 
@@ -400,7 +401,7 @@ LegacyCompatOCSP = Union[bytes, ocsp.OCSPResponse, OCSPContainer]
 
 def process_legacy_crl_input(
     crls: Iterable[LegacyCompatCRL],
-) -> List[CRLContainer]:
+) -> list[CRLContainer]:
     """
     Internal function to process legacy CRL data into one or more
     :class:`.CRLContainer`.
@@ -430,7 +431,7 @@ def process_legacy_crl_input(
 
 def process_legacy_ocsp_input(
     ocsps: Iterable[LegacyCompatOCSP],
-) -> List[OCSPContainer]:
+) -> list[OCSPContainer]:
     """
     Internal function to process legacy OCSP data into one or more
     :class:`.OCSPContainer`.

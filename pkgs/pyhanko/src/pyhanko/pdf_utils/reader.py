@@ -14,8 +14,9 @@ import logging
 import os
 import re
 from collections import defaultdict
+from collections.abc import Generator
 from io import BytesIO
-from typing import BinaryIO, Dict, Generator, Optional, Set, Tuple, Union
+from typing import BinaryIO
 
 from . import generic, misc
 from .crypt import (
@@ -53,7 +54,7 @@ header_regex = re.compile(b'%PDF-(\\d).(\\d)')
 catalog_version_regex = re.compile(r'/(\d).(\d)')
 
 
-def parse_catalog_version(version_str) -> Optional[Tuple[int, int]]:
+def parse_catalog_version(version_str) -> tuple[int, int] | None:
     m = catalog_version_regex.match(str(version_str))
     if m is not None:
         major = int(m.group(1))
@@ -134,7 +135,7 @@ def process_data_at_eof(stream) -> int:
     return startxref
 
 
-def _read_header_version(stream: BinaryIO) -> Tuple[int, int]:
+def _read_header_version(stream: BinaryIO) -> tuple[int, int]:
     stream.seek(0)
     input_version = None
     header = misc.read_until_whitespace(stream, maxchars=20)
@@ -151,7 +152,7 @@ def _read_header_version(stream: BinaryIO) -> Tuple[int, int]:
 
 def _read_xrefs_and_trailer(
     stream: BinaryIO, handler_ref: PdfHandler, strict: bool
-) -> Tuple[XRefCache, XRefBuilder]:
+) -> tuple[XRefCache, XRefBuilder]:
     # start at the end to read the trailer & xref table
     stream.seek(-1, os.SEEK_END)
     # This needs to be recorded for incremental update purposes
@@ -188,12 +189,12 @@ class PdfFileReader(PdfHandler):
             problems and also causes some correctable problems to be fatal.
             Defaults to ``True``.
         """
-        self._security_handler: Optional[SecurityHandler] = None
+        self._security_handler: SecurityHandler | None = None
         self.strict = strict
-        self.resolved_objects: Dict[Tuple[int, int], generic.PdfObject] = {}
+        self.resolved_objects: dict[tuple[int, int], generic.PdfObject] = {}
         self._header_version = None
         self._input_version = None
-        self._historical_resolver_cache: Dict[int, HistoricalResolver] = {}
+        self._historical_resolver_cache: dict[int, HistoricalResolver] = {}
         self.stream = stream
         # first, read the header & PDF version number
         # (version number can be overridden in the document catalog later)
@@ -211,7 +212,7 @@ class PdfFileReader(PdfHandler):
             self._security_handler = SecurityHandler.build(self.encrypt_dict)
         return self._security_handler
 
-    def _xmp_meta_view(self) -> Optional[DocumentMetadata]:
+    def _xmp_meta_view(self) -> DocumentMetadata | None:
         try:
             from pyhanko.pdf_utils.metadata import xmp_xml
 
@@ -302,7 +303,7 @@ class PdfFileReader(PdfHandler):
                 )
 
                 if self.strict:
-                    raise PdfStrictReadError("Can't read object stream: %s" % e)
+                    raise PdfStrictReadError(f"Can't read object stream: {e}")
                 # Replace with null. Hopefully it's nothing important.
                 obj = generic.NullObject()
             if isinstance(obj, (generic.StreamObject, generic.IndirectObject)):
@@ -327,7 +328,7 @@ class PdfFileReader(PdfHandler):
             return generic.NullObject()
 
     @property
-    def encrypt_dict(self) -> Optional[generic.DictionaryObject]:
+    def encrypt_dict(self) -> generic.DictionaryObject | None:
         try:
             encrypt_ref = self.trailer.raw_get('/Encrypt')
         except KeyError:
@@ -357,7 +358,7 @@ class PdfFileReader(PdfHandler):
         ).reference
 
     @property
-    def document_id(self) -> Tuple[bytes, bytes]:
+    def document_id(self) -> tuple[bytes, bytes]:
         id_arr = self.trailer['/ID']
         return id_arr[0].original_bytes, id_arr[1].original_bytes
 
@@ -457,7 +458,7 @@ class PdfFileReader(PdfHandler):
     def _read_object(
         self,
         ref: generic.Reference,
-        marker: Union[int, ObjStreamRef, None],
+        marker: int | ObjStreamRef | None,
         never_decrypt: bool = False,
         as_metadata_stream: bool = False,
     ):
@@ -516,7 +517,7 @@ class PdfFileReader(PdfHandler):
             and not isinstance(marker, ObjStreamRef)
             and self.encrypted
         ):
-            sh: Optional[SecurityHandler] = self.security_handler
+            sh: SecurityHandler | None = self.security_handler
             assert sh is not None
             # make sure the object that lands in the cache is always
             # a proxy object
@@ -571,7 +572,7 @@ class PdfFileReader(PdfHandler):
         else:
             return prelim_auth_result
 
-    def decrypt(self, password: Union[str, bytes]) -> AuthResult:
+    def decrypt(self, password: str | bytes) -> AuthResult:
         """
         When using an encrypted PDF file with the standard PDF encryption
         handler, this function will allow the file to be decrypted.
@@ -714,7 +715,7 @@ class RawPdfPath:
     This class is internal API.
     """
 
-    def __init__(self, *path: Union[str, int]):
+    def __init__(self, *path: str | int):
         self.path = path
 
     def __len__(self):
@@ -725,7 +726,7 @@ class RawPdfPath:
 
     def _tag(self):
         # should give better hashing results
-        return tuple(map(lambda x: (isinstance(x, int), x), self.path))
+        return tuple((isinstance(x, int), x) for x in self.path)
 
     def __hash__(self):
         return hash(self._tag())
@@ -737,9 +738,9 @@ class RawPdfPath:
 
     def walk_nodes(
         self, from_obj, transparent_dereference=True
-    ) -> Generator[Tuple[Union[int, str, None], generic.PdfObject], None, None]:
+    ) -> Generator[tuple[int | str | None, generic.PdfObject], None, None]:
         current_obj = from_obj
-        elem: Union[int, str, None] = None
+        elem: int | str | None = None
         for ix, entry in enumerate(self.path):
             if not transparent_dereference:
                 yield elem, current_obj
@@ -864,19 +865,19 @@ class HistoricalResolver(PdfHandler):
         return view_from_info_dict(info_dict, strict=self.reader.strict)
 
     @property
-    def document_id(self) -> Tuple[bytes, bytes]:
+    def document_id(self) -> tuple[bytes, bytes]:
         id_arr = self._trailer['/ID']
         return id_arr[0].original_bytes, id_arr[1].original_bytes
 
     def __init__(self, reader: PdfFileReader, revision):
-        self.cache: Dict[generic.Reference, generic.PdfObject] = {}
+        self.cache: dict[generic.Reference, generic.PdfObject] = {}
         self.reader = reader
         self.revision = revision
         self._trailer = self.reader.trailer.flatten(self.revision)
         self._trailer.container_ref = generic.TrailerReference(self)
-        self._indirect_object_access_cache: Optional[
-            Dict[generic.Reference, Set[RawPdfPath]]
-        ] = None
+        self._indirect_object_access_cache: (
+            dict[generic.Reference, set[RawPdfPath]] | None
+        ) = None
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:
@@ -1025,7 +1026,7 @@ class HistoricalResolver(PdfHandler):
 
     def collect_dependencies(
         self, obj: generic.PdfObject, since_revision=None
-    ) -> Set[generic.Reference]:
+    ) -> set[generic.Reference]:
         """
         Collect all indirect references used by an object and its descendants.
 
@@ -1042,7 +1043,7 @@ class HistoricalResolver(PdfHandler):
         :return:
             A :class:`set` of :class:`~.generic.Reference` objects.
         """
-        result_set: Set[generic.Reference] = set()
+        result_set: set[generic.Reference] = set()
         self._collect_indirect_references(obj, result_set, since_revision)
         return result_set
 
@@ -1071,7 +1072,7 @@ class HistoricalResolver(PdfHandler):
             for v in obj:
                 self._collect_indirect_references(v, seen, since_revision)
 
-    def _get_usages_of_ref(self, ref: generic.Reference) -> Set[RawPdfPath]:
+    def _get_usages_of_ref(self, ref: generic.Reference) -> set[RawPdfPath]:
         cache = self._indirect_object_access_cache or {}
         try:
             return cache[ref]
@@ -1089,7 +1090,7 @@ class HistoricalResolver(PdfHandler):
         # We flatten everything when we're done
         def _compute_paths_to_refs(
             obj,
-            cur_path: misc.ConsList[Union[str, int]],
+            cur_path: misc.ConsList[str | int],
             seen_in_path: misc.ConsList[generic.Reference],
             *,
             is_page_tree,

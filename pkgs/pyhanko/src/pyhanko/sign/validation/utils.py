@@ -1,6 +1,5 @@
 import abc
 from datetime import datetime
-from typing import Optional
 
 from asn1crypto import algos, cms, keys
 from pyhanko_certvalidator.policy_decl import (
@@ -87,7 +86,7 @@ class CMSAlgorithmUsagePolicy(AlgorithmUsagePolicy, abc.ABC):
         self,
         signature_algo: algos.SignedDigestAlgorithm,
         message_digest_algo: algos.DigestAlgorithm,
-        moment: Optional[datetime],
+        moment: datetime | None,
     ) -> AlgorithmUsageConstraint:
         """
         Verify whether a digest algorithm is compatible with the digest
@@ -134,15 +133,15 @@ class _DefaultPolicyMixin(CMSAlgorithmUsagePolicy):
         self._policy = underlying_policy
 
     def digest_algorithm_allowed(
-        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+        self, algo: algos.DigestAlgorithm, moment: datetime | None
     ) -> AlgorithmUsageConstraint:
         return self._policy.digest_algorithm_allowed(algo, moment)
 
     def signature_algorithm_allowed(
         self,
         algo: algos.SignedDigestAlgorithm,
-        moment: Optional[datetime],
-        public_key: Optional[keys.PublicKeyInfo],
+        moment: datetime | None,
+        public_key: keys.PublicKeyInfo | None,
     ) -> AlgorithmUsageConstraint:
         return self._policy.signature_algorithm_allowed(
             algo, moment, public_key
