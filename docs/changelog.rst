@@ -6,6 +6,18 @@ Release history
 pyHanko
 -------
 
+.. _release-0.36.1:
+
+0.36.1
+======
+
+*Release date:* 2026-07-26
+
+
+No functional changes, this release adopts the new
+:ref:`attestation strategy <release-authenticity>`.
+
+
 .. _release-0.36.0:
 
 0.36.0
@@ -2672,6 +2684,18 @@ pyhanko-certvalidator
 ---------------------
 
 
+.. _certvalidator-release-0.31.4:
+
+0.31.4
+======
+
+*Release date:* 2026-07-26
+
+
+No functional changes, this release adopts the new
+:ref:`attestation strategy <release-authenticity>`.
+
+
 .. _certvalidator-release-0.31.3:
 
 0.31.3
@@ -3394,6 +3418,19 @@ The impact on the high-level API should be small to nonexistent, but caution whe
 -----------
 pyhanko-cli
 -----------
+
+
+.. _cli-release-0.4.2:
+
+0.4.2
+======
+
+*Release date:* 2026-07-26
+
+
+No functional changes, this release adopts the new
+:ref:`attestation strategy <release-authenticity>`.
+
 
 .. _cli-release-0.4.1:
 
