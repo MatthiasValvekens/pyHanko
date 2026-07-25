@@ -2671,6 +2671,17 @@ Initial release.
 pyhanko-certvalidator
 ---------------------
 
+
+.. _certvalidator-release-0.31.3:
+
+0.31.3
+======
+
+*Release date:* 2026-07-25
+
+No changes. Re-run to address a CI configuration issue.
+
+
 .. _certvalidator-release-0.31.2:
 
 0.31.2
