@@ -189,20 +189,14 @@ jobs:
     permissions:
       # we use PyPI's trusted publisher model -> expose identity token
       id-token: write
-      # we want to add the provenance bundle to the release on GitHub
-      contents: write
-      discussions: write
+      contents: read
+      actions: read
     steps:
     - name: Download dist artifacts
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: pyhanko-release-dist
         path: dist/
-    - name: Download provenance data
-      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: pyhanko-provenance
-        path: provenance/
     - name: Download release body
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
@@ -212,16 +206,40 @@ jobs:
       uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
       with:
         repository-url: ${{ vars.REPOSITORY_URL }}
-    - name: Create GitHub release
-      if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
-      with:
-        files: |
-          dist/*.whl
-          dist/*.tar.gz
-          provenance/provenance.sigstore.json
-        body_path: release-body/release.md
-        fail_on_unmatched_files: true
-        discussion_category_name: Announcements
-        prerelease: true
-        name: ${{ needs.extract-params.outputs.package }} ${{ needs.extract-params.outputs.version }} beta
+  publish-github-release:
+    name: Create GitHub release
+    needs: [extract-params, publish]
+    runs-on: ubuntu-latest
+    if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
+    permissions:
+      # we want to add the provenance bundle to the release on GitHub
+      contents: write
+      discussions: write
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pyhanko-release-dist
+          path: dist/
+      - name: Download provenance data
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pyhanko-provenance
+          path: provenance/
+      - name: Download release body
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-body
+          path: release-body
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            provenance/provenance.sigstore.json
+          body_path: release-body/release.md
+          fail_on_unmatched_files: true
+          discussion_category_name: Announcements
+          prerelease: true
+          name: ${{ needs.extract-params.outputs.package }} ${{ needs.extract-params.outputs.version }} beta
