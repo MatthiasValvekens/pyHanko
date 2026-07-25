@@ -184,45 +184,38 @@ script verifies the environment (together with the repository, ref and
 workflow(s)) against the signature, using the ``sigstore`` Python
 package directly.
 
-It works against either provenance source: a downloaded
-``provenance.sigstore.json`` bundle, or a response from PyPI's integrity API.
+It draws its provenance from either of the two attestation families described
+above -- the GitHub build provenance or the PyPI :pep:`740` attestations -- and
+can fetch each of them on your behalf, so no manual download step is required.
 
+Rather than spelling out the release tag by hand, pass the package name and
+version with ``--package``/``--version`` and let the script derive the expected
+source ref (adding the ``<package>/`` tag prefix for subprojects where needed).
+For the main ``pyhanko`` package, ``--package`` may be omitted.
 
-.. note::
-
-    The examples below show how to validate the provenance of a source tarball
-    of the main library (``pyhanko*.tar.gz``), but the process
-    is the same for wheels, also those built for other pyHanko components
-    (``pyhanko-certvalidator``, ``pyhanko-cli``)
-    in this repository.
-
-Against a downloaded ``provenance.sigstore.json`` bundle:
+The most convenient option is ``--all``, which runs both the GitHub
+build-provenance check and the PyPI provenance check, downloading each.
 
 .. code-block:: bash
 
     EXPECTED_VERSION=<version number goes here>
-    REPO=MatthiasValvekens/pyHanko
     uv sync --group provenance-check
-    uv run dev/attest_provenance.py pyhanko-$EXPECTED_VERSION.tar.gz \
-        --source-ref "refs/tags/v$EXPECTED_VERSION" \
-        --bundle provenance.sigstore.json
 
-Against PyPI's integrity API (download the provenance response first):
+    for artifact in pyhanko-$EXPECTED_VERSION-*.whl pyhanko-$EXPECTED_VERSION.tar.gz; do
+        uv run dev/attest_provenance.py "$artifact" \
+            --package pyhanko --version "$EXPECTED_VERSION" \
+            --all
+    done
 
-.. code-block:: bash
+The two sources can also be checked one at a time, with ``--gh-attestations``
+or ``--pypi-integrity``.
 
-    EXPECTED_VERSION=<version number goes here>
-    REPO=MatthiasValvekens/pyHanko
-    curl -sL \
-        "https://pypi.org/integrity/pyhanko/v$EXPECTED_VERSION/pyhanko-$EXPECTED_VERSION.tar.gz/provenance" \
-        -o provenance.json
-    uv sync --group provenance-check
-    uv run dev/attest_provenance.py pyhanko-$EXPECTED_VERSION.tar.gz \
-        --source-ref "refs/tags/v$EXPECTED_VERSION" \
-        --pypi-provenance provenance.json
+The GitHub attestation API is subject to rate limiting; export a
+``GITHUB_TOKEN`` to raise the limit if necessary.
 
-For subprojects other than ``pyhanko``, adjust the filenames and use a prefixed
-tag as the ``--source-ref`` (e.g. ``refs/tags/pyhanko-certvalidator/v$EXPECTED_VERSION``).
+For subprojects other than ``pyhanko``, adjust the filenames and pass the
+subproject as ``--package`` (e.g. ``--package pyhanko-certvalidator``); the
+prefixed release tag is derived automatically.
 
 
 Legacy releases
