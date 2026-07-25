@@ -225,10 +225,10 @@ async def bootstrap_lotl_signers(
         Index of the OJEU anchor to bootstrap against. Known OJEU anchors
         are bundled with this library. Defaults to the latest.
 
-         * Anchor 0 was sourced from  <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG>`_,
-         * Anchor 1 was sourced from <https://eur-lex.europa.eu/eli/C/2026/1944/oj>`_.
+         * Anchor 0 was sourced from  `<https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG>`_,
+         * Anchor 1 was sourced from `<https://eur-lex.europa.eu/eli/C/2026/1944/oj>`_ .
 
-        .. info::
+        .. note::
             At the time of writing, the LotL has been re-anchored once in its history.
 
     :return:
