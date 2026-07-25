@@ -6,6 +6,56 @@ Release history
 pyHanko
 -------
 
+.. _release-0.36.0:
+
+0.36.0
+======
+
+*Release date:* 2026-07-25
+
+
+Dependency changes
+------------------
+
+* Bump the minimal ``signxml`` version to ``5.1.0`` (in the ``[etsi]`` group)
+  to accommodate its point-in-time validation API.
+* Relax upper bound for ``uharfbuzz`` to ``<0.56.0``.
+* Drop the direct dependency on ``pyyaml``, which was no longer used.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+* Support signing with ML-DSA through the PKCS#11 signer.
+
+Validation
+^^^^^^^^^^
+
+* Realign the EU List of Trusted Lists anchor after its recent re-anchoring
+  by OJEU publication, and allow bootstrapping against a specific anchor.
+* Improve error messages for invalid trusted-list signatures.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+* Mass-apply linting fixes to comply with new ``ruff`` default ruleset.
+
+
+Bugs fixed
+----------
+
+* Tolerate space-padded offsets in classic cross-reference tables in
+  non-strict mode, and raise an explicit error for invalid xref operation
+  markers in strict mode.
+* Provide clearer errors when parsing malformed numbers in cross-reference
+  tables.
+* Fix unintended use of naive datetime in digest algorithm policy check.
+* Fix ``Configurable`` field introspection for PEP 604 union
+  annotations.
+
 
 .. _release-0.35.2:
 
@@ -2621,6 +2671,18 @@ Initial release.
 pyhanko-certvalidator
 ---------------------
 
+.. _certvalidator-release-0.31.2:
+
+0.31.2
+======
+
+*Release date:* 2026-07-25
+
+
+ * Mass-apply linting fixes to comply with new ``ruff`` default ruleset.
+ * Relax upper bound for ``aiohttp`` to ``<3.15``.
+
+
 .. _certvalidator-release-0.31.1:
 
 0.31.1
@@ -3321,6 +3383,18 @@ The impact on the high-level API should be small to nonexistent, but caution whe
 -----------
 pyhanko-cli
 -----------
+
+.. _cli-release-0.4.1:
+
+0.4.1
+======
+
+*Release date:* 2026-07-25
+
+
+* Support signing with ML-DSA through the PKCS#11 signer.
+* Mass-apply linting fixes to comply with new ``ruff`` default ruleset.
+
 
 .. _cli-release-0.4.0:
 
