@@ -53,7 +53,7 @@ The following are important to keep in mind:
  * The ``gh attestation verify`` flow below checks the repository, ref and
    workflow, but not the GitHub Actions deployment environment behind which the
    maintainer approval sits. That claim is signed too; see
-   :ref:`verifying-deployment-environment` for how to check it.
+   :ref:`one-stop-shop` for how to check it.
 
 Long story short, as long as you trust GitHub's security controls, these checks
 are appropriate.
@@ -121,7 +121,7 @@ result, including the provenance predicate.
 
 
 Attestations on PyPI
-====================
+--------------------
 
 PyHanko is published to PyPI using PyPI's trusted publisher model, and the
 publishing step also uploads :pep:`740` attestations for the distributions it
@@ -132,13 +132,13 @@ These attestations share the same trust root (Sigstore) and the same family of
 GitHub Actions OIDC identity as the build provenance described above.
 
 They can also be used to audit PyPI's trusted publisher mechanism,
-as described in :ref:`verifying-deployment-environment`.
+as described in :ref:`one-stop-shop`.
 
 
-.. _verifying-deployment-environment:
+.. _one-stop-shop:
 
-Verifying the deployment environment
-====================================
+Detailed build provenance auditing
+----------------------------------
 
 The pyHanko release pipeline signs its provenance from inside a GitHub Actions
 deployment environment. Deploying into that environment requires a manual
