@@ -6,6 +6,21 @@ Release history
 pyHanko
 -------
 
+.. _release-0.36.2:
+
+0.36.2
+======
+
+*Release date:* 2026-07-27
+
+
+Bugs fixed
+----------
+
+ * Prevent new signature fields from reusing old signature objects
+   during difference analysis.
+
+
 .. _release-0.36.1:
 
 0.36.1
