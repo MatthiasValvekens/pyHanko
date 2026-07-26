@@ -18,6 +18,7 @@ from pyhanko.pdf_utils.reader import (
     RawPdfPath,
 )
 from pyhanko.pdf_utils.writer import copy_into_new_writer
+from pyhanko.pdf_utils.xref import ObjectStream
 from pyhanko.sign import PdfTimeStamper, fields, signers
 from pyhanko.sign.diff_analysis import (
     DEFAULT_DIFF_POLICY,
@@ -2818,3 +2819,100 @@ def test_fieldmdp_include_does_not_lock_field_with_shared_name_prefix():
         status = validate_pdf_signature(sig, simple_v_context())
         assert status.docmdp_ok
         assert status.bottom_line
+
+
+@freeze_time('2020-11-01')
+def test_maliciously_recycled_sig_add_visible_field_approval():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    sp = fields.SigFieldSpec(
+        'EvilSig', box=(10, 74, 140, 134), empty_field_appearance=True
+    )
+    fields.append_signature_field(w, sp)
+
+    filled_value = next(
+        fields.enumerate_sig_fields(w, filled_status=True, with_name='Sig1')
+    )[1]
+
+    field = next(
+        fields.enumerate_sig_fields(w, filled_status=False, with_name='EvilSig')
+    )[2].get_object()
+    field['/V'] = filled_value
+    w.update_container(field)
+
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+
+    status = validate_pdf_signature(
+        r.embedded_signatures[0], simple_v_context()
+    )
+    assert not status.docmdp_ok
+    assert 'references an existing object' in str(status.diff_result)
+
+
+@freeze_time('2020-11-01')
+def test_recycled_phantom_sig_add_visible_field_approval():
+    # writer engineered to only serialise a phantom signature value object
+    # while skipping all form field updates
+    class HackedWriter(IncrementalPdfFileWriter):
+        sig_value_ref = None
+
+        def mark_update(self, obj_ref):
+            return
+
+        def add_object(
+            self, obj, obj_stream: ObjectStream | None = None, idnum=None
+        ):
+            ref = super().add_object(obj, obj_stream, idnum)
+            if (
+                isinstance(obj, generic.DictionaryObject)
+                and '/ByteRange' in obj
+            ):
+                self.sig_value_ref = ref
+            return ref
+
+    boobytrap_w = HackedWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    out = signers.sign_pdf(
+        boobytrap_w,
+        signers.PdfSignatureMetadata(field_name='PhantomSig'),
+        signer=FROM_CA,
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA,
+        in_place=True,
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    sp = fields.SigFieldSpec(
+        'EvilSig', box=(10, 74, 140, 134), empty_field_appearance=True
+    )
+    fields.append_signature_field(w, sp)
+
+    field = next(
+        fields.enumerate_sig_fields(w, filled_status=False, with_name='EvilSig')
+    )[2].get_object()
+    field['/V'] = generic.IndirectObject(
+        boobytrap_w.sig_value_ref.idnum, boobytrap_w.sig_value_ref.generation, w
+    )
+    w.update_container(field)
+
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+
+    status = validate_pdf_signature(
+        r.embedded_signatures[0], simple_v_context()
+    )
+    assert not status.docmdp_ok
+
+    assert 'references an existing object' in str(status.diff_result)

@@ -561,6 +561,13 @@ class SigFieldModificationRule(BaseFieldModificationRule):
     :class:`.ModificationLevel.LTA_UPDATES`, but in all other cases
     the modification level will be bumped to
     :class:`.ModificationLevel.FORM_FILLING`.
+
+    .. note::
+        :class:`.SigFieldModificationRule` also applies to newly created
+        signature fields and is complementary to :class:`.SigFieldCreationRule`
+        in the sense that the latter is about changes to the wider form
+        / annotation structure, while this rule deals with the internals
+        of the form field itself.
     """
 
     def check_form_field(
@@ -657,6 +664,12 @@ class SigFieldModificationRule(BaseFieldModificationRule):
             raise SuspiciousModification(
                 f"Value of signature field {fq_name} should be an indirect "
                 f"reference"
+            )
+        if not context.old.is_ref_unassignable(current_value_ref):
+            raise SuspiciousModification(
+                f"Value of signature field {fq_name} in revision {context.new.revision} "
+                f"is {current_value_ref}, which references an existing object "
+                f"in revision {context.old.revision}"
             )
 
         sig_obj = current_value_ref.get_object()
