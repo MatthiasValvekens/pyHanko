@@ -73,7 +73,7 @@ def _find_orphans(hist_rev: HistoricalResolver):
     # The candidate orphans are all the others
     candidate_orphans = set()
     for ref in new_refs:
-        if previous.is_ref_available(ref):
+        if previous.is_ref_unassignable(ref):
             # ref didn't exist in previous revision
             candidate_orphans.add(ref)
         else:

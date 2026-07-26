@@ -139,7 +139,7 @@ class MetadataUpdateRule(WhitelistRule):
             old_metadata_ref == new_metadata_ref
             and not self.always_refuse_stream_override
         )
-        if same_ref_ok or old.is_ref_available(new_metadata_ref):
+        if same_ref_ok or old.is_ref_unassignable(new_metadata_ref):
             yield ReferenceUpdate(
                 new_metadata_ref,
                 context_checked=Context.from_absolute(

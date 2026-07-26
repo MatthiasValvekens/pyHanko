@@ -1007,7 +1007,7 @@ class HistoricalResolver(PdfHandler):
     def object_streams_used(self):
         return self.reader.xrefs.object_streams_used_in(self.revision)
 
-    def is_ref_available(self, ref: generic.Reference) -> bool:
+    def is_ref_unassignable(self, ref: generic.Reference) -> bool:
         """
         Check if the reference in question was in scope for this revision.
         This call doesn't care about the specific semantics of free vs. used

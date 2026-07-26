@@ -65,7 +65,7 @@ def safe_whitelist(
     if old_ref == new_ref:
         assert_not_stream(new_ref.get_object())
         yield new_ref
-    elif old.is_ref_available(new_ref):
+    elif old.is_ref_unassignable(new_ref):
         yield new_ref
     else:
         raise SuspiciousModification(

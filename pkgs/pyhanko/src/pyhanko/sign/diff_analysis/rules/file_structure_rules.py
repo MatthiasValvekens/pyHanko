@@ -91,7 +91,7 @@ class ObjectStreamRule(WhitelistRule):
     ) -> Iterable[ReferenceUpdate]:
         # object streams are OK, but overriding object streams is not.
         for objstream_ref in new.object_streams_used():
-            if old.is_ref_available(objstream_ref):
+            if old.is_ref_unassignable(objstream_ref):
                 yield ReferenceUpdate(objstream_ref)
 
 
@@ -106,7 +106,7 @@ class XrefStreamRule(WhitelistRule):
         xrefs = new.reader.xrefs
         xref_meta = xrefs.get_xref_container_info(new.revision)
         xref_stm = xref_meta.stream_ref
-        if xref_stm is not None and old.is_ref_available(xref_stm):
+        if xref_stm is not None and old.is_ref_unassignable(xref_stm):
             yield ReferenceUpdate(xref_stm)
 
         # If this revision is followed by a hybrid one, then we must
@@ -124,5 +124,5 @@ class XrefStreamRule(WhitelistRule):
 
         if next_rev_data.hybrid is not None:
             hyb_xref_stm = next_rev_data.hybrid.meta_info.stream_ref
-            if hyb_xref_stm and old.is_ref_available(hyb_xref_stm):
+            if hyb_xref_stm and old.is_ref_unassignable(hyb_xref_stm):
                 yield ReferenceUpdate(hyb_xref_stm)

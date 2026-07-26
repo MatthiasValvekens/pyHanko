@@ -198,7 +198,7 @@ class DSSCompareRule(WhitelistRule):
             new_vri_dict = new_vri.raw_get(key)
             if isinstance(
                 new_vri_dict, generic.IndirectObject
-            ) and old.is_ref_available(new_vri_dict.reference):
+            ) and old.is_ref_unassignable(new_vri_dict.reference):
                 yield ReferenceUpdate(new_vri_dict.reference)
                 new_vri_dict = new_vri_dict.get_object()
             assert_not_stream(new_vri_dict)
@@ -230,7 +230,7 @@ class DSSCompareRule(WhitelistRule):
                 ts_ref = new_vri_dict.get_value_as_reference(
                     '/TS', optional=True
                 )
-                if ts_ref is not None and old.is_ref_available(ts_ref):
+                if ts_ref is not None and old.is_ref_unassignable(ts_ref):
                     yield ReferenceUpdate(ts_ref)
             except misc.IndirectObjectExpected:
                 pass
@@ -344,7 +344,7 @@ class SigFieldCreationRule(FieldMDPRule):
                 if visible
                 else ModificationLevel.LTA_UPDATES
             )
-            if context.old.is_ref_available(sigfield_ref):
+            if context.old.is_ref_unassignable(sigfield_ref):
                 yield (
                     mod_level,
                     FormUpdate(
@@ -384,7 +384,7 @@ class SigFieldCreationRule(FieldMDPRule):
                 old = context.old
                 if isinstance(
                     kids_arr_ref, generic.IndirectObject
-                ) and old.is_ref_available(kids_arr_ref.reference):
+                ) and old.is_ref_unassignable(kids_arr_ref.reference):
                     yield (
                         mod_level,
                         FormUpdate(
@@ -403,7 +403,7 @@ class SigFieldCreationRule(FieldMDPRule):
                 for kid in kid_refs:
                     if '/T' not in kid.get_object():
                         field_ref_reverse[kid] = fq_name
-                        if old.is_ref_available(kid):
+                        if old.is_ref_unassignable(kid):
                             yield (
                                 mod_level,
                                 FormUpdate(
@@ -1056,7 +1056,7 @@ def _walk_page_tree_annots(
             )
             if new_annots_ref and (
                 old_annots_ref == new_annots_ref
-                or old.is_ref_available(new_annots_ref)
+                or old.is_ref_unassignable(new_annots_ref)
             ):
                 # current /Annots entry is an indirect reference
 
