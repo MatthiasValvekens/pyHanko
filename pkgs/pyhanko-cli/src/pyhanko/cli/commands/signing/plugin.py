@@ -33,7 +33,8 @@ def _ensure_field_visible(
             field=field_ref.get_object()
         )
         w, h = form_tools.annot_width_height(sig_annot)
-        if not w or not h:
+        visible = bool(w and h)
+        if not visible:
             raise click.ClickException(
                 f"{prefix}, but the field '{fq_name}' in the PDF is not a "
                 f"visible one. Please specify another field name if you "
