@@ -409,6 +409,13 @@ pki-architectures:
   testing-ca-ed25519:
     template: testing-ca
     keyset: testing-ca-ed25519
+    certs:
+      signer1-indefinite:
+        subject: signer1
+        template: signer1
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "9999-12-31T23:59:59+0000"
     services:
       time-stamping:
         tsa:

@@ -953,3 +953,18 @@ async def test_basic_certificate_validator_root_expiration_unquestioned(moment):
     path = ValidationPath(trust_anchor=anchor, interm=[], leaf=None)
 
     await async_validate_path(context, path)
+
+
+@pytest.mark.asyncio
+async def test_extreme_not_after():
+    moment = datetime(3124, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    cert = load_cert_object('testing-ca-ed25519', 'signer1-indefinite.cert.pem')
+    ca = load_cert_object('testing-ca-ed25519', 'interm.cert.pem')
+    anchor = CertTrustAnchor(cert=ca)
+
+    context = ValidationContext(
+        trust_manager=SimpleTrustManager.build([anchor]), moment=moment
+    )
+    path = ValidationPath(trust_anchor=anchor, interm=[], leaf=cert)
+
+    await async_validate_path(context, path)

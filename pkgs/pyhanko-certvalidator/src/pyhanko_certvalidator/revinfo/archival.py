@@ -240,9 +240,9 @@ def _judge_revinfo(
 
         retroactive = policy.retroactive_revinfo
 
-        if not retroactive and validation_time < this_update - time_tolerance:
+        if not retroactive and validation_time + time_tolerance < this_update:
             return RevinfoUsability(RevinfoUsabilityRating.TOO_NEW)
-        if validation_time > next_update + time_tolerance:
+        if validation_time - time_tolerance > next_update:
             return RevinfoUsability(
                 RevinfoUsabilityRating.STALE,
                 compared_to=validation_time,

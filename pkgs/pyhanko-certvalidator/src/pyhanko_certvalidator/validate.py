@@ -1170,11 +1170,11 @@ async def intl_validate_path(
 def _check_validity(
     validity: Validity, moment, tolerance, proc_state: ValProcState
 ):
-    if moment < validity['not_before'].native - tolerance:
+    if moment + tolerance < validity['not_before'].native:
         raise NotYetValidError.format(
             valid_from=validity['not_before'].native, proc_state=proc_state
         )
-    if moment > validity['not_after'].native + tolerance:
+    if moment - tolerance > validity['not_after'].native:
         raise ExpiredError.format(
             expired_dt=validity['not_after'].native, proc_state=proc_state
         )

@@ -35,7 +35,7 @@ def test_build_paths_custom_ca_certs():
     assert 2 == len(path)
     assert [item.subject.sha1 for item in path] == [
         b'Xm\xb3f\xac[T\x13\xbaP$\x13\xfb\x93L\xf0\x9ex\x83V',
-        b'\x8d\x19\xc0\xcdx\x84[\x7f\xe3/$\x86B\xfc\x83\xd9Kzm\x97',
+        b'\x0c\x08\xeaK\x9f\xe3\x10\xcc*\x11rF\x8d\x99\xbf\xf0\xd51\xf6A',
     ]
 
 
