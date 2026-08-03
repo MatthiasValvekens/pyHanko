@@ -185,11 +185,30 @@ async def init_trust_manager(
         if settings.trust_replace:
             trust_manager = SimpleTrustManager.build(trust_roots=trust_certs)
         else:
+            _warn_system_trust_fallback(configured=bool(trust_certs))
             trust_manager = SimpleTrustManager.build(
                 extra_trust_roots=trust_certs
             )
 
     return trust_manager
+
+
+def _warn_system_trust_fallback(configured: bool):
+    if configured:
+        logger.warning(
+            "The configured trust roots are being combined with the operating "
+            "system's trust list. This fallback is deprecated and will be "
+            "removed in a future release, when the behaviour of "
+            "'--trust-replace' becomes the default."
+        )
+    else:
+        logger.warning(
+            "No trust roots were configured, so the operating system's trust "
+            "list is being used. This fallback is deprecated and will be "
+            "removed in a future release. Configure trust roots explicitly using "
+            "'--trust', or through a validation context in the configuration "
+            "file."
+        )
 
 
 def _parse_other_certs(config_dict):
@@ -507,7 +526,11 @@ TRUST_OPTIONS = [
     ),
     click.Option(
         ('--trust-replace',),
-        help='listed trust roots supersede OS-provided trust store',
+        help=(
+            'listed trust roots supersede OS-provided trust store '
+            '(deprecated: this becomes the only supported behaviour '
+            'in a future release)'
+        ),
         required=False,
         type=bool,
         is_flag=True,

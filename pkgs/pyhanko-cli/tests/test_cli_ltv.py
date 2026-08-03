@@ -29,6 +29,7 @@ def test_cli_lta_update(
         'validation-contexts': {
             'test': {
                 'trust': root_cert,
+                'trust-replace': True,
             }
         },
     }
@@ -87,6 +88,7 @@ def test_cli_ltvfix(
         'validation-contexts': {
             'test': {
                 'trust': root_cert,
+                'trust-replace': True,
             }
         },
     }
@@ -139,6 +141,7 @@ def test_cli_ltvfix_require_signed_field(cli_runner):
         'validation-contexts': {
             'test': {
                 'trust': _write_cert(TESTING_CA, CertLabel('root'), 'root.crt'),
+                'trust-replace': True,
             }
         },
     }

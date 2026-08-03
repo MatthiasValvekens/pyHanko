@@ -105,6 +105,7 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     async_val_trusted,
     live_ac_vcs,
     live_testing_vc,
+    notrust_v_context,
     simple_dsa_v_context,
     simple_ecc_v_context,
     simple_v_context,
@@ -182,7 +183,11 @@ async def test_generic_data_sign(input_data, detached):
     content = signature['content']
     assert content['version'].native == 'v1'
     assert isinstance(content, cms.SignedData)
-    status = await async_validate_cms_signature(content, raw_digest=raw_digest)
+    status = await async_validate_cms_signature(
+        content,
+        raw_digest=raw_digest,
+        validation_context=notrust_v_context(),
+    )
     assert status.valid
     assert status.intact
 
@@ -191,7 +196,11 @@ async def test_generic_data_sign(input_data, detached):
         assert eci['content_type'].native == 'data'
         assert eci['content'].native is None
 
-        status = await async_validate_detached_cms(input_data, content)
+        status = await async_validate_detached_cms(
+            input_data,
+            content,
+            signer_validation_context=notrust_v_context(),
+        )
         assert status.valid
         assert status.intact
         assert (
@@ -244,7 +253,11 @@ async def test_cms_v3_sign(detached):
         raw_digest = None
         inner_eci = eci['content'].parsed['encap_content_info']
         assert inner_eci['content'].native == b'Hello world!'
-    status = await async_validate_cms_signature(content, raw_digest=raw_digest)
+    status = await async_validate_cms_signature(
+        content,
+        raw_digest=raw_digest,
+        validation_context=notrust_v_context(),
+    )
     assert status.valid
     assert status.intact
 
@@ -260,7 +273,9 @@ async def test_detached_cms_with_self_reported_timestamp():
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
-        b'Hello world!', signature['content']
+        b'Hello world!',
+        signature['content'],
+        signer_validation_context=notrust_v_context(),
     )
     assert status.signer_reported_dt == dt
     assert status.timestamp_validity is None
@@ -277,7 +292,9 @@ async def test_detached_cms_with_tst():
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
-        b'Hello world!', signature['content']
+        b'Hello world!',
+        signature['content'],
+        signer_validation_context=notrust_v_context(),
     )
     assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
@@ -381,7 +398,9 @@ async def test_detached_cms_with_content_tst():
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
-        b'Hello world!', signature['content']
+        b'Hello world!',
+        signature['content'],
+        signer_validation_context=notrust_v_context(),
     )
     assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
@@ -436,7 +455,9 @@ async def test_detached_cms_with_wrong_tst():
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
-        b'Hello world!', signature['content']
+        b'Hello world!',
+        signature['content'],
+        signer_validation_context=notrust_v_context(),
     )
     assert status.signer_reported_dt is None
     # signature in TS is valid, but digest is wrong
@@ -484,7 +505,9 @@ async def test_detached_cms_with_wrong_content_tst():
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
-        b'Hello world!', signature['content']
+        b'Hello world!',
+        signature['content'],
+        signer_validation_context=notrust_v_context(),
     )
     assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
@@ -540,6 +563,7 @@ async def test_detached_cms_with_duplicated_attr():
     ):
         await async_validate_cms_signature(
             signature['content'],
+            validation_context=notrust_v_context(),
         )
 
 
@@ -609,7 +633,11 @@ async def test_detached_with_malformed_content_tst(content, detach):
     with pytest.raises(
         SignatureValidationError, match="does not encapsulate TSTInfo"
     ):
-        await async_validate_detached_cms(b'Hello world!', signature['content'])
+        await async_validate_detached_cms(
+            b'Hello world!',
+            signature['content'],
+            signer_validation_context=notrust_v_context(),
+        )
 
 
 @freeze_time('2020-11-01')
@@ -1555,7 +1583,11 @@ async def test_noop_attribute_prov():
 
     raw_digest = hashlib.sha256(input_data).digest()
     content = signature['content']
-    status = await async_validate_cms_signature(content, raw_digest=raw_digest)
+    status = await async_validate_cms_signature(
+        content,
+        raw_digest=raw_digest,
+        validation_context=notrust_v_context(),
+    )
     assert status.valid
     assert status.intact
 
@@ -1602,7 +1634,7 @@ async def test_no_certificates(delete):
     with pytest.raises(CMSExtractionError, match='signer cert.*includ'):
         emb = r.embedded_signatures[0]
         await collect_validation_info(
-            embedded_sig=emb, validation_context=ValidationContext()
+            embedded_sig=emb, validation_context=notrust_v_context()
         )
     with pytest.raises(SignatureValidationError, match='signer cert.*includ'):
         r.embedded_signatures[0].signer_cert.dump()
@@ -1647,7 +1679,7 @@ async def test_two_signer_infos():
     with pytest.raises(CMSExtractionError, match='exactly one'):
         emb = r.embedded_signatures[0]
         await collect_validation_info(
-            embedded_sig=emb, validation_context=ValidationContext()
+            embedded_sig=emb, validation_context=notrust_v_context()
         )
 
 
@@ -1852,7 +1884,9 @@ async def test_detached_cades_cms_with_tst():
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
-        b'Hello world!', signature['content']
+        b'Hello world!',
+        signature['content'],
+        signer_validation_context=notrust_v_context(),
     )
     assert status.signer_reported_dt == datetime.now(tz=timezone.utc)
     assert status.timestamp_validity.intact

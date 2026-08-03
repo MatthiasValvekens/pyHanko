@@ -85,6 +85,7 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     async_val_trusted,
     dummy_ocsp_vc,
     live_testing_vc,
+    notrust_v_context,
     simple_ed448_v_context,
     simple_ed25519_v_context,
     simple_v_context,
@@ -218,7 +219,10 @@ def test_diff_fallback_ok(policy, skip_diff):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     status = validate_pdf_signature(
-        emb, diff_policy=policy, skip_diff=skip_diff
+        emb,
+        signer_validation_context=notrust_v_context(),
+        diff_policy=policy,
+        skip_diff=skip_diff,
     )
     if skip_diff:
         assert emb.diff_result is None
@@ -244,7 +248,11 @@ def test_no_diff_summary():
 
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
-    status = validate_pdf_signature(emb, skip_diff=True)
+    status = validate_pdf_signature(
+        emb,
+        signer_validation_context=notrust_v_context(),
+        skip_diff=True,
+    )
     assert emb.diff_result is None
     assert status.modification_level is None
     assert not status.docmdp_ok
@@ -280,6 +288,18 @@ async def test_sign_with_trust_async():
     assert s.field_name == 'Sig1'
     assert '/AP' not in s.sig_field
     await async_val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_default_validation_context_deprecated():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    with pytest.warns(DeprecationWarning, match="operating system's trust"):
+        validate_pdf_signature(s)
 
 
 @freeze_time('2020-12-05')

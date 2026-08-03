@@ -82,6 +82,13 @@ in the CLI. This is how they are interpreted:
 * ``trust``: One or more paths to trust anchor(s) to be used.
 * ``trust-replace``: Flag indicating whether the ``trust`` setting should
   override the system trust (default ``false``).
+
+  .. deprecated:: 0.5.0
+      Combining the configured trust roots with the operating system's trust
+      list is deprecated: the behaviour of ``trust-replace: true``
+      will eventually become the only supported pattern.
+      See :ref:`here <os-trust-deprecation>` for the rationale.
+
 * ``other-certs``: One or more paths to other certificate(s) that may be needed
   to validate an end entity certificate.
 

@@ -300,7 +300,7 @@ def test_pades_dss_content(requests_mock):
     )
     r = PdfFileReader(out)
     dss = DocumentSecurityStore.read_dss(handler=r)
-    vc = dss.as_validation_context({})
+    vc = dss.as_validation_context({'trust_roots': []})
     assert dss is not None
     assert len(dss.vri_entries) == 1
     assert len(dss.certs) == 5

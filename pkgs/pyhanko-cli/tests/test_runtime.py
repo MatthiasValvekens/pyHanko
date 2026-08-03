@@ -48,6 +48,7 @@ def test_fail_strict_mildly_broken(cli_runner):
         [
             'sign',
             'validate',
+            '--trust-replace',
             INPUT_PATH,
         ],
     )
@@ -64,6 +65,7 @@ def test_succeed_strict_mildly_broken_nonstrict(cli_runner):
             'sign',
             'validate',
             '--no-strict-syntax',
+            '--trust-replace',
             INPUT_PATH,
         ],
     )
@@ -75,7 +77,8 @@ def test_log_stdout(cli_runner):
         "logging": {
             "root-level": "DEBUG",
             "root-output": "stdout",
-        }
+        },
+        "validation-contexts": {"default": {"trust-replace": True}},
     }
     _write_config(cfg)
     with open(INPUT_PATH, 'wb') as inf:
@@ -105,6 +108,7 @@ def test_log_stderr_default(cli_runner):
         [
             'sign',
             'validate',
+            '--trust-replace',
             INPUT_PATH,
         ],
     )
@@ -117,7 +121,8 @@ def test_log_file(cli_runner):
         "logging": {
             "root-level": "DEBUG",
             "root-output": "pyhanko.log",
-        }
+        },
+        "validation-contexts": {"default": {"trust-replace": True}},
     }
     _write_config(cfg)
     with open(INPUT_PATH, 'wb') as inf:

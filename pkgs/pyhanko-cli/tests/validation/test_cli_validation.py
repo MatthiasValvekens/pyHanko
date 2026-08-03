@@ -42,6 +42,7 @@ def test_basic_validate(cli_runner, root_cert, input_to_validate, cli_context):
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             input_to_validate,
         ],
         obj=cli_context,
@@ -61,6 +62,7 @@ def test_basic_validate_fail_without_revinfo(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             input_to_validate,
         ],
         obj=cli_context,
@@ -80,6 +82,7 @@ def test_basic_validate_with_soft_revocation(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             '--soft-revocation-check',
             input_to_validate,
         ],
@@ -99,6 +102,7 @@ def test_basic_validate_with_required_revinfo(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             '--force-revinfo',
             input_to_validate,
         ],
@@ -119,6 +123,7 @@ def test_basic_validate_fail_without_required_revinfo(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             '--force-revinfo',
             input_to_validate,
         ],
@@ -139,6 +144,7 @@ def test_basic_validate_without_revinfo_check(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             '--no-revocation-check',
             input_to_validate,
         ],
@@ -159,6 +165,7 @@ def test_inconsistent_revo_settings(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             '--no-revocation-check',
             '--soft-revocation-check',
             input_to_validate,
@@ -182,6 +189,7 @@ def test_validate_encrypted_wrong_password(cli_runner, pki_arch, root_cert):
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             fname,
         ],
         obj=CLIContext(ux=UXContext(prompter=DummyPrompter("badpassword"))),
@@ -206,6 +214,7 @@ def test_validate_encrypted_empty_user_password(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             fname,
         ],
         obj=cli_context,
@@ -232,6 +241,7 @@ def test_validate_encrypted_empty_user_password_wrong_explicit_password(
             'bogus',
             '--trust',
             root_cert,
+            '--trust-replace',
             fname,
         ],
         obj=cli_context,
@@ -258,6 +268,7 @@ def test_validate_encrypted_explicit_empty_password(
             '',
             '--trust',
             root_cert,
+            '--trust-replace',
             fname,
         ],
         obj=cli_context,
@@ -284,6 +295,7 @@ def test_validate_encrypted_wrong_explicit_empty_password(
             '',
             '--trust',
             root_cert,
+            '--trust-replace',
             fname,
         ],
         obj=cli_context,
@@ -307,6 +319,7 @@ def test_validate_unsupported_handler(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             fname,
         ],
         obj=cli_context,
@@ -326,13 +339,15 @@ def test_basic_validate_summary(
             '--executive-summary',
             '--trust',
             root_cert,
+            '--trust-replace',
             input_to_validate,
         ],
         obj=cli_context,
     )
     assert not result.exception, result.output
+    # the executive summary goes to stdout; diagnostics go to stderr
     pattern = re.compile("Sig1:.*:VALID$")
-    assert pattern.match(result.output)
+    assert pattern.match(result.stdout)
 
 
 def test_validate_inconsistent_print_settings(cli_runner, cli_context):
@@ -364,6 +379,7 @@ def test_basic_validate_pretty_print(
             '--pretty-print',
             '--trust',
             root_cert,
+            '--trust-replace',
             input_to_validate,
         ],
         obj=cli_context,
@@ -385,6 +401,7 @@ def test_basic_validate_with_validation_time(
                 f"{FREEZE_DT.date().isoformat()}",
                 '--trust',
                 root_cert,
+                '--trust-replace',
                 input_to_validate,
             ],
             obj=cli_context,
@@ -405,6 +422,7 @@ def test_validation_time_syntax_error(cli_runner, cli_context):
                 'validate',
                 '--validation-time',
                 '2020-99-99T99:99:99Z',
+                '--trust-replace',
                 'file.pdf',
             ],
             obj=cli_context,
@@ -426,6 +444,7 @@ def test_basic_validate_with_claimed_time(
                 'claimed',
                 '--trust',
                 root_cert,
+                '--trust-replace',
                 input_to_validate,
             ],
             obj=cli_context,
@@ -445,6 +464,7 @@ def test_basic_validate_untrusted(
                 'validate',
                 '--trust',
                 root_cert,
+                '--trust-replace',
                 input_to_validate,
             ],
             obj=cli_context,
@@ -459,7 +479,13 @@ def test_basic_validate_with_weak_hash(cli_runner, pretty, cli_context):
         TESTING_CA, 'to_validate.pdf', w, weakened=True
     )
     root_cert = _write_cert(TESTING_CA, CertLabel('root'), 'root.cert.pem')
-    _write_config({'validation-contexts': {'default': {'trust': root_cert}}})
+    _write_config(
+        {
+            'validation-contexts': {
+                'default': {'trust': root_cert, 'trust-replace': True}
+            }
+        }
+    )
     result = cli_runner.invoke(
         cli_root,
         [
@@ -507,7 +533,13 @@ def test_basic_validate_with_unknown_hash(cli_runner, pretty, cli_context):
             output=outf,
         )
     root_cert = _write_cert(TESTING_CA, CertLabel('root'), 'root.cert.pem')
-    _write_config({'validation-contexts': {'default': {'trust': root_cert}}})
+    _write_config(
+        {
+            'validation-contexts': {
+                'default': {'trust': root_cert, 'trust-replace': True}
+            }
+        }
+    )
     result = cli_runner.invoke(
         cli_root,
         [
@@ -532,7 +564,13 @@ def test_basic_validate_signed_with_wrong_key(
         TESTING_CA, 'to_validate.pdf', w, wrong_key=True
     )
     root_cert = _write_cert(TESTING_CA, CertLabel('root'), 'root.cert.pem')
-    _write_config({'validation-contexts': {'default': {'trust': root_cert}}})
+    _write_config(
+        {
+            'validation-contexts': {
+                'default': {'trust': root_cert, 'trust-replace': True}
+            }
+        }
+    )
     result = cli_runner.invoke(
         cli_root,
         [
@@ -557,7 +595,13 @@ def test_basic_validate_signed_with_wrong_key(
 def test_basic_validate_with_default_context(
     cli_runner, root_cert, input_to_validate, cli_context
 ):
-    _write_config({'validation-contexts': {'default': {'trust': root_cert}}})
+    _write_config(
+        {
+            'validation-contexts': {
+                'default': {'trust': root_cert, 'trust-replace': True}
+            }
+        }
+    )
     result = cli_runner.invoke(
         cli_root,
         [
@@ -589,7 +633,13 @@ def test_basic_validate_with_system_trust(
 def test_basic_validate_with_explicit_context(
     cli_runner, root_cert, input_to_validate, cli_context
 ):
-    _write_config({'validation-contexts': {'test': {'trust': root_cert}}})
+    _write_config(
+        {
+            'validation-contexts': {
+                'test': {'trust': root_cert, 'trust-replace': True}
+            }
+        }
+    )
     result = cli_runner.invoke(
         cli_root,
         [
@@ -640,7 +690,11 @@ def test_basic_validate_lacking_intermediate(
     _write_config(
         {
             'validation-contexts': {
-                'default': {'trust': root_cert, 'other-certs': 'interm.crt'}
+                'default': {
+                    'trust': root_cert,
+                    'trust-replace': True,
+                    'other-certs': 'interm.crt',
+                }
             }
         }
     )
@@ -676,6 +730,7 @@ def test_basic_validate_lacking_intermediate_with_trust_arg(
             'validate',
             '--trust',
             root_cert,
+            '--trust-replace',
             '--other-certs',
             'interm.crt',
             fname,
@@ -715,7 +770,13 @@ def test_basic_validate_context_config_wrong(
 def test_basic_validate_context_config_nonsensical_other_certs(
     cli_runner, setup_type, cli_context
 ):
-    _write_config({'validation-contexts': {setup_type: {'other-certs': 1234}}})
+    _write_config(
+        {
+            'validation-contexts': {
+                setup_type: {'other-certs': 1234, 'trust-replace': True}
+            }
+        }
+    )
     result = cli_runner.invoke(
         cli_root,
         [
@@ -760,6 +821,7 @@ def test_basic_validate_context_incompatible_args(cli_runner, cli_context):
             'test',
             '--trust',
             INPUT_PATH,
+            '--trust-replace',
             INPUT_PATH,
         ],
         obj=cli_context,
@@ -770,7 +832,11 @@ def test_basic_validate_context_incompatible_args(cli_runner, cli_context):
 
 def test_basic_validate_context_file_not_found(cli_runner, cli_context):
     _write_config(
-        {'validation-contexts': {'test': {'trust': 'no-such-cert.crt'}}}
+        {
+            'validation-contexts': {
+                'test': {'trust': 'no-such-cert.crt', 'trust-replace': True}
+            }
+        }
     )
     result = cli_runner.invoke(
         cli_root,
@@ -791,7 +857,13 @@ def test_basic_validate_context_malformed_cert(cli_runner, cli_context):
     with open('cert.crt', 'wb') as outf:
         outf.write(b"\xde\xad\xbe\xef")
 
-    _write_config({'validation-contexts': {'test': {'trust': 'cert.crt'}}})
+    _write_config(
+        {
+            'validation-contexts': {
+                'test': {'trust': 'cert.crt', 'trust-replace': True}
+            }
+        }
+    )
     result = cli_runner.invoke(
         cli_root,
         [
@@ -835,6 +907,7 @@ def test_basic_detached_validate(
             detached_input_to_validate,
             '--trust',
             root_cert,
+            '--trust-replace',
             INPUT_PATH,
         ],
         obj=cli_context,
@@ -866,6 +939,7 @@ def test_fail_detached_validate(
             detached_input_to_validate,
             '--trust',
             root_cert,
+            '--trust-replace',
             INPUT_PATH,
         ],
         obj=cli_context,
@@ -883,6 +957,7 @@ def test_detached_validate_malformed_input(cli_runner, cli_context):
         [
             'sign',
             'validate',
+            '--trust-replace',
             '--detached',
             'data.pem',
             INPUT_PATH,
@@ -902,6 +977,7 @@ def test_detached_validate_bad_cms_type(cli_runner, cli_context):
         [
             'sign',
             'validate',
+            '--trust-replace',
             '--detached',
             'data.der',
             INPUT_PATH,

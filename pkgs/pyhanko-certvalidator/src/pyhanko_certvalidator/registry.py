@@ -1,10 +1,10 @@
 import abc
 import asyncio
+import warnings
 from collections import defaultdict
 from collections.abc import AsyncGenerator, Iterable, Iterator
 
 from asn1crypto import x509
-from oscrypto import trust_list
 
 from .authority import (
     Authority,
@@ -252,6 +252,17 @@ class TrustManager:
         raise NotImplementedError
 
 
+def _system_trust_roots() -> list[x509.Certificate]:
+    # Deferred import: oscrypto initialises the platform's crypto backend at
+    # import time, and this is the only remaining place where we need it.
+    from oscrypto import trust_list
+
+    # Note: the entries also carry the trust and reject OIDs recorded by the
+    # platform, which pyhanko-certvalidator (and its predecessor certvalidator)
+    # have never honoured.
+    return [entry[0] for entry in trust_list.get_list()]
+
+
 class SimpleTrustManager(TrustManager):
     """
     Trust manager backed by a list of trust roots, possibly in addition to the
@@ -270,23 +281,44 @@ class SimpleTrustManager(TrustManager):
     ) -> 'SimpleTrustManager':
         """
         :param trust_roots:
-            If the operating system's trust list should not be used, instead
-            pass a list of asn1crypto.x509.Certificate objects. These
-            certificates will be used as the trust roots for the path being
-            built.
+            A list of asn1crypto.x509.Certificate objects. These certificates
+            will be used as the trust roots for the path being built.
+
+            If unspecified, the operating system's trust list is used.
+
+            .. deprecated:: 0.32.0
+                Falling back to the operating system's TLS trust list is
+                deprecated and will be removed in a future release.
 
         :param extra_trust_roots:
             If the operating system's trust list should be used, but augmented
             with one or more extra certificates. This should be a list of
             asn1crypto.x509.Certificate objects.
+
+            .. deprecated:: 0.32.0
+                This parameter exists to supplement the operating system's
+                trust list, and will be removed in a future release.
+                Pass all trust roots through ``trust_roots`` instead.
         :return:
         """
         if trust_roots is None:
-            trust_roots = [e[0] for e in trust_list.get_list()]
+            warnings.warn(
+                "Relying on the operating system's trust list is deprecated "
+                "and will stop working in a future release; pass 'trust_roots' "
+                "explicitly",
+                DeprecationWarning,
+            )
+            trust_roots = _system_trust_roots()
         else:
             trust_roots = list(trust_roots)
 
         if extra_trust_roots is not None:
+            warnings.warn(
+                "'extra_trust_roots' is deprecated and will be removed in "
+                "a future release; pass all trust roots through "
+                "'trust_roots' instead",
+                DeprecationWarning,
+            )
             trust_roots.extend(extra_trust_roots)
 
         manager = SimpleTrustManager()

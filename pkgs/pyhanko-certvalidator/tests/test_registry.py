@@ -39,6 +39,24 @@ def test_build_paths_custom_ca_certs():
     ]
 
 
+def test_system_trust_fallback_deprecated(monkeypatch):
+    monkeypatch.setattr(
+        'pyhanko_certvalidator.registry._system_trust_roots', list
+    )
+    with pytest.warns(DeprecationWarning, match="operating system's trust"):
+        manager = SimpleTrustManager.build()
+    assert not list(manager.iter_certs())
+
+
+def test_extra_trust_roots_deprecated():
+    root = load_cert_object('testing-ca-ed25519', 'root.cert.pem')
+    with pytest.warns(DeprecationWarning, match="'extra_trust_roots'"):
+        manager = SimpleTrustManager.build(
+            trust_roots=[], extra_trust_roots=[root]
+        )
+    assert manager.is_root(root)
+
+
 def test_build_paths_qualified_root_with_wrong_type():
     cert = load_cert_object('testing-ca-ed25519', 'signer.cert.pem')
     ca = load_cert_object('testing-ca-ed25519', 'interm.cert.pem')

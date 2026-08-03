@@ -696,6 +696,11 @@ async def async_validate_cms_signature(
         Raw digest, computed from context.
     :param validation_context:
         Validation context to validate the signer's certificate.
+
+        .. deprecated:: 0.37.0
+            If omitted, a validation context backed by the operating system's
+            trust list is used. That fallback is deprecated and will be
+            removed in a future release; supply a validation context explicitly.
     :param status_kwargs:
         Other keyword arguments to pass to the ``status_class`` when reporting
         validation results.

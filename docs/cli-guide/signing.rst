@@ -381,6 +381,15 @@ the document security store (see above), leave off the ``--use-pades`` flag.
 Using the ``--trust``, ``--trust-replace`` and ``--other-certs`` parameters, it
 is possible to fine tune the validation context that will be used to embed
 the validation data.
+
+.. warning::
+    Without ``--trust-replace``, the trust roots passed in through ``--trust``
+    supplement the operating system's trust list rather than replacing it.
+
+    That fallback deprecated: the behaviour of ``--trust-replace``
+    will eventually become the only supported pattern.
+    See :ref:`here <os-trust-deprecation>` for the rationale.
+
 You can also predefine validation contexts in the configuration file, and select
 them using the ``--validation-context`` parameter.
 See :ref:`config-validation-context` for further information.
