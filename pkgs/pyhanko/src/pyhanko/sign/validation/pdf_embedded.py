@@ -797,6 +797,11 @@ async def async_validate_pdf_signature(
         Embedded signature to evaluate.
     :param signer_validation_context:
         Validation context to use to validate the signature's chain of trust.
+
+        .. deprecated:: 0.37.0
+            If omitted, a validation context backed by the operating system's
+            trust list is used. That fallback is deprecated and will be
+            removed in a future release; supply a validation context explicitly.
     :param ts_validation_context:
         Validation context to use to validate the timestamp's chain of trust
         (defaults to ``signer_validation_context``).

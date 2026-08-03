@@ -51,7 +51,9 @@ class CLIConfig:
 
      * ``trust``: path to a root certificate or list of such paths
      * ``trust-replace``: whether the value of the ``trust`` setting should
-       replace the system trust, or add to it
+       replace the system trust, or add to it. Deprecated: replacing the
+       system trust will become the only supported behaviour in a
+       future pyHanko release.
      * ``other-certs``: paths to other relevant certificates that are not
        trusted by fiat.
      * ``time-tolerance``: a time drift tolerance setting in seconds

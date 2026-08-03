@@ -87,6 +87,12 @@ class CertificateValidator:
             The same validation context will also be used in the validation
             of relevant certificates found in OCSP responses and/or CRLs.
 
+            .. deprecated:: 0.32.0
+                If omitted, a validation context backed by the operating
+                system's TLS trust list is used. That fallback is deprecated and
+                will be removed in a future release; supply a validation context
+                explicitly.
+
         :param pkix_params:
             A pyhanko_certvalidator.context.PKIXValidationParams() object that
             controls advanced PKIX validation parameters used to validate

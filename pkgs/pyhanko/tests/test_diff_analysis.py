@@ -103,7 +103,11 @@ def test_no_changes_policy():
     # now check with the ultra-strict no-op policy
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    status = validate_pdf_signature(s, diff_policy=NO_CHANGES_DIFF_POLICY)
+    status = validate_pdf_signature(
+        s,
+        signer_validation_context=notrust_v_context(),
+        diff_policy=NO_CHANGES_DIFF_POLICY,
+    )
     assert isinstance(s.diff_result, SuspiciousModification)
     assert not status.docmdp_ok
 
@@ -366,7 +370,9 @@ def test_bogus_metadata_manipulation():
     def do_check():
         r = PdfFileReader(out)
         s = r.embedded_signatures[0]
-        status = validate_pdf_signature(s)
+        status = validate_pdf_signature(
+            s, signer_validation_context=notrust_v_context()
+        )
         assert status.modification_level == ModificationLevel.OTHER
 
     w = IncrementalPdfFileWriter(infile)
@@ -442,7 +448,9 @@ def test_dangerous_xml_metadata_manipulation(bad_file):
 
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    status = validate_pdf_signature(s)
+    status = validate_pdf_signature(
+        s, signer_validation_context=notrust_v_context()
+    )
     assert status.modification_level == ModificationLevel.OTHER
 
 
@@ -1493,7 +1501,10 @@ def test_tamper_sig_obj(policy, skip_diff):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     status = validate_pdf_signature(
-        emb, diff_policy=policy, skip_diff=skip_diff
+        emb,
+        signer_validation_context=notrust_v_context(),
+        diff_policy=policy,
+        skip_diff=skip_diff,
     )
     if skip_diff:
         assert emb.diff_result is None
@@ -1874,7 +1885,9 @@ def test_signed_file_diff_proxied_objs():
 
     r = PdfFileReader(out)
     r.decrypt("secret")
-    result = validate_pdf_signature(r.embedded_signatures[0])
+    result = validate_pdf_signature(
+        r.embedded_signatures[0], signer_validation_context=notrust_v_context()
+    )
     assert result.docmdp_ok
 
 
@@ -2491,7 +2504,9 @@ def test_diff_analysis_add_extensions_dict(fname):
     with open(testfile, 'rb') as f:
         r = PdfFileReader(f)
         s = r.embedded_signatures[0]
-        status = validate_pdf_signature(s)
+        status = validate_pdf_signature(
+            s, signer_validation_context=notrust_v_context()
+        )
     assert status.modification_level == ModificationLevel.FORM_FILLING
 
 
@@ -2502,7 +2517,9 @@ def test_diff_analysis_update_indirect_extensions_not_all_paths():
     with open(testfile, 'rb') as f:
         r = PdfFileReader(f)
         s = r.embedded_signatures[0]
-        status = validate_pdf_signature(s)
+        status = validate_pdf_signature(
+            s, signer_validation_context=notrust_v_context()
+        )
     assert isinstance(status.diff_result, SuspiciousModification)
     assert 'DontOverrideMe' in status.diff_result.args[0]
 

@@ -73,6 +73,48 @@ def test_read_vc_kwargs(trust_replace):
         )
 
 
+@pytest.mark.parametrize(
+    'trust_setting,expected_msg',
+    [
+        (
+            f"trust: '{TESTING_CA_DIR}/root/root.cert.pem'",
+            'being combined with the operating system',
+        ),
+        ('other-certs: []', 'No trust roots were configured'),
+    ],
+)
+def test_os_trust_fallback_warning(caplog, trust_setting, expected_msg):
+    config_string = f"""
+    validation-contexts:
+        default:
+            {trust_setting}
+            trust-replace: false
+    """
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
+
+    parse_trust_config_into_policy(
+        trust_config=cli_config.get_validation_settings_raw(),
+        cli_config=cli_config,
+    )
+    assert expected_msg in caplog.text
+
+
+def test_no_os_trust_fallback_warning_with_trust_replace(caplog):
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            trust-replace: true
+    """
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
+
+    parse_trust_config_into_policy(
+        trust_config=cli_config.get_validation_settings_raw(),
+        cli_config=cli_config,
+    )
+    assert 'operating system' not in caplog.text
+
+
 NOTO_SERIF_JP = f'{TEST_DIR}/data/fonts/NotoSerifJP-Regular.otf'
 
 
@@ -185,6 +227,8 @@ def test_read_bad_config2(bad_type):
 
 
 def test_empty_config():
+    # An empty config necessarily exercises the deprecated fallback to the
+    # platform trust list; revisit when the fallback goes away.
     cli_config: config.CLIConfig = _parse_cli_config("")
     parse_trust_config_into_policy(
         trust_config=cli_config.get_validation_settings_raw(),
@@ -466,6 +510,7 @@ def test_key_usage_errors(key_usage_str):
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             5,
         ),
@@ -477,6 +522,7 @@ def test_key_usage_errors(key_usage_str):
             time-tolerance: 7
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             7,
         ),
@@ -487,6 +533,7 @@ def test_key_usage_errors(key_usage_str):
             time-tolerance: 7
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             7,
         ),
@@ -496,6 +543,7 @@ def test_key_usage_errors(key_usage_str):
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             DEFAULT_TIME_TOLERANCE.seconds,
         ),
@@ -548,6 +596,7 @@ def test_read_time_tolerance_input_issues():
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             True,
         ),
@@ -559,6 +608,7 @@ def test_read_time_tolerance_input_issues():
             retroactive-revinfo: false
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             False,
         ),
@@ -570,6 +620,7 @@ def test_read_time_tolerance_input_issues():
             retroactive-revinfo: true
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             True,
         ),
@@ -580,6 +631,7 @@ def test_read_time_tolerance_input_issues():
             retroactive-revinfo: true
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             True,
         ),
@@ -590,6 +642,7 @@ def test_read_time_tolerance_input_issues():
             retroactive-revinfo: "yes"
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             True,
         ),
@@ -599,6 +652,7 @@ def test_read_time_tolerance_input_issues():
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+            trust-replace: true
     """,
             False,
         ),

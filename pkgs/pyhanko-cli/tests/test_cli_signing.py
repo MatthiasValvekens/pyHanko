@@ -201,6 +201,7 @@ def test_cli_addsig_pemder_with_wrong_key_usage(
     cfg['validation-contexts'] = {
         'test': {
             'trust': root_cert,
+            'trust-replace': True,
             # makes no sense
             'signer-key-usage': 'crl_sign',
         }
@@ -240,6 +241,7 @@ def test_cli_addsig_pemder_with_wrong_extd_key_usage(
     cfg['validation-contexts'] = {
         'test': {
             'trust': root_cert,
+            'trust-replace': True,
             'signer-extd-key-usage': '2.999',
         }
     }
@@ -1014,6 +1016,7 @@ def test_cli_pades_lta(
         'validation-contexts': {
             'test': {
                 'trust': root_cert,
+                'trust-replace': True,
             }
         },
     }
@@ -1053,6 +1056,7 @@ def test_cli_pades_lta_nonstrict(
         'validation-contexts': {
             'test': {
                 'trust': root_cert,
+                'trust-replace': True,
             }
         },
     }
@@ -1450,6 +1454,7 @@ def test_cli_pades_lta_no_timestamp_url(cli_runner):
         'validation-contexts': {
             'test': {
                 'trust': _write_cert(TESTING_CA, CertLabel('root'), "root.pem"),
+                'trust-replace': True,
             }
         },
     }
@@ -1566,6 +1571,7 @@ def test_cli_timestamp(pki_arch_name, timestamp_url, cli_runner, root_cert):
         'validation-contexts': {
             'test': {
                 'trust': root_cert,
+                'trust-replace': True,
             }
         },
     }

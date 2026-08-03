@@ -98,6 +98,41 @@ w.r.t. a specific trust root.
         print(status.pretty_print_details())
 
 
+.. _os-trust-deprecation:
+
+Deprecation of OS trust list
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. warning::
+
+    Specifying ``trust_roots`` (or a ``trust_manager``) is optional today: if
+    you leave it out, the |ValidationContext| falls back to the operating
+    system's trust list. This is for historical reasons: it's a behaviour
+    that stems from the library that ``pyhanko-certvalidator`` was forked from.
+
+    **This fallback is deprecated** and will be removed in a future
+    ``pyhanko-certvalidator`` release, at which point trust roots will
+    have to be supplied explicitly.
+    The ``extra_trust_roots`` parameter, which exists to supplement the
+    platform's trust list, is deprecated along with it.
+
+    The reason is that the platform trust list is maintained for TLS purposes,
+    which makes it a nonsensical source of trust for document signature validation.
+
+    If you do want to keep validating against a set of TLS roots for one
+    reason or another, load them explicitly from a PEM bundle:
+
+    .. code-block:: python
+
+        from pyhanko.keys import load_certs_from_pemder
+
+        vc = ValidationContext(
+            trust_roots=list(
+                load_certs_from_pemder(['/path/to/ca-bundle.pem'])
+            )
+        )
+
+
 Validating signatures against EU trusted lists
 ----------------------------------------------
 

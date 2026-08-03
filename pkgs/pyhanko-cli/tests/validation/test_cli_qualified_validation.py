@@ -181,6 +181,7 @@ def test_validate_eutl_with_extra_roots_ca_is_extra(
             'validation-contexts': {
                 'default': {
                     'trust': 'extra-root.cert.pem',
+                    'trust-replace': True,
                     'eutl-lotl-url': LOTL_URL,
                     'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
                 }
@@ -222,6 +223,7 @@ def test_validate_eutl_with_extra_roots_ca_on_tl(
             'validation-contexts': {
                 'default': {
                     'trust': 'extra-root.cert.pem',
+                    'trust-replace': True,
                     'eutl-lotl-url': LOTL_URL,
                     'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
                 }
@@ -279,6 +281,9 @@ def test_validate_config_eutl_limited_territories(
 def test_validate_eutl_config_limited_territories_not_included(
     cli_runner, input_to_validate, tl_cache, territories, cli_context
 ):
+    # an empty 'eutl-territories' setting disables EUTL sourcing altogether,
+    # so 'trust-replace' is what keeps those parameters from falling through
+    # to the platform trust list
     _write_config(
         {
             'cache-dir': CACHE_DIR,
@@ -287,6 +292,7 @@ def test_validate_eutl_config_limited_territories_not_included(
                     'eutl-lotl-url': LOTL_URL,
                     'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
                     'eutl-territories': territories,
+                    'trust-replace': True,
                 }
             },
         }

@@ -97,17 +97,27 @@ class ValidationContext:
     ):
         """
         :param trust_roots:
-            If the operating system's trust list should not be used, instead
-            pass a list of byte strings containing DER or PEM-encoded X.509
+            A list of byte strings containing DER or PEM-encoded X.509
             certificates, or asn1crypto.x509.Certificate objects. These
             certificates will be used as the trust roots for the path being
             built.
+
+            If unspecified, the operating system's trust list is used.
+
+            .. deprecated:: 0.32.0
+                Falling back to the operating system's TLS trust list is
+                deprecated and will be removed in a future release.
 
         :param extra_trust_roots:
             If the operating system's trust list should be used, but augmented
             with one or more extra certificates. This should be a list of byte
             strings containing DER or PEM-encoded X.509 certificates, or
             asn1crypto.x509.Certificate objects.
+
+            .. deprecated:: 0.32.0
+                Falling back to the operating system's TLS trust list is
+                deprecated and will be removed in a future release.
+                This parameter will be removed along with it.
 
         :param other_certs:
             A list of byte strings containing DER or PEM-encoded X.509
