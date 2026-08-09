@@ -1757,6 +1757,12 @@ def test_fs_cache_reload_from_disk(tmp_path):
     assert fs2['baz'] == 'quux'
 
 
+def test_fs_cache_accepts_str_path(tmp_path):
+    fs = FileSystemTLCache(str(tmp_path), expire_after=timedelta(minutes=1))
+    fs['foo'] = 'bar'
+    assert fs['foo'] == 'bar'
+
+
 def test_fs_cache_keep_until_expiry(tmp_path):
     with freeze_time('2025-08-28'):
         fs = FileSystemTLCache(tmp_path, expire_after=timedelta(days=10))

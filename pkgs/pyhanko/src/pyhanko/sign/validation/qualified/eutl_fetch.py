@@ -71,8 +71,9 @@ class InMemoryTLCache(TLCache):
 
 
 class FileSystemTLCache(TLCache):
-    def __init__(self, cache_path: Path, expire_after: timedelta):
+    def __init__(self, cache_path: str | Path, expire_after: timedelta):
         self._cache: dict[str, tuple[datetime, str]] = {}
+        cache_path = Path(cache_path)
         self._root = cache_path
         self._expire_after = expire_after
         if not cache_path.exists():
