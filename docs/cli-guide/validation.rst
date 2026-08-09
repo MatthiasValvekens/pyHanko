@@ -211,7 +211,7 @@ optional dependency groups.
     several minutes to complete, since pyHanko will then download
     and verify all trusted lists for all EU member states.
 
-    If this isn't what you want, use the ``--eu-territories``
+    If this isn't what you want, use the ``--eutl-territories``
     flag with a list of country codes to limit the scope.
 
 

@@ -43,9 +43,10 @@ before specifying the subcommand to invoke. ::
     one.
 
 
-Right now, the pyHanko CLI offers two subcommand groups, for
-:doc:`sign <signing>` and :doc:`stamp <stamping>`, respectively.
-Additional configuration options are available in an optional YAML
+The pyHanko CLI offers subcommands for :doc:`signing <signing>` and
+:doc:`validating <validation>` PDF signatures, applying visual
+:doc:`stamps <stamping>`, and :doc:`encrypting and decrypting <encryption>`
+PDF files. Additional configuration options are available in an optional YAML
 :doc:`config file <config>`.
 
 
@@ -56,4 +57,5 @@ Additional configuration options are available in an optional YAML
     signing
     validation
     stamping
+    encryption
     config

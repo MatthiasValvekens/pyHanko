@@ -44,7 +44,7 @@ Here's an example.
                 level: DEBUG
 
 
-The keys ``root-level`` and ``root-ouput`` allow you to set the log level
+The keys ``root-level`` and ``root-output`` allow you to set the log level
 and the output stream (respectively) for the root logger.
 The default log level is ``INFO``, and the default output stream is ``stderr``.
 The keys under ``by-module`` allow you to specify more granular
