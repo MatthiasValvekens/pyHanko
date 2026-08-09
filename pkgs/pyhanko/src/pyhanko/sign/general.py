@@ -8,7 +8,6 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 
 import hashlib
 import logging
-import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import IO
@@ -44,7 +43,6 @@ __all__ = [
     'check_ess_certid',
     'extract_certificate_info',
     'extract_signer_info',
-    'find_cms_attribute',
     'find_cms_attribute_iter',
     'find_unique_cms_attribute',
     'get_cms_hash_algo_for_mechanism',
@@ -105,35 +103,6 @@ class NonexistentAttributeError(KeyError):
 
 class MultivaluedAttributeError(ValueError):
     pass
-
-
-def find_cms_attribute(attrs: Iterable[cms.CMSAttribute] | None, name: str):
-    """
-    .. deprecated:: 0.35.0
-
-    Find and return CMS attribute values of a given type.
-
-    :param attrs:
-        The :class:`.cms.CMSAttributes` object.
-    :param name:
-        The attribute type as a string (as defined in ``asn1crypto``).
-    :return:
-        The values associated with the requested type, if present.
-    :raise NonexistentAttributeError:
-        Raised when no such type entry could be found in the
-        :class:`.cms.CMSAttributes` object.
-    """
-
-    warnings.warn(
-        "Deprecated in favour of find_cms_attribute_iter",
-        DeprecationWarning,
-    )
-
-    found_values = list(find_cms_attribute_iter(attrs, name))
-    if found_values:
-        return found_values
-    else:
-        raise NonexistentAttributeError(f'Unable to locate attribute {name}.')
 
 
 def find_cms_attribute_iter(

@@ -686,9 +686,11 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
 
 .. code-block:: python
 
+    import asyncio
     from datetime import datetime
     from pyhanko.sign import signers
     from pyhanko.sign.signers import cms_embedder
+    from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
     from io import BytesIO
@@ -739,9 +741,12 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
 
     signer: signers.SimpleSigner = FROM_CA
     # let's supply the CMS object as a raw bytestring
-    cms_bytes = signer.sign(
-        data_digest=prep_digest.document_digest,
-        digest_algorithm=md_algorithm, timestamp=timestamp
+    cms_bytes = asyncio.run(
+        signer.async_sign(
+            data_digest=prep_digest.document_digest,
+            digest_algorithm=md_algorithm,
+            signed_attr_settings=PdfCMSSignedAttributes(signing_time=timestamp)
+        )
     ).dump()
     sig_contents = cms_writer.send(cms_bytes)
 

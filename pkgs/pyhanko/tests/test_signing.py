@@ -700,12 +700,12 @@ def _tamper_with_sig_obj(tamper_fun):
             {'algorithm': 'rsassa_pkcs1v15'}
         ),
     )
-    with pytest.deprecated_call():
-        # noinspection PyDeprecation
-        cms_obj = signer.sign(
+    cms_obj = asyncio.run(
+        signer.async_sign(
             data_digest=prep_document_hash.document_digest,
             digest_algorithm=md_algorithm,
         )
+    )
     cms_writer.send(cms_obj)
     return output
 
@@ -1094,14 +1094,17 @@ async def test_embed_signed_attachment():
 
 
 @freeze_time('2020-11-01')
-def test_simple_interrupted_signature():
+@pytest.mark.asyncio
+async def test_simple_interrupted_signature():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     pdf_signer = signers.PdfSigner(
         signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA
     )
-    with pytest.deprecated_call():
-        # noinspection PyDeprecation
-        prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
+    (
+        prep_digest,
+        tbs_document,
+        output,
+    ) = await pdf_signer.async_digest_doc_for_signing(w)
     md_algorithm = tbs_document.md_algorithm
     assert tbs_document.post_sign_instructions is None
 
@@ -1112,19 +1115,17 @@ def test_simple_interrupted_signature():
     new_output.write(buf)
     buf.release()
 
-    with pytest.deprecated_call():
-        # noinspection PyDeprecation
-        PdfTBSDocument.finish_signing(
-            new_output,
-            prep_digest,
-            FROM_CA.sign(
-                prep_digest.document_digest,
-                digest_algorithm=md_algorithm,
-            ),
-        )
+    await PdfTBSDocument.async_finish_signing(
+        new_output,
+        prep_digest,
+        await FROM_CA.async_sign(
+            prep_digest.document_digest,
+            digest_algorithm=md_algorithm,
+        ),
+    )
 
     r = PdfFileReader(new_output)
-    val_trusted(r.embedded_signatures[0])
+    await async_val_trusted(r.embedded_signatures[0])
 
 
 @freeze_time('2020-11-01')
@@ -1302,29 +1303,6 @@ async def test_sign_prescribed_attrs(requests_mock):
     status = await async_validate_detached_cms(
         b'Hello world!', sig_cms['content'], signer_validation_context=vc
     )
-    assert status.valid and status.intact and status.trusted
-    ts_status = status.timestamp_validity
-    assert ts_status.valid and ts_status.intact and ts_status.trusted
-
-
-# noinspection PyDeprecation
-@freeze_time('2020-11-01')
-def test_sign_prescribed_attrs_legacy(requests_mock):
-    vc = live_testing_vc(requests_mock)
-    message = b'Hello world!'
-    digest = hashlib.sha256(message).digest()
-    signed_attrs = asyncio.run(FROM_CA.signed_attrs(digest, 'sha256'))
-    with pytest.deprecated_call():
-        sig_cms = FROM_CA.sign_prescribed_attributes(
-            'sha256', signed_attrs=signed_attrs, timestamper=DUMMY_HTTP_TS
-        )
-
-    from pyhanko.sign.validation import validate_detached_cms
-
-    with pytest.deprecated_call():
-        status = validate_detached_cms(
-            b'Hello world!', sig_cms['content'], signer_validation_context=vc
-        )
     assert status.valid and status.intact and status.trusted
     ts_status = status.timestamp_validity
     assert ts_status.valid and ts_status.intact and ts_status.trusted

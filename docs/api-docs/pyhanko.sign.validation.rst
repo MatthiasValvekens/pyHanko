@@ -90,5 +90,5 @@ Module contents
 ---------------
 
 .. automodule:: pyhanko.sign.validation
-   :members: validate_cms_signature, validate_detached_cms, validate_pdf_signature, validate_pdf_timestamp, add_validation_info
+   :members: validate_pdf_signature, validate_pdf_timestamp, add_validation_info
    :show-inheritance:

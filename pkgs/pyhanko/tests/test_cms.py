@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import itertools
 import os
@@ -34,7 +35,6 @@ from pyhanko.sign.general import (
     SigningError,
     as_signing_certificate,
     as_signing_certificate_v2,
-    find_cms_attribute,
     find_cms_attribute_iter,
     find_unique_cms_attribute,
     simple_cms_attribute,
@@ -51,7 +51,6 @@ from pyhanko.sign.validation import (
     async_validate_detached_cms,
     async_validate_pdf_signature,
     collect_validation_info,
-    validate_cms_signature,
     validate_pdf_signature,
 )
 from pyhanko.sign.validation.ades import ades_lta_validation
@@ -112,42 +111,6 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     val_trusted,
     val_untrusted,
 )
-
-
-def test_generic_data_sign_legacy():
-    input_data = b'Hello world!'
-    with pytest.deprecated_call():
-        # noinspection PyDeprecation
-        signature = FROM_CA.sign_general_data(
-            input_data, 'sha256', detached=True
-        )
-
-    # reset the stream
-    if isinstance(input_data, BytesIO):
-        input_data.seek(0)
-
-    # re-parse just to make sure we're starting fresh
-    signature = cms.ContentInfo.load(signature.dump())
-
-    raw_digest = hashlib.sha256(b'Hello world!').digest()
-    content = signature['content']
-    assert content['version'].native == 'v1'
-    assert isinstance(content, cms.SignedData)
-
-    with pytest.deprecated_call():
-        # noinspection PyDeprecation
-
-        # noinspection PyDeprecation
-        status = validate_cms_signature(content, raw_digest=raw_digest)
-    assert status.valid
-    assert status.intact
-
-    eci = content['encap_content_info']
-    assert eci['content_type'].native == 'data'
-    assert eci['content'].native is None
-
-    assert status.valid
-    assert status.intact
 
 
 @pytest.mark.parametrize(
@@ -708,12 +671,12 @@ def _tamper_with_signed_attrs(
             {'algorithm': 'rsassa_pkcs1v15'}
         ),
     )
-    with pytest.deprecated_call():
-        # noinspection PyDeprecation
-        cms_obj = signer.sign(
+    cms_obj = asyncio.run(
+        signer.async_sign(
             data_digest=prep_digest.document_digest,
             digest_algorithm=md_algorithm,
         )
+    )
     sd = cms_obj['content']
     (si,) = sd['signer_infos']
     signed_attrs = si['signed_attrs']
@@ -1506,13 +1469,13 @@ def test_direct_pdfcmsembedder_usage():
 
     signer: signers.SimpleSigner = FROM_CA
     # let's supply the CMS object as a raw bytestring
-    with pytest.deprecated_call():
-        # noinspection PyDeprecation
-        cms_bytes = signer.sign(
+    cms_bytes = asyncio.run(
+        signer.async_sign(
             data_digest=prep_digest.document_digest,
             digest_algorithm=md_algorithm,
-            timestamp=timestamp,
-        ).dump()
+            signed_attr_settings=PdfCMSSignedAttributes(signing_time=timestamp),
+        )
+    ).dump()
     sig_contents = cms_writer.send(cms_bytes)
 
     # we requested in-place output
@@ -2448,54 +2411,6 @@ def test_find_cms_attribute_iter_empty_attrs():
     attrs = cms.CMSAttributes([])
     values = list(find_cms_attribute_iter(attrs, 'content_type'))
     assert values == []
-
-
-def test_find_cms_attribute_deprecated_success():
-    attrs = _create_test_attrs()
-
-    with pytest.deprecated_call():
-        values = find_cms_attribute(attrs, 'content_type')
-
-    assert len(values) == 1
-    assert isinstance(values[0], cms.ContentType)
-    assert values[0].native == 'data'
-
-
-def test_find_cms_attribute_deprecated_raises_on_missing():
-    attrs = _create_test_attrs()
-
-    with (
-        pytest.deprecated_call(),
-        pytest.raises(NonexistentAttributeError, match='nonexistent_attribute'),
-    ):
-        find_cms_attribute(attrs, 'nonexistent_attribute')
-
-
-def test_find_cms_attribute_deprecated_none_attrs():
-    with pytest.deprecated_call(), pytest.raises(NonexistentAttributeError):
-        find_cms_attribute(None, 'content_type')
-
-
-def test_find_cms_attribute_deprecated_with_multiple_values():
-    attr_val1 = core.OctetString(b'test1')
-    attr_val2 = core.OctetString(b'test2')
-    attrs = cms.CMSAttributes(
-        [
-            cms.CMSAttribute(
-                {
-                    'type': cms.CMSAttributeType('message_digest'),
-                    'values': (attr_val1, attr_val2),
-                }
-            )
-        ]
-    )
-
-    with pytest.deprecated_call():
-        values = find_cms_attribute(attrs, 'message_digest')
-
-    assert len(values) == 2
-    assert values[0].native == b'test1'
-    assert values[1].native == b'test2'
 
 
 def test_find_unique_cms_attribute_success():

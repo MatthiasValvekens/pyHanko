@@ -7,7 +7,6 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 import asyncio
 import binascii
 import logging
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -323,7 +322,6 @@ def select_pkcs11_signing_params(
 def open_pkcs11_session(
     lib_location: str,
     slot_no: int | None = None,
-    token_label: str | None = None,
     token_criteria: TokenCriteria | None = None,
     user_pin: str | object | None = None,
 ) -> Session:
@@ -334,12 +332,7 @@ def open_pkcs11_session(
         Path to the PKCS#11 module.
     :param slot_no:
         Slot number to use. If not specified, the first slot containing a token
-        labelled ``token_label`` will be used.
-    :param token_label:
-        .. deprecated:: 0.14.0
-            Use ``token_criteria`` instead.
-
-        Label of the token to use. If ``None``, there is no constraint.
+        matching ``token_criteria`` will be used.
     :param token_criteria:
         Criteria that the token should match.
     :param user_pin:
@@ -355,13 +348,6 @@ def open_pkcs11_session(
         An open PKCS#11 session object.
     """
     lib = p11_lib(lib_location)
-
-    if token_criteria is None and token_label is not None:
-        warnings.warn(
-            "'token_label' is deprecated, use 'token_criteria' instead",
-            DeprecationWarning,
-        )
-        token_criteria = TokenCriteria(label=token_label)
 
     slots = lib.get_slots()
     token = find_token(slots, slot_no=slot_no, token_criteria=token_criteria)

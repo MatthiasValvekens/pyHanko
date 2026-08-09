@@ -149,33 +149,6 @@ def test_simple_sign_with_rsassa_pss_custom_parameters(p11_config):
     val_trusted(emb, vc=p11_config.validation_context)
 
 
-@pytest.mark.hsm(platform='softhsm')
-def test_simple_sign_legacy_open_session_by_token_label(p11_config):
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    meta = signers.PdfSignatureMetadata(field_name='Sig1')
-    with (
-        pytest.deprecated_call(),
-        pkcs11.open_pkcs11_session(
-            p11_config.module,
-            user_pin=p11_config.user_pin,
-            token_label=p11_config.token_label,
-        ) as sess,
-    ):
-        signer = pkcs11.PKCS11Signer(
-            sess,
-            p11_config.cert_label,
-            key_label=p11_config.key_label,
-            other_certs_to_pull=p11_config.cert_chain_labels,
-            base_sign_kwargs=p11_config.signing_kwargs,
-        )
-        out = signers.sign_pdf(w, meta, signer=signer)
-
-    r = PdfFileReader(out)
-    emb = r.embedded_signatures[0]
-    assert emb.field_name == 'Sig1'
-    val_trusted(emb, vc=p11_config.validation_context)
-
-
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @pytest.mark.hsm
 def test_sign_external_certs(bulk_fetch, p11_config):

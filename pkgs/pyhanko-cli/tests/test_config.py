@@ -1,3 +1,4 @@
+import asyncio
 import dataclasses
 import hashlib
 import os
@@ -1019,8 +1020,7 @@ def test_read_pkcs11_signing_pin_invalid():
 
 def _signer_sanity_check(signer):
     digest = hashlib.sha256(b'Hello world!').digest()
-    with pytest.deprecated_call():
-        sig = signer.sign(digest, digest_algorithm='sha256')
+    sig = asyncio.run(signer.async_sign(digest, digest_algorithm='sha256'))
     from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 
     intact, valid = validate_sig_integrity(

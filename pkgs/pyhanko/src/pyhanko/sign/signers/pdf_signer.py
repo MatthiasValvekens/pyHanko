@@ -7,7 +7,6 @@ import enum
 import itertools
 import logging
 import uuid
-import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -1236,7 +1235,7 @@ class PdfSigner:
         prior to signing: it creates the target form field if necessary, and
         makes sure the seed value dictionary gets processed.
 
-        See also :meth:`digest_doc_for_signing` and :meth:`sign_pdf`.
+        See also :meth:`async_digest_doc_for_signing` and :meth:`sign_pdf`.
 
         :param pdf_out:
             The writer containing the PDF file to be signed.
@@ -1316,87 +1315,6 @@ class PdfSigner:
         )
 
         return session
-
-    def digest_doc_for_signing(
-        self,
-        pdf_out: BasePdfFileWriter,
-        existing_fields_only=False,
-        bytes_reserved=None,
-        *,
-        appearance_text_params=None,
-        in_place=False,
-        output=None,
-        chunk_size=misc.DEFAULT_CHUNK_SIZE,
-    ) -> tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
-        """
-        .. deprecated:: 0.9.0
-            Use :meth:`async_digest_doc_for_signing` instead.
-
-        Set up all stages of the signing process up to and including the point
-        where the signature placeholder is allocated, and the document's
-        ``/ByteRange`` digest is computed.
-
-        See :meth:`sign_pdf` for a less granular, more high-level approach.
-
-        .. note::
-            This method is useful in remote signing scenarios, where you might
-            want to free up resources while waiting for the remote signer to
-            respond. The :class:`.PreparedByteRangeDigest` object returned
-            allows you to keep track of the required state to fill the
-            signature container at some later point in time.
-
-        :param pdf_out:
-            A PDF file writer (usually an :class:`.IncrementalPdfFileWriter`)
-            containing the data to sign.
-        :param existing_fields_only:
-            If ``True``, never create a new empty signature field to contain
-            the signature.
-            If ``False``, a new field may be created if no field matching
-            :attr:`~.PdfSignatureMetadata.field_name` exists.
-        :param bytes_reserved:
-            Bytes to reserve for the CMS object in the PDF file.
-            If not specified, make an estimate based on a dummy signature.
-
-            .. warning::
-                Since the CMS object is written to the output file as a
-                hexadecimal string, you should request **twice** the (estimated)
-                number of bytes in the DER-encoded version of the CMS object.
-        :param appearance_text_params:
-            Dictionary with text parameters that will be passed to the
-            signature appearance constructor (if applicable).
-        :param output:
-            Write the output to the specified output stream.
-            If ``None``, write to a new :class:`.BytesIO` object.
-            Default is ``None``.
-        :param in_place:
-            Sign the original input stream in-place.
-            This parameter overrides ``output``.
-        :param chunk_size:
-            Size of the internal buffer (in bytes) used to feed data to the
-            message digest function if the input stream does not support
-            ``memoryview``.
-        :return:
-            A tuple containing a :class:`.PreparedByteRangeDigest` object,
-            a :class:`.PdfTBSDocument` object and an output handle to which the
-            document in its current state has been written.
-        """
-        warnings.warn(
-            "'digest_doc_for_signing' is deprecated, use "
-            "'async_digest_doc_for_signing' instead",
-            DeprecationWarning,
-        )
-        result = asyncio.run(
-            self.async_digest_doc_for_signing(
-                pdf_out,
-                existing_fields_only=existing_fields_only,
-                bytes_reserved=bytes_reserved,
-                appearance_text_params=appearance_text_params,
-                in_place=in_place,
-                output=output,
-                chunk_size=chunk_size,
-            )
-        )
-        return result
 
     async def async_digest_doc_for_signing(
         self,
