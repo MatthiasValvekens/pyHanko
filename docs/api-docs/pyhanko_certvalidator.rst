@@ -70,10 +70,10 @@ pyhanko\_certvalidator.policy\_decl module
    :undoc-members:
    :show-inheritance:
 
-pyhanko\_certvalidator.policy\_tree module
-------------------------------------------
+pyhanko\_certvalidator.policy\_graph module
+-------------------------------------------
 
-.. automodule:: pyhanko_certvalidator.policy_tree
+.. automodule:: pyhanko_certvalidator.policy_graph
    :members:
    :undoc-members:
    :show-inheritance:

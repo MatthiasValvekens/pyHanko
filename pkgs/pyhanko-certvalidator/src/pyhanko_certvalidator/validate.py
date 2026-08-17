@@ -48,7 +48,7 @@ from .policy_decl import (
     RevocationCheckingRule,
     intersect_policy_sets,
 )
-from .policy_tree import (
+from .policy_graph import (
     PolicyTreeNode,
     PolicyTreeRoot,
     apply_policy_mapping,
