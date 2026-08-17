@@ -4,7 +4,6 @@ import enum
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Optional
 
 from asn1crypto import algos, cms, core, x509
 from asn1crypto.x509 import Validity
@@ -41,7 +40,7 @@ from .name_trees import (
     default_permitted_subtrees,
     process_general_subtrees,
 )
-from .path import QualifiedPolicy, ValidationPath
+from .path import ValidationPath
 from .policy_decl import (
     AlgorithmUsagePolicy,
     PKIXValidationParams,
@@ -49,12 +48,11 @@ from .policy_decl import (
     intersect_policy_sets,
 )
 from .policy_graph import (
-    PolicyTreeNode,
-    PolicyTreeRoot,
+    PolicyGraph,
     apply_policy_mapping,
     enumerate_policy_mappings,
-    prune_unacceptable_policies,
-    update_policy_tree,
+    update_policy_graph,
+    user_constrained_policies,
 )
 from .registry import CertificateCollection
 from .revinfo.validate_crl import verify_crl
@@ -691,7 +689,7 @@ class _PathValidationState:
     path
     """
 
-    valid_policy_tree: Optional['PolicyTreeRoot']
+    valid_policy_graph: PolicyGraph | None
     explicit_policy: int
     inhibit_any_policy: int
     policy_mapping: int
@@ -774,9 +772,7 @@ class _PathValidationState:
 
         state = _PathValidationState(
             # Step 1 a
-            valid_policy_tree=PolicyTreeRoot.init_policy_tree(
-                'any_policy', set(), {'any_policy'}
-            ),
+            valid_policy_graph=PolicyGraph(),
             # Steps 1 b-c
             permitted_subtrees=initial_permitted_subtrees,
             excluded_subtrees=initial_excluded_subtrees,
@@ -848,20 +844,21 @@ class _PathValidationState:
         any_policy_uninhibited,
         proc_state: ValProcState,
     ):
-        if certificate_policies and self.valid_policy_tree is not None:
-            self.valid_policy_tree = update_policy_tree(
+        # Step 2 e (RFC 9618)
+        if certificate_policies is None:
+            self.valid_policy_graph = None
+
+        # Step 2 d (RFC 9618)
+        elif self.valid_policy_graph is not None:
+            self.valid_policy_graph = update_policy_graph(
                 certificate_policies,
-                self.valid_policy_tree,
+                self.valid_policy_graph,
                 depth=index,
                 any_policy_uninhibited=any_policy_uninhibited,
             )
 
-        # Step 2 e
-        elif certificate_policies is None:
-            self.valid_policy_tree = None
-
         # Step 2 f
-        if self.valid_policy_tree is None and self.explicit_policy <= 0:
+        if self.valid_policy_graph is None and self.explicit_policy <= 0:
             raise PathValidationError.from_state(
                 "The path could not be validated because there is no valid set "
                 f"of policies for {proc_state.describe_cert()}",
@@ -1193,53 +1190,12 @@ def _finish_policy_processing(
     ):
         state.explicit_policy = 0
     # Step 4 g
-    # Step 4 g i
-    intersection: PolicyTreeRoot | None
-    if state.valid_policy_tree is None:
-        intersection = None
-
-    # Step 4 g ii
-    elif acceptable_policies == {'any_policy'}:
-        intersection = state.valid_policy_tree
-
-    # Step 4 g iii
-    else:
-        intersection = prune_unacceptable_policies(
-            path_length, state.valid_policy_tree, acceptable_policies
-        )
-    qualified_policies: frozenset[QualifiedPolicy] = frozenset()
-    if intersection is not None:
-        # collect policies in a user-friendly format and attach them to the
-        # path object
-        def _enum_policies() -> Iterable[QualifiedPolicy]:
-            accepted_policy: PolicyTreeNode
-            assert intersection is not None
-            for accepted_policy in intersection.at_depth(path_length):
-                listed_pol = accepted_policy.valid_policy
-                if listed_pol != 'any_policy':
-                    # the first ancestor that is a child of any_policy
-                    # will have an ID that makes sense in the user's policy
-                    # domain (here 'ancestor' includes the node itself)
-                    user_domain_policy_id = next(
-                        ancestor.valid_policy
-                        for ancestor in accepted_policy.path_to_root()
-                        if ancestor.parent.valid_policy == 'any_policy'
-                    )
-                else:
-                    # any_policy can't be mapped, so we don't have to do
-                    # any walking up the tree. This also covers the corner case
-                    # where the path length is 0 (in this case, PKIX validation
-                    # is pointless, but we have to deal with it gracefully)
-                    user_domain_policy_id = 'any_policy'
-
-                yield QualifiedPolicy(
-                    user_domain_policy_id=user_domain_policy_id,
-                    issuer_domain_policy_id=listed_pol,
-                    qualifiers=frozenset(accepted_policy.qualifier_set),
-                )
-
-        qualified_policies = frozenset(_enum_policies())
-    elif state.explicit_policy == 0:
+    qualified_policies = user_constrained_policies(
+        state.valid_policy_graph,
+        path_length=path_length,
+        user_initial_policy_set=acceptable_policies,
+    )
+    if not qualified_policies and state.explicit_policy == 0:
         raise PathValidationError.from_state(
             f"The path could not be validated because there is no valid set of "
             f"policies for {proc_state.describe_cert()}.",
@@ -1460,10 +1416,10 @@ def _prepare_next_step(
         )
 
         # Step 3 b
-        if state.valid_policy_tree is not None:
-            state.valid_policy_tree = apply_policy_mapping(
+        if state.valid_policy_graph is not None:
+            state.valid_policy_graph = apply_policy_mapping(
                 policy_map,
-                state.valid_policy_tree,
+                state.valid_policy_graph,
                 depth=index,
                 policy_mapping_uninhibited=state.policy_mapping > 0,
             )
