@@ -15,13 +15,13 @@ major dependency upgrades, `y` will be incremented. If more work is necessary,
 
 ## Reporting a Vulnerability
 
-Please don't hesitate to email me if you think you've found a security
+Please don't hesitate to contact me if you think you've found a security
 vulnerability in pyHanko or one of its dependencies.
 
-Depending on your preferences, you can either
-- contact me at `dev@mvalvekens.be`;
-- use the contact information and PGP key that are listed [on my website][website];
-- use GitHub's private vulnerability disclosure feature.
+GitHub's private vulnerability disclosure feature is the
+preferred channel for such communication.
+Alternatively, you may contact me at `dev@mvalvekens.be`, but
+this is intended as a fallback, not as the primary reporting avenue.
 
 I'll do my best to get back to you within 24 hours
 to assess the scope of the issue. We can discuss severity, possible fixes,
@@ -29,9 +29,6 @@ mitigations and disclosure timelines in private. In the meantime, standard
 responsible disclosure practices apply.
 
 Proof-of-concept code and/or sample documents are appreciated if available.
-
-
-[website]: https://mvalvekens.be/contact.html
 
 
 ## Spec issues
