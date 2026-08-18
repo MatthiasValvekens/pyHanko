@@ -414,7 +414,6 @@ EXPECTED_CONFIG_KEYS = (
     'signer-key-usage',
     'signer-extd-key-usage',
     'signer-key-usage-policy',
-    'eutl',
     'eutl-force-redownload',
     'eutl-lotl-url',
     'lotl-tlso-certs',
