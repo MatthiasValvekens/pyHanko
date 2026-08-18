@@ -81,7 +81,9 @@ in the CLI. This is how they are interpreted:
 
 * ``trust``: One or more paths to trust anchor(s) to be used.
 * ``trust-replace``: Flag indicating whether the ``trust`` setting should
-  override the system trust (default ``false``).
+  override the system trust (default ``false``). Passing ``--trust-replace``
+  on the command line forces this setting on, whatever the configuration
+  file says.
 
   .. deprecated:: 0.5.0
       Combining the configured trust roots with the operating system's trust

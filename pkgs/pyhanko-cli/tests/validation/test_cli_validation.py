@@ -795,6 +795,40 @@ def test_basic_validate_context_config_nonsensical_other_certs(
     assert "validation context" in result.output
 
 
+@pytest.mark.parametrize('setup_type', ['default', 'explicit'])
+@pytest.mark.parametrize('trust_replace_arg', [True, False])
+def test_trust_replace_arg_applies_to_config_context(
+    cli_runner,
+    caplog,
+    setup_type,
+    trust_replace_arg,
+    root_cert,
+    input_to_validate,
+    cli_context,
+):
+    # the trust_replace_arg=False half relies on the OS trust fallback, so it
+    # has to be dropped when that fallback goes away
+    _write_config({'validation-contexts': {setup_type: {'trust': root_cert}}})
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            *(
+                ()
+                if setup_type == 'default'
+                else ('--validation-context', setup_type)
+            ),
+            *(('--trust-replace',) if trust_replace_arg else ()),
+            input_to_validate,
+        ],
+        obj=cli_context,
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED,UNTOUCHED' in result.output
+    assert ('operating system' in caplog.text) is not trust_replace_arg
+
+
 def test_basic_validate_context_without_config_file(cli_runner, cli_context):
     result = cli_runner.invoke(
         cli_root,

@@ -277,13 +277,10 @@ def test_validate_config_eutl_limited_territories(
 
 
 @pytest.mark.nosmoke
-@pytest.mark.parametrize('territories', ['de,fr', 'de', ['de', 'fr'], [], ''])
+@pytest.mark.parametrize('territories', ['de,fr', 'de', ['de', 'fr']])
 def test_validate_eutl_config_limited_territories_not_included(
     cli_runner, input_to_validate, tl_cache, territories, cli_context
 ):
-    # an empty 'eutl-territories' setting disables EUTL sourcing altogether,
-    # so 'trust-replace' is what keeps those parameters from falling through
-    # to the platform trust list
     _write_config(
         {
             'cache-dir': CACHE_DIR,
@@ -292,7 +289,6 @@ def test_validate_eutl_config_limited_territories_not_included(
                     'eutl-lotl-url': LOTL_URL,
                     'lotl-tlso-certs': LOTL_TLSO_CERT_PATH,
                     'eutl-territories': territories,
-                    'trust-replace': True,
                 }
             },
         }
@@ -309,6 +305,34 @@ def test_validate_eutl_config_limited_territories_not_included(
     )
     assert result.exit_code == 1
     assert 'judged INVALID' in result.output
+
+
+@pytest.mark.nosmoke
+@pytest.mark.parametrize('territories', [[], '', None])
+def test_validate_eutl_config_empty_territories(
+    cli_runner, caplog, input_to_validate, territories, cli_context
+):
+    _write_config(
+        {
+            'cache-dir': CACHE_DIR,
+            'validation-contexts': {
+                'default': {'eutl-territories': territories}
+            },
+        }
+    )
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--pretty-print',
+            input_to_validate,
+        ],
+        obj=cli_context,
+    )
+    assert result.exit_code == 1
+    assert 'validation context' in result.output
+    assert 'must be non-empty' in caplog.text
 
 
 @pytest.mark.nosmoke
