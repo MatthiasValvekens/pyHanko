@@ -4,6 +4,7 @@ from typing import TypeVar
 from pyhanko.pdf_utils import misc
 from pyhanko_certvalidator import ValidationContext
 
+from .._session_scope import run_and_release
 from ..diff_analysis import DiffPolicy
 from .dss import (
     VRI,
@@ -99,7 +100,9 @@ def validate_pdf_signature(
         key_usage_settings=key_usage_settings,
         skip_diff=skip_diff,
     )
-    return asyncio.run(coro)
+    return asyncio.run(
+        run_and_release(coro, signer_validation_context, ts_validation_context)
+    )
 
 
 def validate_pdf_timestamp(
@@ -134,7 +137,7 @@ def validate_pdf_timestamp(
         diff_policy=diff_policy,
         skip_diff=skip_diff,
     )
-    return asyncio.run(coro)
+    return asyncio.run(run_and_release(coro, validation_context))
 
 
 def add_validation_info(
@@ -192,4 +195,4 @@ def add_validation_info(
         chunk_size=chunk_size,
         force_write=force_write,
     )
-    return asyncio.run(coro)
+    return asyncio.run(run_and_release(coro, validation_context))

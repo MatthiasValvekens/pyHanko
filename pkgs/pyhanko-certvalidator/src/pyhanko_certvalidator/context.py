@@ -7,8 +7,12 @@ from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
 from .authority import AuthorityWithCert
-from .fetchers import FetcherBackend, Fetchers, default_fetcher_backend
-from .fetchers.requests_fetchers import RequestsFetcherBackend
+from .fetchers import (
+    FetcherBackend,
+    Fetchers,
+    OwnedFetcherBackend,
+    _default_fetcher_backend,
+)
 from .ltv.poe import POEManager
 from .ltv.types import ValidationTimingInfo, ValidationTimingParams
 from .path import ValidationPath
@@ -85,7 +89,7 @@ class ValidationContext:
         weak_hash_algos: Iterable[str] | None = None,
         time_tolerance: timedelta = timedelta(seconds=1),
         retroactive_revinfo: bool = False,
-        fetcher_backend: FetcherBackend | None = None,
+        fetcher_backend: FetcherBackend | OwnedFetcherBackend | None = None,
         acceptable_ac_targets: ACTargetDescription | None = None,
         poe_manager: POEManager | None = None,
         revinfo_manager: RevinfoManager | None = None,
@@ -246,17 +250,28 @@ class ValidationContext:
                 algorithm_usage_policy = DisallowWeakAlgorithmsPolicy()
         self.algorithm_policy = algorithm_usage_policy
 
+        self._owned_fetcher_backend: FetcherBackend | None = None
+        if isinstance(fetcher_backend, OwnedFetcherBackend):
+            fetcher_backend = self._owned_fetcher_backend = (
+                fetcher_backend.backend
+            )
+
+        # Fetchers set up here are consumed by the certificate registry and the
+        # revinfo manager below. If both of those were supplied by the caller,
+        # anything we build here is discarded unused, so don't build it: an
+        # unowned backend is a leak waiting for someone to touch it.
+        fetchers_reachable = (
+            revinfo_manager is None or certificate_registry is None
+        )
         cert_fetcher = None
-        if allow_fetching:
+        if allow_fetching and fetchers_reachable:
             # not None -> externally managed fetchers
             if fetchers is None:
                 # fetcher managed by this validation context,
                 # but backend possibly managed externally
                 if fetcher_backend is None:
-                    # in this case, we load the default requests-based
-                    # backend, since the caller doesn't do any resource
-                    # management
-                    fetcher_backend = default_fetcher_backend()
+                    fetcher_backend = _default_fetcher_backend()
+                    self._owned_fetcher_backend = fetcher_backend
                 fetchers = fetcher_backend.get_fetchers()
             cert_fetcher = fetchers.cert_fetcher
         else:
@@ -445,6 +460,34 @@ class ValidationContext:
     def acceptable_ac_targets(self) -> ACTargetDescription | None:
         return self._acceptable_ac_targets
 
+    async def aclose(self):
+        """
+        .. versionadded:: 0.32.0
+
+        Release the network resources that this validation context provisioned
+        for itself.
+
+        Only a fetcher backend that this context set up on its own behalf is
+        closed. Fetchers or a fetcher backend passed in by the caller stay the
+        caller's to manage, and are left untouched.
+
+        The context remains usable afterwards: the next operation provisions a
+        session of its own. Call this at the end of every top-level operation,
+        from within the event loop that ran it, or wrap the context in
+        :func:`contextlib.aclosing` if you prefer the block form::
+
+            async with aclosing(ValidationContext(...)) as vc:
+                ...
+
+        Note that this manages a *session*, not the context object; pooling
+        connections across several operations is expressed by passing a
+        :class:`~pyhanko_certvalidator.fetchers.FetcherBackend` of your own.
+        """
+
+        backend = self._owned_fetcher_backend
+        if backend is not None:
+            await backend.close()
+
 
 @dataclass(frozen=True)
 class ValidationDataHandlers:
@@ -474,12 +517,50 @@ class ValidationDataHandlers:
         related to how the certificates fit together.
     """
 
+    owned_fetcher_backend: FetcherBackend | None = None
+    """
+    .. versionadded:: 0.32.0
 
-DEFAULT_FETCHER_BACKEND = RequestsFetcherBackend()
+    A fetcher backend that was provisioned on this object's behalf, and is
+    therefore closed by :meth:`aclose`. ``None`` when the fetchers came from
+    the caller, in which case cleaning up after them is the caller's job.
+    """
+
+    async def aclose(self):
+        """
+        .. versionadded:: 0.32.0
+
+        Release the network resources provisioned on this object's behalf.
+
+        Call this from within the event loop that ran the operation these
+        handlers were built for.
+        """
+
+        backend = self.owned_fetcher_backend
+        if backend is not None:
+            await backend.close()
+
+
+class UseDefaultFetchers:
+    def __repr__(self):  # pragma: nocover
+        return 'USE_DEFAULT_FETCHERS'
+
+
+USE_DEFAULT_FETCHERS = UseDefaultFetchers()
+"""
+.. versionadded:: 0.32.0
+
+Sentinel instructing :func:`bootstrap_validation_data_handlers` to provision a
+fetcher backend of its own, as opposed to ``None``, which disables remote
+fetching altogether.
+"""
 
 
 def bootstrap_validation_data_handlers(
-    fetchers: Fetchers | FetcherBackend | None = DEFAULT_FETCHER_BACKEND,
+    fetchers: Fetchers
+    | FetcherBackend
+    | UseDefaultFetchers
+    | None = USE_DEFAULT_FETCHERS,
     crls: Iterable[CRLContainer] = (),
     ocsps: Iterable[OCSPContainer] = (),
     certs: Iterable[x509.Certificate] = (),
@@ -492,8 +573,9 @@ def bootstrap_validation_data_handlers(
 
     :param fetchers:
         Data fetcher implementation and/or backend to use.
-        If ``None``, remote fetching is disabled. The ``requests``-based
-        implementation is the default.
+        If ``None``, remote fetching is disabled. Left unspecified, a backend
+        is provisioned for the resulting handlers, which then own it; see
+        :meth:`.ValidationDataHandlers.aclose`.
     :param crls:
         Initial collection of CRLs to feed to the revocation info manager.
     :param ocsps:
@@ -511,7 +593,11 @@ def bootstrap_validation_data_handlers(
     """
 
     _fetchers: Fetchers | None
-    if isinstance(fetchers, FetcherBackend):
+    owned_backend: FetcherBackend | None = None
+    if isinstance(fetchers, UseDefaultFetchers):
+        owned_backend = _default_fetcher_backend()
+        _fetchers = owned_backend.get_fetchers()
+    elif isinstance(fetchers, FetcherBackend):
         _fetchers = fetchers.get_fetchers()
     elif isinstance(fetchers, Fetchers):
         _fetchers = fetchers
@@ -535,6 +621,7 @@ def bootstrap_validation_data_handlers(
         revinfo_manager=revinfo_manager,
         poe_manager=poe_manager,
         cert_registry=cert_registry,
+        owned_fetcher_backend=owned_backend,
     )
 
 
@@ -632,7 +719,7 @@ class CertValidationPolicySpec:
             poe_manager = handlers.poe_manager
             revinfo_manager = handlers.revinfo_manager
 
-        return {
+        kwargs: dict[str, Any] = {
             "trust_manager": self.trust_manager,
             "revinfo_policy": self.revinfo_policy,
             "revinfo_manager": revinfo_manager,
@@ -646,6 +733,14 @@ class CertValidationPolicySpec:
             "allow_fetching": revinfo_manager.fetching_allowed,
             "signature_validator": self.signature_validator,
         }
+        if handlers is not None and handlers.owned_fetcher_backend is not None:
+            # The handlers provisioned a backend for the validation that these
+            # kwargs are part of, and a context is what the caller actually
+            # holds, so let it do the releasing.
+            kwargs["fetcher_backend"] = OwnedFetcherBackend(
+                handlers.owned_fetcher_backend
+            )
+        return kwargs
 
     def build_validation_context(
         self,

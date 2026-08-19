@@ -31,6 +31,11 @@ class LazySession:
     async def close(self):
         session = self._session
         if session is not None:
+            # Drop the reference as well as closing it: a session is bound to
+            # the event loop that created it, so an object holding a lazy
+            # session across two top-level calls has to be able to provision a
+            # fresh one for the second.
+            self._session = None
             await session.close()
 
 

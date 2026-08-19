@@ -18,6 +18,7 @@ __all__ = [
     'FetcherBackend',
     'Fetchers',
     'OCSPFetcher',
+    'OwnedFetcherBackend',
 ]
 
 DEFAULT_USER_AGENT = f'pyhanko_certvalidator {__version__}'
@@ -216,3 +217,22 @@ class FetcherBackend(abc.ABC):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         return await self.close()
+
+
+@dataclass(frozen=True)
+class OwnedFetcherBackend:
+    """
+    .. versionadded:: 0.32.0
+
+    Wrapper handing a backend's lifetime over to whoever it is passed to.
+
+    Backends are ordinarily the caller's to close, so passing one to a
+    validation context leaves it untouched. Wrap it in this to say the
+    opposite: the recipient provisioned it in all but name, and releases it
+    when the operation it was provisioned for is over.
+    """
+
+    backend: FetcherBackend
+    """
+    The backend whose lifetime is being handed over.
+    """

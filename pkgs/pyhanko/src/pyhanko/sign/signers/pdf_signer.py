@@ -24,6 +24,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import attributes
+from pyhanko.sign._session_scope import run_and_release
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 from pyhanko.sign.fields import (
     FieldMDPSpec,
@@ -649,18 +650,21 @@ class PdfTimeStamper:
             The output stream containing the signed output.
         """
         result = asyncio.run(
-            self.async_timestamp_pdf(
-                pdf_out,
-                md_algorithm,
-                validation_context=validation_context,
-                bytes_reserved=bytes_reserved,
-                validation_paths=validation_paths,
-                timestamper=timestamper,
-                in_place=in_place,
-                output=output,
-                chunk_size=chunk_size,
-                dss_settings=dss_settings,
-                tight_size_estimates=tight_size_estimates,
+            run_and_release(
+                self.async_timestamp_pdf(
+                    pdf_out,
+                    md_algorithm,
+                    validation_context=validation_context,
+                    bytes_reserved=bytes_reserved,
+                    validation_paths=validation_paths,
+                    timestamper=timestamper,
+                    in_place=in_place,
+                    output=output,
+                    chunk_size=chunk_size,
+                    dss_settings=dss_settings,
+                    tight_size_estimates=tight_size_estimates,
+                ),
+                validation_context,
             )
         )
         return result
@@ -904,7 +908,7 @@ class PdfTimeStamper:
             chunk_size=chunk_size,
             default_md_algorithm=default_md_algorithm,
         )
-        return asyncio.run(coro)
+        return asyncio.run(run_and_release(coro, validation_context))
 
     async def async_update_archival_timestamp_chain(
         self,
@@ -1452,14 +1456,17 @@ class PdfSigner:
             The output stream containing the signed data.
         """
         result = asyncio.run(
-            self.async_sign_pdf(
-                pdf_out,
-                existing_fields_only=existing_fields_only,
-                bytes_reserved=bytes_reserved,
-                appearance_text_params=appearance_text_params,
-                in_place=in_place,
-                output=output,
-                chunk_size=chunk_size,
+            run_and_release(
+                self.async_sign_pdf(
+                    pdf_out,
+                    existing_fields_only=existing_fields_only,
+                    bytes_reserved=bytes_reserved,
+                    appearance_text_params=appearance_text_params,
+                    in_place=in_place,
+                    output=output,
+                    chunk_size=chunk_size,
+                ),
+                self.signature_meta.validation_context,
             )
         )
         return result
@@ -2660,13 +2667,16 @@ class PdfTBSDocument:
             ``memoryview``.
         """
         asyncio.run(
-            cls.async_finish_signing(
-                output,
-                prepared_digest,
-                signature_cms,
-                post_sign_instr=post_sign_instr,
-                validation_context=validation_context,
-                chunk_size=chunk_size,
+            run_and_release(
+                cls.async_finish_signing(
+                    output,
+                    prepared_digest,
+                    signature_cms,
+                    post_sign_instr=post_sign_instr,
+                    validation_context=validation_context,
+                    chunk_size=chunk_size,
+                ),
+                validation_context,
             )
         )
 

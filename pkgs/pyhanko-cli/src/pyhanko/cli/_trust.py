@@ -30,20 +30,16 @@ from pyhanko.sign.validation.qualified.tsp import (
 )
 from pyhanko_certvalidator.authority import AuthorityWithCert
 from pyhanko_certvalidator.context import (
+    USE_DEFAULT_FETCHERS,
     CertValidationPolicySpec,
-    ValidationDataHandlers,
+    bootstrap_validation_data_handlers,
 )
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
-)
-from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.policy_decl import (
     CertRevTrustPolicy,
     RevocationCheckingPolicy,
 )
 from pyhanko_certvalidator.registry import (
-    CertificateRegistry,
     SimpleTrustManager,
     TrustManager,
 )
@@ -54,7 +50,6 @@ __all__ = [
     'init_trust_manager',
 ]
 
-from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 
 DEFAULT_TL_CACHE_REFRESH_TIME = timedelta(days=15)
 
@@ -383,25 +378,9 @@ def init_handlers(
     other_certs: Iterable[str] | str,
     allow_fetching: bool,
 ):
-    other_cert_objs = list(load_certs_from_pemder(other_certs))
-    fetcher_backend = RequestsFetcherBackend()
-    fetchers = fetcher_backend.get_fetchers() if allow_fetching else None
-    cert_registry = CertificateRegistry(
-        cert_fetcher=fetchers.cert_fetcher if fetchers else None,
-    )
-    cert_registry.register_multiple(other_cert_objs)
-    poe_manager = POEManager()
-    revinfo_manager = RevinfoManager(
-        certificate_registry=cert_registry,
-        poe_manager=poe_manager,
-        crls=[],
-        ocsps=[],
-        fetchers=fetchers,
-    )
-    return ValidationDataHandlers(
-        revinfo_manager=revinfo_manager,
-        poe_manager=poe_manager,
-        cert_registry=cert_registry,
+    return bootstrap_validation_data_handlers(
+        fetchers=USE_DEFAULT_FETCHERS if allow_fetching else None,
+        certs=load_certs_from_pemder(other_certs),
     )
 
 
