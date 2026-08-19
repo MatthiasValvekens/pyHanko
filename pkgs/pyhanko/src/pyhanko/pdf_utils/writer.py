@@ -743,14 +743,14 @@ class BasePdfFileWriter(PdfHandler):
         # increase page count for all parents
         parent = pages_obj
         while parent is not None:
-            # can't use += 1 because of the way PyPDF2's generic types work
+            parent = parent.get_object()
+            self.update_container(parent)
             count = parent['/Count']
             parent[pdf_name('/Count')] = generic.NumberObject(count + 1)
             parent = parent.get('/Parent')
         new_page_ref = self.add_object(new_page)
         kids.insert(kid_ix + 1, new_page_ref)
         new_page[pdf_name('/Parent')] = pages_obj_ref
-        self.update_container(pages_obj)
         self.update_container(kids)
 
         return new_page_ref

@@ -82,6 +82,64 @@ def test_create_fresh(zip1, zip2):
         r.find_page_for_modification(-3)
 
 
+def _nested_page_tree_pdf(page_count=4, pages_per_node=2):
+    """
+    Produce a PDF whose page tree has intermediate /Pages nodes, i.e. where
+    the root /Pages node does not point to the /Page leaves directly.
+    """
+    w = writer.PdfFileWriter()
+
+    page_refs = [
+        w.add_object(simple_page(w, f'Page {ix}'))
+        for ix in range(1, page_count + 1)
+    ]
+
+    root_ref = w.root.raw_get('/Pages')
+    root = root_ref.get_object()
+
+    intermediate_refs = []
+    for start in range(0, page_count, pages_per_node):
+        chunk = page_refs[start : start + pages_per_node]
+        node_ref = w.add_object(
+            generic.DictionaryObject(
+                {
+                    pdf_name('/Type'): pdf_name('/Pages'),
+                    pdf_name('/Parent'): root_ref,
+                    pdf_name('/Count'): generic.NumberObject(len(chunk)),
+                    pdf_name('/Kids'): generic.ArrayObject(chunk),
+                }
+            )
+        )
+        for page_ref in chunk:
+            page_ref.get_object()[pdf_name('/Parent')] = node_ref
+        intermediate_refs.append(node_ref)
+
+    root[pdf_name('/Kids')] = generic.ArrayObject(intermediate_refs)
+    root[pdf_name('/Count')] = generic.NumberObject(page_count)
+
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    return out
+
+
+def test_insert_page_into_nested_page_tree():
+    w = IncrementalPdfFileWriter(_nested_page_tree_pdf())
+    w.insert_page(simple_page(w, 'Appended'))
+
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+
+    r = PdfFileReader(out)
+    # the /Count on the root node has to account for the new page, otherwise
+    # consumers that rely on it will not see the page at all
+    assert r.root['/Pages']['/Count'] == 5
+    last_page_ref, _ = r.find_page_for_modification(-1)
+    contents = last_page_ref.get_object()['/Contents']
+    assert b'Appended' in contents.get_object().data
+
+
 def test_add_stream():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
