@@ -1,18 +1,19 @@
 """
 This module contains a number of functions to handle AdES signature validation.
-
-
-.. danger::
-    This API is incubating, and not all features of the spec have been fully
-    implemented at this stage. There will be bugs, and API changes may still
-    occur.
 """
 
 import asyncio
 import dataclasses
 import itertools
 import logging
-from collections.abc import Callable, Generator, Iterable, Iterator
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+)
+from contextlib import asynccontextmanager
 from copy import copy
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -73,6 +74,9 @@ from pyhanko_certvalidator.context import (
     ValidationDataHandlers,
 )
 from pyhanko_certvalidator.errors import PathError
+from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
+    AIOHttpFetcherBackend,
+)
 from pyhanko_certvalidator.ltv.ades_past import past_validate
 from pyhanko_certvalidator.ltv.poe import (
     KnownPOE,
@@ -130,6 +134,41 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 StatusType_co = TypeVar('StatusType_co', bound=SignatureStatus, covariant=True)
+
+
+@asynccontextmanager
+async def _operation_scoped_spec(
+    spec: SignatureValidationSpec,
+) -> AsyncIterator[SignatureValidationSpec]:
+    """
+    Pin a single fetcher backend to one validation operation.
+
+    An AdES validation bootstraps several sets of validation data handlers as
+    it goes; left to their own devices, each of those would provision a backend
+    of its own. Provisioning one up front and putting it on the specification
+    instead means they all treat it as externally supplied, so connections are
+    pooled across everything the operation does and there is exactly one thing
+    to close at the end.
+
+    A backend the caller put on the specification themselves is left alone: it
+    outlives this operation, and closing it is their business.
+    """
+
+    gathering_policy = spec.revinfo_gathering_policy
+    if gathering_policy.fetcher_backend is not None:
+        yield spec
+        return
+
+    backend = AIOHttpFetcherBackend()
+    try:
+        yield dataclasses.replace(
+            spec,
+            revinfo_gathering_policy=dataclasses.replace(
+                gathering_policy, fetcher_backend=backend
+            ),
+        )
+    finally:
+        await backend.close()
 
 
 def derive_validation_object_binary_data(
@@ -327,31 +366,31 @@ async def ades_timestamp_validation(
     """
 
     timing_info = timing_info or ValidationTimingInfo.now()
-    cert_validation_policy = (
-        validation_spec.ts_cert_validation_policy
-        or validation_spec.cert_validation_policy
-    )
 
-    if validation_data_handlers is None:
-        validation_data_handlers = bootstrap_validation_data_handlers(
-            spec=validation_spec, timing_info=timing_info
+    async with _operation_scoped_spec(validation_spec) as spec:
+        cert_validation_policy = (
+            spec.ts_cert_validation_policy or spec.cert_validation_policy
         )
+        if validation_data_handlers is None:
+            validation_data_handlers = bootstrap_validation_data_handlers(
+                spec=spec, timing_info=timing_info
+            )
 
-    validation_context = cert_validation_policy.build_validation_context(
-        timing_info=timing_info, handlers=validation_data_handlers
-    )
-    qualification_requirements = (
-        validation_spec.ts_qualification_requirements
-        or validation_spec.qualification_requirements
-    )
-    return await ades_timestamp_validation_internal(
-        tst_signed_data,
-        validation_context,
-        expected_tst_imprint,
-        qualification_requirements,
-        extra_status_kwargs=extra_status_kwargs,
-        status_cls=status_cls,
-    )
+        validation_context = cert_validation_policy.build_validation_context(
+            timing_info=timing_info, handlers=validation_data_handlers
+        )
+        qualification_requirements = (
+            spec.ts_qualification_requirements
+            or spec.qualification_requirements
+        )
+        return await ades_timestamp_validation_internal(
+            tst_signed_data,
+            validation_context,
+            expected_tst_imprint,
+            qualification_requirements,
+            extra_status_kwargs=extra_status_kwargs,
+            status_cls=status_cls,
+        )
 
 
 def _ades_signature_crypto_policy_check(
@@ -733,6 +772,29 @@ async def ades_basic_validation(
     :return:
         A :class:`.AdESBasicValidationResult`.
     """
+    async with _operation_scoped_spec(validation_spec) as spec:
+        return await _scoped_ades_basic_validation(
+            signed_data=signed_data,
+            validation_spec=spec,
+            timing_info=timing_info,
+            raw_digest=raw_digest,
+            validation_data_handlers=validation_data_handlers,
+            signature_not_before_time=signature_not_before_time,
+            extra_status_kwargs=extra_status_kwargs,
+            status_cls=status_cls,
+        )
+
+
+async def _scoped_ades_basic_validation(
+    signed_data: cms.SignedData,
+    validation_spec: SignatureValidationSpec,
+    timing_info: ValidationTimingInfo | None = None,
+    raw_digest: bytes | None = None,
+    validation_data_handlers: ValidationDataHandlers | None = None,
+    signature_not_before_time: datetime | None = None,
+    extra_status_kwargs: dict[str, Any] | None = None,
+    status_cls=StandardCMSSignatureStatus,
+) -> AdESBasicValidationResult:
 
     timing_info = timing_info or ValidationTimingInfo.now()
     if validation_data_handlers is None:
@@ -956,6 +1018,29 @@ async def ades_with_time_validation(
     :return:
         A :class:`.AdESBasicValidationResult`.
     """
+    async with _operation_scoped_spec(validation_spec) as spec:
+        return await _scoped_ades_with_time_validation(
+            signed_data=signed_data,
+            validation_spec=spec,
+            timing_info=timing_info,
+            raw_digest=raw_digest,
+            validation_data_handlers=validation_data_handlers,
+            signature_not_before_time=signature_not_before_time,
+            extra_status_kwargs=extra_status_kwargs,
+            status_cls=status_cls,
+        )
+
+
+async def _scoped_ades_with_time_validation(
+    signed_data: cms.SignedData,
+    validation_spec: SignatureValidationSpec,
+    timing_info: ValidationTimingInfo | None = None,
+    raw_digest: bytes | None = None,
+    validation_data_handlers: ValidationDataHandlers | None = None,
+    signature_not_before_time: datetime | None = None,
+    extra_status_kwargs: dict[str, Any] | None = None,
+    status_cls=StandardCMSSignatureStatus,
+) -> AdESWithTimeValidationResult:
 
     timing_info = timing_info or ValidationTimingInfo.now()
     if validation_data_handlers is None:
@@ -1469,6 +1554,23 @@ async def ades_past_signature_validation(
         An AdES subindication indicating the validation result
         after going through the past validation process.
     """
+    async with _operation_scoped_spec(validation_spec) as spec:
+        return await _scoped_ades_past_signature_validation(
+            signed_data=signed_data,
+            validation_spec=spec,
+            poe_manager=poe_manager,
+            current_time_sub_indic=current_time_sub_indic,
+            init_control_time=init_control_time,
+        )
+
+
+async def _scoped_ades_past_signature_validation(
+    signed_data: cms.SignedData,
+    validation_spec: SignatureValidationSpec,
+    poe_manager: POEManager,
+    current_time_sub_indic: AdESIndeterminate | None,
+    init_control_time: datetime | None = None,
+) -> AdESSubIndic:
 
     eci = signed_data['encap_content_info']
     is_timestamp = eci['content_type'].native == 'tst_info'
@@ -2070,6 +2172,25 @@ async def ades_lta_validation(
     :return:
         A validation result.
     """
+    async with _operation_scoped_spec(
+        pdf_validation_spec.signature_validation_spec
+    ) as spec:
+        return await _scoped_ades_lta_validation(
+            embedded_sig=embedded_sig,
+            pdf_validation_spec=dataclasses.replace(
+                pdf_validation_spec, signature_validation_spec=spec
+            ),
+            timing_info=timing_info,
+            signature_not_before_time=signature_not_before_time,
+        )
+
+
+async def _scoped_ades_lta_validation(
+    embedded_sig: EmbeddedPdfSignature,
+    pdf_validation_spec: PdfSignatureValidationSpec,
+    timing_info: ValidationTimingInfo | None = None,
+    signature_not_before_time: datetime | None = None,
+) -> AdESLTAValidationResult:
 
     timing_info = timing_info or ValidationTimingInfo.now(
         tz=tzlocal.get_localzone()

@@ -14,16 +14,15 @@ from pyhanko.sign.validation.qualified.tsp import QcCertType
 from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
 from pyhanko_certvalidator.authority import TrustedServiceType
 from pyhanko_certvalidator.context import (
+    USE_DEFAULT_FETCHERS,
     CertValidationPolicySpec,
+    UseDefaultFetchers,
     ValidationDataHandlers,
 )
 from pyhanko_certvalidator.context import (
     bootstrap_validation_data_handlers as _certvalidator_bootstrap_handlers,
 )
 from pyhanko_certvalidator.fetchers import FetcherBackend
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
-)
 from pyhanko_certvalidator.ltv.poe import (
     KnownPOE,
     POEManager,
@@ -73,9 +72,19 @@ class RevocationInfoGatheringSpec:
     online_fetching_rule: RevinfoOnlineFetchingRule = (
         RevinfoOnlineFetchingRule.NO_HISTORICAL_FETCH
     )
-    fetcher_backend: FetcherBackend = field(
-        default_factory=RequestsFetcherBackend
-    )
+    fetcher_backend: FetcherBackend | None = None
+    """
+    .. versionchanged:: 0.37.0
+        Defaults to ``None`` now, which will result in a backend
+        provisioned on-the-fly for each operation that requires one.
+
+    Fetcher backend to gather revocation information with.
+
+    When ``None``, a backend is provisioned for the duration of each
+    validation operation and released when it ends. Supply one explicitly to
+    pool resources across operations. In this case, the lifecycle management
+    responsibility is yours.
+    """
 
 
 @dataclass(frozen=True)
@@ -194,14 +203,16 @@ class PdfSignatureValidationSpec:
 
 
 def _backend_if_necessary(
-    hist: bool, rule: RevinfoOnlineFetchingRule, backend: FetcherBackend
-) -> FetcherBackend | None:
+    hist: bool, rule: RevinfoOnlineFetchingRule, backend: FetcherBackend | None
+) -> FetcherBackend | UseDefaultFetchers | None:
     if (
         rule == RevinfoOnlineFetchingRule.LOCAL_ONLY
         or rule == RevinfoOnlineFetchingRule.NO_HISTORICAL_FETCH
         and hist
     ):
         return None
+    elif backend is None:
+        return USE_DEFAULT_FETCHERS
     else:
         return backend
 

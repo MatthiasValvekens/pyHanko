@@ -67,7 +67,10 @@ image-support = [
     "python-barcode==0.16.1"
 ]
 pkcs11 = ["python-pkcs11~=0.9.3"]
-async-http = ["aiohttp>=3.9,<3.15"]
+async-http = [
+    # kept for compatibility reasons, empty now
+]
+requests = ["requests>=2.31.0"]
 etsi = [
     "xsdata>=24.4,<27.0",
     "signxml>=5.1.0"
@@ -77,19 +80,15 @@ etsi = [
 testing-base = [
     "common-test-utils",
     "pytest>=6.1.1",
-    "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
     "certomancer[web-api-async]>=0.16.0",
     "pytest-cov>=4.0,<7.2",
     "pytest-asyncio>=1.1.0,<2.0",
-]
-testing-aiohttp = [
-    "aiohttp>=3.9,<3.15",
     "pytest-aiohttp>=1.0.4,<1.2.0",
+    "requests>=2.31.0",
 ]
 testing = [
     { include-group = "testing-base" },
-    { include-group = "testing-aiohttp" },
     "common-test-utils[csc]",
 ]
 testing-pkcs11-setup = [

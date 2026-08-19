@@ -576,27 +576,9 @@ Using ``aiohttp`` for network I/O
 
 .. versionadded:: 0.9.0
 
-In version ``0.9.0``, pyHanko's lower-level APIs were reworked from an
-"async-first" perspective. For backwards compatibility reasons, the default
-implementation pyHanko's network I/O code (for fetching revocation info,
-timestamps, etc.) still uses the ``requests`` library with some crude
-``asyncio`` plumbing around it.
-However, to take maximal advantage of the new ``asyncio`` facilities,
-you need to use a networking library that actually supports asynchronous I/O
-natively. In principle, nothing stops you from plugging in an async-friendly
-library of your choosing, but pyHanko(and its dependency
-``pyhanko-certvalidator``) can already be used with ``aiohttp`` without much
-additional effort |---| ``aiohttp`` is a widely-used
-`library for asynchronous HTTP <https://github.com/aio-libs/aiohttp>`_.
+.. versionchanged:: 0.37.0
 
-.. note::
-    The reason why the ``aiohttp`` backend isn't the default one is simple:
-    using ``aiohttp`` requires the caller to manage a connection pool, which
-    was impossible to properly retrofit into pyHanko without causing major
-    breakage in the higher-level APIs as well.
-
-    Also note that ``aiohttp`` is an optional dependency.
-
+    ``aiohttp`` will become the default way to do network I/O in version 0.37.0.
 
 Here's an example demonstrating how you could use ``aiohttp``-based networking
 in pyHanko to create a PAdES-B-LTA signature.
@@ -608,7 +590,7 @@ in pyHanko to create a PAdES-B-LTA signature.
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.sign import signers
     from pyhanko.sign.fields import SigSeedSubFilter
-    from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
+    from pyhanko.sign.timestamps import HTTPTimeStamper
     from pyhanko_certvalidator import ValidationContext
     from pyhanko_certvalidator.fetchers.aiohttp_fetchers \
         import AIOHttpFetcherBackend
@@ -621,6 +603,9 @@ in pyHanko to create a PAdES-B-LTA signature.
 
     # This demo async function takes an aiohttp session, an input
     # file name and an output file name.
+    # Leaving out the session will result in one being plugged in lazily
+    # and resource-managed by the library. This can be suboptimal,
+    # so we encourage callers to do their own session management.
     async def sign_doc_demo(session, input_file, output_file):
         # Use the aiohttp fetcher backend provided by pyhanko-certvalidator,
         # and tell it to use our client session.
@@ -634,9 +619,8 @@ in pyHanko to create a PAdES-B-LTA signature.
             ),
         )
 
-        # Similarly, we choose an RFC 3161 client implementation
-        # that uses AIOHttp under the hood
-        timestamper = AIOHttpTimeStamper(
+        # Similarly, hand the session to the RFC 3161 client
+        timestamper = HTTPTimeStamper(
             TSA_URL,
             session=session
         )

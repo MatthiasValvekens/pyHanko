@@ -17,9 +17,6 @@ from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
     AIOHttpFetcherBackend,
 )
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers.util import LazySession
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
-)
 from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.policy_decl import (
@@ -64,7 +61,7 @@ def _handlers_only() -> tuple[RevinfoManager, CertificateRegistry]:
 async def test_context_provisions_and_owns_a_backend():
     vc = ValidationContext(trust_roots=[], allow_fetching=True)
     backend = vc._owned_fetcher_backend
-    assert isinstance(backend, RequestsFetcherBackend)
+    assert isinstance(backend, AIOHttpFetcherBackend)
     # closing the context releases what it provisioned...
     await vc.aclose()
     # ...and is repeatable, since a context outlives any single operation
@@ -146,7 +143,7 @@ async def test_unreachable_fetchers_still_adopt_an_owned_backend():
 @pytest.mark.asyncio
 async def test_bootstrap_owns_the_default_backend():
     handlers = bootstrap_validation_data_handlers()
-    assert isinstance(handlers.owned_fetcher_backend, RequestsFetcherBackend)
+    assert isinstance(handlers.owned_fetcher_backend, AIOHttpFetcherBackend)
     await handlers.aclose()
 
 

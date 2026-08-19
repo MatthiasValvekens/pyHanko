@@ -1192,7 +1192,6 @@ dependencies = [
     { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "requests-mock" },
 ]
 
 [package.metadata]
@@ -1209,7 +1208,6 @@ requires-dist = [
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
-    { name = "requests-mock", specifier = ">=1.8.0" },
 ]
 
 [[package]]
@@ -2284,9 +2282,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-async-http = [
-    { name = "aiohttp" },
-]
 etsi = [
     { name = "signxml" },
     { name = "xsdata" },
@@ -2305,10 +2300,12 @@ pkcs11 = [
 qr = [
     { name = "qrcode" },
 ]
+requests = [
+    { name = "requests" },
+]
 
 [package.dev-dependencies]
 testing = [
-    { name = "aiohttp" },
     { name = "certomancer", extra = ["web-api-async"] },
     { name = "common-test-utils", extra = ["csc"] },
     { name = "freezegun" },
@@ -2316,20 +2313,17 @@ testing = [
     { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "requests-mock" },
-]
-testing-aiohttp = [
-    { name = "aiohttp" },
-    { name = "pytest-aiohttp" },
+    { name = "requests" },
 ]
 testing-base = [
     { name = "certomancer", extra = ["web-api-async"] },
     { name = "common-test-utils" },
     { name = "freezegun" },
     { name = "pytest" },
+    { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "requests-mock" },
+    { name = "requests" },
 ]
 testing-pkcs11-setup = [
     { name = "certomancer", extra = ["pkcs11"] },
@@ -2338,7 +2332,6 @@ testing-pkcs11-setup = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9,<3.15" },
-    { name = "aiohttp", marker = "extra == 'async-http'", specifier = ">=3.9,<3.15" },
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "fonttools", marker = "extra == 'opentype'", specifier = ">=4.33.3" },
@@ -2348,16 +2341,16 @@ requires-dist = [
     { name = "python-barcode", marker = "extra == 'image-support'", specifier = "==0.16.1" },
     { name = "python-pkcs11", marker = "extra == 'pkcs11'", specifier = "~=0.9.3" },
     { name = "qrcode", marker = "extra == 'qr'", specifier = ">=7.3.1" },
+    { name = "requests", marker = "extra == 'requests'", specifier = ">=2.31.0" },
     { name = "signxml", marker = "extra == 'etsi'", specifier = ">=5.1.0" },
     { name = "tzlocal", specifier = ">=4.3" },
     { name = "uharfbuzz", marker = "extra == 'opentype'", specifier = ">=0.25.0,<0.56.0" },
     { name = "xsdata", marker = "extra == 'etsi'", specifier = ">=24.4,<27.0" },
 ]
-provides-extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "etsi"]
+provides-extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "requests", "etsi"]
 
 [package.metadata.requires-dev]
 testing = [
-    { name = "aiohttp", specifier = ">=3.9,<3.15" },
     { name = "certomancer", extras = ["web-api-async"], specifier = ">=0.16.0" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
@@ -2366,20 +2359,17 @@ testing = [
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
-    { name = "requests-mock", specifier = ">=1.8.0" },
-]
-testing-aiohttp = [
-    { name = "aiohttp", specifier = ">=3.9,<3.15" },
-    { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 testing-base = [
     { name = "certomancer", extras = ["web-api-async"], specifier = ">=0.16.0" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
+    { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
-    { name = "requests-mock", specifier = ">=1.8.0" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 testing-pkcs11-setup = [{ name = "certomancer", extras = ["pkcs11"], specifier = ">=0.16.0" }]
 
@@ -2456,12 +2446,11 @@ testing = [
     { name = "certomancer", extra = ["web-api-async"] },
     { name = "common-test-utils" },
     { name = "freezegun" },
-    { name = "pyhanko", extra = ["async-http", "etsi", "image-support", "opentype", "pkcs11", "qr"] },
+    { name = "pyhanko", extra = ["etsi", "image-support", "opentype", "pkcs11", "qr"] },
     { name = "pytest" },
     { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "requests-mock" },
 ]
 testing-base = [
     { name = "certomancer", extra = ["web-api-async"] },
@@ -2470,7 +2459,6 @@ testing-base = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "requests-mock" },
 ]
 testing-pkcs11-setup = [
     { name = "certomancer", extra = ["pkcs11"] },
@@ -2499,7 +2487,6 @@ testing = [
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
-    { name = "requests-mock", specifier = ">=1.8.0" },
 ]
 testing-base = [
     { name = "certomancer", extras = ["web-api-async"], specifier = ">=0.16.0" },
@@ -2508,7 +2495,6 @@ testing-base = [
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
-    { name = "requests-mock", specifier = ">=1.8.0" },
 ]
 testing-pkcs11-setup = [{ name = "certomancer", extras = ["pkcs11"], specifier = ">=0.16.0" }]
 
@@ -2548,7 +2534,7 @@ docs = [
     { name = "sphinx-rtd-theme" },
 ]
 docs-build = [
-    { name = "pyhanko", extra = ["async-http", "etsi", "image-support", "opentype", "pkcs11", "qr"] },
+    { name = "pyhanko", extra = ["etsi", "image-support", "opentype", "pkcs11", "qr"] },
     { name = "pyhanko-certvalidator" },
     { name = "pyhanko-cli" },
     { name = "sphinx", version = "8.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -2560,10 +2546,9 @@ docs-doctest = [
     { name = "certomancer", extra = ["web-api", "web-api-async"] },
     { name = "common-test-utils" },
     { name = "freezegun" },
-    { name = "pyhanko", extra = ["async-http", "etsi", "image-support", "opentype", "pkcs11", "qr"] },
+    { name = "pyhanko", extra = ["etsi", "image-support", "opentype", "pkcs11", "qr"] },
     { name = "pyhanko-certvalidator" },
     { name = "pyhanko-cli" },
-    { name = "requests-mock" },
     { name = "sphinx", version = "8.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -2632,7 +2617,6 @@ docs-doctest = [
     { name = "pyhanko", extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "etsi"], editable = "pkgs/pyhanko" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
     { name = "pyhanko-cli", editable = "pkgs/pyhanko-cli" },
-    { name = "requests-mock", specifier = ">=1.8.0" },
     { name = "sphinx" },
     { name = "sphinx-rtd-theme" },
 ]

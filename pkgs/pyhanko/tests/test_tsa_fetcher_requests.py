@@ -40,11 +40,12 @@ async def test_ts_fetch_error_requests():
 
 
 @freeze_time('2020-11-01')
-def test_http_timestamp_requests(pki_services):
+def test_http_timestamp_bad_content_type_requests(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
     # bad content-type
     pki_services.post(DUMMY_HTTP_TS.url, content=ts_response_callback)
+    from pyhanko.sign.timestamps import TimestampRequestError
 
     requests_http_ts = RequestsHTTPTimeStamper(DUMMY_HTTP_TS.url, https=False)
 
@@ -57,6 +58,10 @@ def test_http_timestamp_requests(pki_services):
             existing_fields_only=True,
         )
 
+
+@freeze_time('2020-11-01')
+def test_http_timestamp_requests(pki_services):
+    requests_http_ts = RequestsHTTPTimeStamper(DUMMY_HTTP_TS.url, https=False)
     pki_services.post(
         DUMMY_HTTP_TS.url,
         content=ts_response_callback,
@@ -67,7 +72,7 @@ def test_http_timestamp_requests(pki_services):
         w,
         signers.PdfSignatureMetadata(),
         signer=FROM_CA,
-        timestamper=DUMMY_HTTP_TS,
+        timestamper=requests_http_ts,
         existing_fields_only=True,
     )
 

@@ -22,6 +22,7 @@ from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.fields import SigSeedSubFilter
 from pyhanko.sign.signers import SimpleSigner
 from pyhanko.sign.timestamps import HTTPTimeStamper
+from pyhanko.sign.timestamps.requests_client import RequestsHTTPTimeStamper
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
 )
@@ -44,6 +45,7 @@ from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
 from pyhanko_certvalidator.fetchers.requests_fetchers import (
     RequestsCertificateFetcher,
     RequestsCRLFetcher,
+    RequestsFetcherBackend,
     RequestsOCSPFetcher,
 )
 from pyhanko_certvalidator.policy_decl import (
@@ -332,7 +334,42 @@ async def test_requests_fetchers_happy_path(strict):
             session, arch, backend=None, fetchers=fetchers
         )
 
-    timestamper = HTTPTimeStamper(f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa")
+    timestamper = RequestsHTTPTimeStamper(
+        f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa"
+    )
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1',
+        validation_context=vc,
+        subfilter=SigSeedSubFilter.PADES,
+        embed_validation_info=True,
+        use_pades_lta=True,
+    )
+    pdf_signer = signers.PdfSigner(meta, signer, timestamper=timestamper)
+    out = await pdf_signer.async_sign_pdf(w, in_place=True)
+    async with aiohttp.ClientSession() as session:
+        await _check_pades_result(out, [root], session)
+
+
+@run_if_live
+@pytest.mark.asyncio
+@pytest.mark.parametrize('strict', [True, False])
+async def test_requests_fetcher_backend_happy_path(strict):
+    arch = "testing-ca"
+    async with aiohttp.ClientSession() as session:
+        signer = await _retrieve_and_decode_credentials(
+            session, arch, "signer1-long", skip_other_certs=True
+        )
+        backend = RequestsFetcherBackend()
+        vc, root = await _init_validation_context(
+            session, arch, backend=backend
+        )
+        await backend.close()
+
+    timestamper = RequestsHTTPTimeStamper(
+        f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa"
+    )
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     meta = signers.PdfSignatureMetadata(

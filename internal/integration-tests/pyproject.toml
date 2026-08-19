@@ -6,7 +6,6 @@ requires-python = ">=3.10"
 dependencies = [
     "certomancer", "pyhanko", "pyhanko-certvalidator", "pyhanko-cli", "common-test-utils[csc]",
     "pytest>=6.1.1",
-    "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
     "certomancer[web-api,web-api-async]>=0.16",
     "pytest-cov>=4.0,<7.2",

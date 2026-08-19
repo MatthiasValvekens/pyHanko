@@ -26,6 +26,7 @@ def _default_fetcher_backend() -> FetcherBackend:
     equivalent.
     """
 
-    from .requests_fetchers import RequestsFetcherBackend
+    # deferred so that aiohttp is not imported by code paths that never fetch
+    from .aiohttp_fetchers import AIOHttpFetcherBackend
 
-    return RequestsFetcherBackend()
+    return AIOHttpFetcherBackend()

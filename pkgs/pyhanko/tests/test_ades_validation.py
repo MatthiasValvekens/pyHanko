@@ -39,6 +39,7 @@ from pyhanko.sign.validation.policy_decl import (
     PdfSignatureValidationSpec,
     QualificationRequirements,
     SignatureValidationSpec,
+    bootstrap_validation_data_handlers,
 )
 from pyhanko.sign.validation.qualified.q_status import (
     QcPrivateKeyManagementType,
@@ -55,6 +56,9 @@ from pyhanko_certvalidator.authority import CertTrustAnchor, TrustedServiceType
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationContext,
+)
+from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
+    AIOHttpFetcherBackend,
 )
 from pyhanko_certvalidator.ltv.poe import (
     KnownPOE,
@@ -1703,3 +1707,8 @@ async def test_content_ts_with_different_digest_not_supported(pki_services):
                 signature['content'],
                 validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
             )
+
+
+def test_bootstrap_handlers_default_backend():
+    handlers = bootstrap_validation_data_handlers(DEFAULT_SIG_VALIDATION_SPEC)
+    assert isinstance(handlers.owned_fetcher_backend, AIOHttpFetcherBackend)

@@ -168,7 +168,7 @@ def test_dummy_timestamp():
 
 
 @freeze_time('2020-11-01')
-def test_http_timestamp(pki_services):
+def test_http_timestamp_bad_content_type(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
     # bad content-type
@@ -184,6 +184,9 @@ def test_http_timestamp(pki_services):
             existing_fields_only=True,
         )
 
+
+@freeze_time('2020-11-01')
+def test_http_timestamp(pki_services):
     pki_services.post(
         DUMMY_HTTP_TS.url,
         content=ts_response_callback,
