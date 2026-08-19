@@ -3,7 +3,6 @@ import logging
 
 from asn1crypto import ocsp
 from asn1crypto.algos import DigestAlgorithm, DigestInfo
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from pyhanko.sign import signers, timestamps
 from pyhanko.sign.ades.cades_asn1 import SignaturePolicyId
@@ -180,7 +179,7 @@ def dummy_ocsp_vc():
     return vc
 
 
-def live_testing_vc(requests_mock, with_extra_tsa=False, **kwargs):
+def live_testing_vc(pki_services, with_extra_tsa=False, **kwargs):
     if with_extra_tsa:
         trust_roots = [*TRUST_ROOTS, UNRELATED_TSA.get_cert(CertLabel('root'))]
     else:
@@ -188,13 +187,13 @@ def live_testing_vc(requests_mock, with_extra_tsa=False, **kwargs):
     vc = ValidationContext(
         trust_roots=trust_roots, allow_fetching=True, other_certs=[], **kwargs
     )
-    Illusionist(TESTING_CA).register(requests_mock)
+    pki_services.register(TESTING_CA)
     if with_extra_tsa:
-        Illusionist(UNRELATED_TSA).register(requests_mock)
+        pki_services.register(UNRELATED_TSA)
     return vc
 
 
-def live_ac_vcs(requests_mock, with_authorities=False):
+def live_ac_vcs(pki_services, with_authorities=False):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     if with_authorities:
         other_certs = [
@@ -214,7 +213,7 @@ def live_ac_vcs(requests_mock, with_authorities=False):
         allow_fetching=True,
         other_certs=other_certs,
     )
-    Illusionist(pki_arch).register(requests_mock)
+    pki_services.register(pki_arch)
     return main_vc, ac_vc
 
 

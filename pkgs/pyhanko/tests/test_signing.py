@@ -7,7 +7,6 @@ from io import BytesIO
 import pytest
 from asn1crypto import cms
 from asn1crypto.algos import SignedDigestAlgorithm
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko import stamp
@@ -303,7 +302,7 @@ def test_default_validation_context_deprecated():
 
 
 @freeze_time('2020-12-05')
-def test_sign_with_revoked(requests_mock):
+def test_sign_with_revoked(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
         w,
@@ -313,7 +312,7 @@ def test_sign_with_revoked(requests_mock):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
 
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     val_status = validate_pdf_signature(s, vc)
     assert val_status.intact
     assert val_status.valid
@@ -339,7 +338,7 @@ def test_sign_with_revoked(requests_mock):
         )
 
 
-def test_sign_with_later_revoked_nots(requests_mock):
+def test_sign_with_later_revoked_nots(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     with freeze_time('2020-01-20'):
         out = signers.sign_pdf(
@@ -355,7 +354,7 @@ def test_sign_with_later_revoked_nots(requests_mock):
     with freeze_time('2020-12-05'):
         r = PdfFileReader(out)
         s = r.embedded_signatures[0]
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         val_status = validate_pdf_signature(s, vc)
         assert val_status.intact
         assert val_status.valid
@@ -521,7 +520,7 @@ def test_ocsp_embed():
 
 
 @freeze_time('2020-11-01')
-def test_ocsp_without_nextupdate_embed(requests_mock):
+def test_ocsp_without_nextupdate_embed(pki_services):
     ca = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ocsp-no-nextupdate'))
     vc = ValidationContext(
         trust_roots=[ca.get_cert(CertLabel('root'))],
@@ -536,7 +535,7 @@ def test_ocsp_without_nextupdate_embed(requests_mock):
             [ca.get_cert(CertLabel('root')), ca.get_cert(CertLabel('interm'))]
         ),
     )
-    Illusionist(ca).register(requests_mock)
+    pki_services.register(ca)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w,
@@ -1008,11 +1007,11 @@ def test_sign_without_annot():
 
 @pytest.mark.parametrize('in_place', [True, False])
 @freeze_time('2020-11-01')
-def test_no_revinfo_to_be_added(requests_mock, in_place):
+def test_no_revinfo_to_be_added(pki_services, in_place):
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
 
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     signers.sign_pdf(
         w,
         signers.PdfSignatureMetadata(
@@ -1292,8 +1291,8 @@ async def test_signer_info_no_signing_cert():
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_sign_prescribed_attrs(requests_mock):
-    vc = live_testing_vc(requests_mock)
+async def test_sign_prescribed_attrs(pki_services):
+    vc = live_testing_vc(pki_services)
     message = b'Hello world!'
     digest = hashlib.sha256(message).digest()
     signed_attrs = await FROM_CA.signed_attrs(digest, 'sha256')
@@ -1351,7 +1350,7 @@ def test_sign_tight_container_with_ts():
 
 
 @freeze_time('2020-11-01')
-def test_sign_tight_container_with_lta(requests_mock):
+def test_sign_tight_container_with_lta(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1',
@@ -1359,7 +1358,7 @@ def test_sign_tight_container_with_lta(requests_mock):
         subfilter=fields.SigSeedSubFilter.PADES,
         use_pades_lta=True,
         embed_validation_info=True,
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
     )
     out = signers.sign_pdf(
         w,

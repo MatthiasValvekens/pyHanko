@@ -1,7 +1,6 @@
 from io import BytesIO
 
 import pytest
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel
 from freezegun import freeze_time
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -39,10 +38,10 @@ from .test_ades_validation import DEFAULT_SIG_VALIDATION_SPEC
 from .test_pades import PADES
 
 
-async def _generate_basic_report(requests_mock, out):
+async def _generate_basic_report(pki_services, out):
     with freeze_time('2020-11-25'):
         r = PdfFileReader(out)
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_basic_validation(
             r.embedded_signatures[0].signed_data,
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -54,7 +53,7 @@ async def _generate_basic_report(requests_mock, out):
 
 
 @pytest.mark.asyncio
-async def test_pades_basic_report_smoke_test(requests_mock):
+async def test_pades_basic_report_smoke_test(pki_services):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
@@ -63,12 +62,12 @@ async def test_pades_basic_report_smoke_test(requests_mock):
             signer=FROM_CA,
             timestamper=DUMMY_TS,
         )
-    report = await _generate_basic_report(requests_mock, out)
+    report = await _generate_basic_report(pki_services, out)
     assert 'urn:etsi:019102:mainindication:total-passed' in report
 
 
 @pytest.mark.asyncio
-async def test_pades_basic_failing_report_smoke_test(requests_mock):
+async def test_pades_basic_failing_report_smoke_test(pki_services):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
@@ -80,12 +79,12 @@ async def test_pades_basic_failing_report_smoke_test(requests_mock):
         out.seek(10)
         out.write(b'@')
 
-    report = await _generate_basic_report(requests_mock, out)
+    report = await _generate_basic_report(pki_services, out)
     assert 'urn:etsi:019102:mainindication:total-failed' in report
 
 
 @pytest.mark.asyncio
-async def test_pades_basic_indeteriminate_report_smoke_test(requests_mock):
+async def test_pades_basic_indeteriminate_report_smoke_test(pki_services):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
@@ -95,16 +94,16 @@ async def test_pades_basic_indeteriminate_report_smoke_test(requests_mock):
             timestamper=DUMMY_TS,
         )
 
-    report = await _generate_basic_report(requests_mock, out)
+    report = await _generate_basic_report(pki_services, out)
     assert 'urn:etsi:019102:mainindication:indeterminate' in report
 
 
 async def _generate_lta_report(
-    requests_mock, out, policy=DEFAULT_SIG_VALIDATION_SPEC
+    pki_services, out, policy=DEFAULT_SIG_VALIDATION_SPEC
 ):
     with freeze_time('2028-11-25'):
         r = PdfFileReader(out)
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_lta_validation(
             r.embedded_signatures[0],
             pdf_validation_spec=PdfSignatureValidationSpec(
@@ -117,7 +116,7 @@ async def _generate_lta_report(
 
 
 @pytest.mark.asyncio
-async def test_pades_lta_report_smoke_test(requests_mock):
+async def test_pades_lta_report_smoke_test(pki_services):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
@@ -127,18 +126,18 @@ async def test_pades_lta_report_smoke_test(requests_mock):
                 subfilter=PADES,
                 use_pades_lta=True,
                 embed_validation_info=True,
-                validation_context=live_testing_vc(requests_mock),
+                validation_context=live_testing_vc(pki_services),
             ),
             signer=FROM_CA,
             timestamper=DUMMY_TS,
         )
-    report = await _generate_lta_report(requests_mock, out)
+    report = await _generate_lta_report(pki_services, out)
     assert 'urn:etsi:019102:mainindication:total-passed' in report
     assert 'urn:etsi:019102:validationprocess:LTA' in report
 
 
 @pytest.mark.asyncio
-async def test_pades_with_attributes_report_smoke_test(requests_mock):
+async def test_pades_with_attributes_report_smoke_test(pki_services):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
 
     authorities = [
@@ -169,7 +168,7 @@ async def test_pades_with_attributes_report_smoke_test(requests_mock):
         signing_key=FROM_CA.signing_key,
         cert_registry=SimpleCertificateStore.from_certs(authorities),
     )
-    Illusionist(pki_arch).register(requests_mock)
+    pki_services.register(pki_arch)
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
@@ -179,7 +178,7 @@ async def test_pades_with_attributes_report_smoke_test(requests_mock):
                 subfilter=PADES,
                 embed_validation_info=True,
                 use_pades_lta=True,
-                validation_context=live_testing_vc(requests_mock),
+                validation_context=live_testing_vc(pki_services),
                 cades_signed_attr_spec=CAdESSignedAttrSpec(
                     commitment_type=CommitmentTypeIndication(
                         {'commitment_type_id': 'proof_of_creation'}
@@ -206,7 +205,7 @@ async def test_pades_with_attributes_report_smoke_test(requests_mock):
             timestamper=DUMMY_TS,
         )
     report = await _generate_lta_report(
-        requests_mock, out, policy=sig_validation_spec
+        pki_services, out, policy=sig_validation_spec
     )
     assert 'urn:etsi:019102:mainindication:total-passed' in report
     assert 'claimed' in report

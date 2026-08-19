@@ -7,7 +7,6 @@ import pytest
 import tzlocal
 from asn1crypto import algos, cms, keys, ocsp, tsp
 from asn1crypto.pdf import RevocationInfoArchival
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import (
     ArchLabel,
     CertLabel,
@@ -57,9 +56,6 @@ from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationContext,
 )
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
-)
 from pyhanko_certvalidator.ltv.poe import (
     KnownPOE,
     POEType,
@@ -105,12 +101,12 @@ from .test_pades import PADES
 
 
 async def _generate_pades_test_doc(
-    requests_mock, signer=FROM_CA, vc=None, timestamper=None, **kwargs
+    pki_services, signer=FROM_CA, vc=None, timestamper=None, **kwargs
 ):
     kwargs.setdefault('use_pades_lta', True)
     kwargs.setdefault('embed_validation_info', True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = vc if vc else live_testing_vc(requests_mock)
+    vc = vc if vc else live_testing_vc(pki_services)
 
     timestamper = timestamper or timestamps.DummyTimeStamper(
         tsa_cert=TSA_CERT,
@@ -131,10 +127,10 @@ async def _generate_pades_test_doc(
     )
 
 
-async def _update_pades_test_doc(requests_mock, out):
+async def _update_pades_test_doc(pki_services, out):
     r = PdfFileReader(out)
 
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     await PdfTimeStamper(DUMMY_TS2).async_update_archival_timestamp_chain(r, vc)
 
 
@@ -154,7 +150,7 @@ DEFAULT_PDF_VALIDATION_SPEC = PdfSignatureValidationSpec(
 
 
 @pytest.mark.asyncio
-async def test_pades_basic_happy_path(requests_mock):
+async def test_pades_basic_happy_path(pki_services):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
@@ -166,7 +162,7 @@ async def test_pades_basic_happy_path(requests_mock):
 
     with freeze_time('2020-11-25'):
         r = PdfFileReader(out)
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_basic_validation(
             r.embedded_signatures[0].signed_data,
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -211,7 +207,7 @@ def _testing_ca_registry():
     'with_requirements',
     [True, False],
 )
-async def test_pades_basic_happy_path_with_tl(requests_mock, with_requirements):
+async def test_pades_basic_happy_path_with_tl(pki_services, with_requirements):
     signer = ESEAL_SIGNER
 
     spec = SignatureValidationSpec(
@@ -233,7 +229,7 @@ async def test_pades_basic_happy_path_with_tl(requests_mock, with_requirements):
 
     with freeze_time('2020-11-25'):
         r = PdfFileReader(out)
-        Illusionist(TESTING_CA_QUALIFIED).register(requests_mock)
+        pki_services.register(TESTING_CA_QUALIFIED)
         result = await ades.ades_basic_validation(
             r.embedded_signatures[0].signed_data,
             validation_spec=spec,
@@ -279,7 +275,7 @@ async def test_pades_basic_happy_path_with_tl(requests_mock, with_requirements):
     ],
 )
 async def test_pades_fail_qualification_requirements(
-    requests_mock, cert_label, requirements
+    pki_services, cert_label, requirements
 ):
     signer = signers.SimpleSigner(
         signing_cert=TESTING_CA_QUALIFIED.get_cert(cert_label),
@@ -305,7 +301,7 @@ async def test_pades_fail_qualification_requirements(
 
     with freeze_time('2020-11-25'):
         r = PdfFileReader(out)
-        Illusionist(TESTING_CA_QUALIFIED).register(requests_mock)
+        pki_services.register(TESTING_CA_QUALIFIED)
         result = await ades.ades_basic_validation(
             r.embedded_signatures[0].signed_data,
             validation_spec=spec,
@@ -315,7 +311,7 @@ async def test_pades_fail_qualification_requirements(
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_happy_path(requests_mock):
+async def test_embedded_cades_happy_path(pki_services):
     with freeze_time('2020-11-01'):
         signature = await FROM_CA.async_sign_general_data(
             b'Hello world!', 'sha256', detached=False, use_cades=True
@@ -323,7 +319,7 @@ async def test_embedded_cades_happy_path(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-11-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_basic_validation(
             signature['content'],
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -332,7 +328,7 @@ async def test_embedded_cades_happy_path(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_basic_tampered(requests_mock):
+async def test_embedded_cades_basic_tampered(pki_services):
     with freeze_time('2020-11-01'):
         signature = await FROM_CA.async_sign_general_data(
             b'Hello world!', 'sha256', detached=False, use_cades=True
@@ -343,7 +339,7 @@ async def test_embedded_cades_basic_tampered(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-11-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_basic_validation(
             signature['content'],
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -352,7 +348,7 @@ async def test_embedded_cades_basic_tampered(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_sig_tampered(requests_mock):
+async def test_embedded_cades_sig_tampered(pki_services):
     with freeze_time('2020-11-01'):
         signature = await FROM_CA.async_sign_general_data(
             b'Hello world!', 'sha256', detached=False, use_cades=True
@@ -361,7 +357,7 @@ async def test_embedded_cades_sig_tampered(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-11-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_basic_validation(
             signature['content'],
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -370,7 +366,7 @@ async def test_embedded_cades_sig_tampered(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_with_time_happy_path(requests_mock):
+async def test_embedded_cades_with_time_happy_path(pki_services):
     with freeze_time('2020-11-01'):
         signature = await FROM_CA.async_sign_general_data(
             b'Hello world!',
@@ -382,7 +378,7 @@ async def test_embedded_cades_with_time_happy_path(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-11-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_with_time_validation(
             signature['content'],
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -394,7 +390,7 @@ async def test_embedded_cades_with_time_happy_path(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_with_time_tampered_timestamp(requests_mock):
+async def test_embedded_cades_with_time_tampered_timestamp(pki_services):
     with freeze_time('2020-11-01'):
         signature = await FROM_CA.async_sign_general_data(
             b'Hello world!',
@@ -413,7 +409,7 @@ async def test_embedded_cades_with_time_tampered_timestamp(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-11-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_with_time_validation(
             signature['content'],
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -422,7 +418,7 @@ async def test_embedded_cades_with_time_tampered_timestamp(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_with_time_sig_tampered_timestamp(requests_mock):
+async def test_embedded_cades_with_time_sig_tampered_timestamp(pki_services):
     with freeze_time('2020-11-01'):
         signature = await FROM_CA.async_sign_general_data(
             b'Hello world!',
@@ -437,7 +433,7 @@ async def test_embedded_cades_with_time_sig_tampered_timestamp(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-11-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_with_time_validation(
             signature['content'],
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -452,7 +448,7 @@ async def test_embedded_cades_with_time_sig_tampered_timestamp(requests_mock):
     [True, False],
 )
 async def test_embedded_cades_with_time_happy_path_with_tl(
-    requests_mock, with_requirements
+    pki_services, with_requirements
 ):
     tsa = timestamps.HTTPTimeStamper(
         'http://pyhanko.tests/testing-ca-qualified/tsa/tsa-qualified',
@@ -467,7 +463,7 @@ async def test_embedded_cades_with_time_happy_path_with_tl(
             QualificationRequirements() if with_requirements else None
         ),
     )
-    Illusionist(TESTING_CA_QUALIFIED).register(requests_mock)
+    pki_services.register(TESTING_CA_QUALIFIED)
     with freeze_time('2020-11-01'):
         signature = await ESEAL_SIGNER.async_sign_general_data(
             b'Hello world!',
@@ -526,7 +522,7 @@ async def test_embedded_cades_with_time_happy_path_with_tl(
     ],
 )
 async def test_embedded_cades_with_time_fail_qualification_requirements(
-    requests_mock, cert_label, tsa_label, requirements, ts_requirements
+    pki_services, cert_label, tsa_label, requirements, ts_requirements
 ):
     tsa = timestamps.HTTPTimeStamper(
         f'http://pyhanko.tests/testing-ca-qualified/tsa/{tsa_label}',
@@ -548,7 +544,7 @@ async def test_embedded_cades_with_time_fail_qualification_requirements(
             list(ESEAL_SIGNER.cert_registry)
         ),
     )
-    Illusionist(TESTING_CA_QUALIFIED).register(requests_mock)
+    pki_services.register(TESTING_CA_QUALIFIED)
     with freeze_time('2020-11-01'):
         signature = await signer.async_sign_general_data(
             b'Hello world!',
@@ -569,7 +565,7 @@ async def test_embedded_cades_with_time_fail_qualification_requirements(
 
 @pytest.mark.nosmoke
 @pytest.mark.asyncio
-async def test_embedded_cades_with_time_non_qtst_tsa_fail(requests_mock):
+async def test_embedded_cades_with_time_non_qtst_tsa_fail(pki_services):
     tsa = timestamps.HTTPTimeStamper(
         'http://pyhanko.tests/testing-ca-qualified/tsa/tsa-qualified',
         https=False,
@@ -588,7 +584,7 @@ async def test_embedded_cades_with_time_non_qtst_tsa_fail(requests_mock):
         ),
     )
 
-    Illusionist(TESTING_CA_QUALIFIED).register(requests_mock)
+    pki_services.register(TESTING_CA_QUALIFIED)
     with freeze_time('2020-11-01'):
         signature = await ESEAL_SIGNER.async_sign_general_data(
             b'Hello world!',
@@ -609,7 +605,7 @@ async def test_embedded_cades_with_time_non_qtst_tsa_fail(requests_mock):
 
 @pytest.mark.nosmoke
 @pytest.mark.asyncio
-async def test_embedded_cades_with_time_non_qtst_tsa_pass(requests_mock):
+async def test_embedded_cades_with_time_non_qtst_tsa_pass(pki_services):
     tsa = timestamps.HTTPTimeStamper(
         'http://pyhanko.tests/testing-ca-qualified/tsa/tsa-qualified',
         https=False,
@@ -628,7 +624,7 @@ async def test_embedded_cades_with_time_non_qtst_tsa_pass(requests_mock):
         ts_qualification_requirements=QualificationRequirements(),
     )
 
-    Illusionist(TESTING_CA_QUALIFIED).register(requests_mock)
+    pki_services.register(TESTING_CA_QUALIFIED)
     with freeze_time('2020-11-01'):
         signature = await ESEAL_SIGNER.async_sign_general_data(
             b'Hello world!',
@@ -648,7 +644,7 @@ async def test_embedded_cades_with_time_non_qtst_tsa_pass(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_provably_revoked(requests_mock):
+async def test_embedded_cades_provably_revoked(pki_services):
     with freeze_time('2020-12-10'):
         signature = await REVOKED_SIGNER.async_sign_general_data(
             b'Hello world!',
@@ -663,7 +659,7 @@ async def test_embedded_cades_provably_revoked(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-12-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_basic_validation(
             signature['content'],
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -672,7 +668,7 @@ async def test_embedded_cades_provably_revoked(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_revoked_no_poe(requests_mock):
+async def test_embedded_cades_revoked_no_poe(pki_services):
     with freeze_time('2020-11-01'):
         signature = await REVOKED_SIGNER.async_sign_general_data(
             b'Hello world!',
@@ -687,7 +683,7 @@ async def test_embedded_cades_revoked_no_poe(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-12-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         result = await ades.ades_basic_validation(
             signature['content'],
             validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
@@ -696,7 +692,7 @@ async def test_embedded_cades_revoked_no_poe(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_embedded_cades_pre_revoke_with_poe(requests_mock):
+async def test_embedded_cades_pre_revoke_with_poe(pki_services):
     with freeze_time('2020-11-01'):
         signature = await REVOKED_SIGNER.async_sign_general_data(
             b'Hello world!',
@@ -706,7 +702,7 @@ async def test_embedded_cades_pre_revoke_with_poe(requests_mock):
             use_cades=True,
         )
         signature = cms.ContentInfo.load(signature.dump())
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
 
         await async_validate_path(
             vc,
@@ -730,8 +726,8 @@ async def test_embedded_cades_pre_revoke_with_poe(requests_mock):
 
 @pytest.mark.asyncio
 @freeze_time('2020-11-20')
-async def test_pades_lta_happy_path_current_time(requests_mock):
-    out = await _generate_pades_test_doc(requests_mock)
+async def test_pades_lta_happy_path_current_time(pki_services):
+    out = await _generate_pades_test_doc(pki_services)
     r = PdfFileReader(out)
     result = await ades.ades_lta_validation(
         r.embedded_signatures[0],
@@ -741,9 +737,9 @@ async def test_pades_lta_happy_path_current_time(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_pades_lta_happy_path_past_time(requests_mock):
+async def test_pades_lta_happy_path_past_time(pki_services):
     with freeze_time('2020-11-20'):
-        out = await _generate_pades_test_doc(requests_mock)
+        out = await _generate_pades_test_doc(pki_services)
 
     with freeze_time('2021-11-20'):
         r = PdfFileReader(out)
@@ -760,10 +756,10 @@ async def test_pades_lta_happy_path_past_time(requests_mock):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('with_lta', [True, False])
 @freeze_time('2020-11-20')
-async def test_simulate_future_lta_happy_path(requests_mock, with_lta):
+async def test_simulate_future_lta_happy_path(pki_services, with_lta):
     # it shouldn't matter for the purposes of this function whether the initial
     # signature is followed by a DTS or not, so we test both
-    out = await _generate_pades_test_doc(requests_mock, use_pades_lta=with_lta)
+    out = await _generate_pades_test_doc(pki_services, use_pades_lta=with_lta)
 
     r = PdfFileReader(out)
     result = await ades.simulate_future_ades_lta_validation(
@@ -787,7 +783,7 @@ async def test_simulate_future_lta_happy_path(requests_mock, with_lta):
 )
 @freeze_time('2020-11-20')
 async def test_simulate_future_lta_happy_path_eseal(
-    requests_mock, with_requirements
+    pki_services, with_requirements
 ):
     signer = ESEAL_SIGNER
 
@@ -811,9 +807,9 @@ async def test_simulate_future_lta_happy_path_eseal(
         'http://pyhanko.tests/testing-ca-qualified/tsa/tsa-qualified',
         https=False,
     )
-    Illusionist(TESTING_CA_QUALIFIED).register(requests_mock)
+    pki_services.register(TESTING_CA_QUALIFIED)
     out = await _generate_pades_test_doc(
-        requests_mock, signer=signer, vc=vc, timestamper=tsa, use_pades_lta=True
+        pki_services, signer=signer, vc=vc, timestamper=tsa, use_pades_lta=True
     )
 
     r = PdfFileReader(out)
@@ -857,7 +853,7 @@ async def test_simulate_future_lta_happy_path_eseal(
     ],
 )
 async def test_pades_lta_fail_qualification_requirements(
-    requests_mock, cert_label, tsa_label, requirements, ts_requirements
+    pki_services, cert_label, tsa_label, requirements, ts_requirements
 ):
     tsa = timestamps.HTTPTimeStamper(
         f'http://pyhanko.tests/testing-ca-qualified/tsa/{tsa_label}',
@@ -885,9 +881,9 @@ async def test_pades_lta_fail_qualification_requirements(
         allow_fetching=True,
         other_certs=[],
     )
-    Illusionist(TESTING_CA_QUALIFIED).register(requests_mock)
+    pki_services.register(TESTING_CA_QUALIFIED)
     out = await _generate_pades_test_doc(
-        requests_mock, signer=signer, vc=vc, timestamper=tsa, use_pades_lta=True
+        pki_services, signer=signer, vc=vc, timestamper=tsa, use_pades_lta=True
     )
 
     r = PdfFileReader(out)
@@ -902,12 +898,12 @@ async def test_pades_lta_fail_qualification_requirements(
 
 
 @pytest.mark.asyncio
-async def test_simulate_future_lta_happy_path_with_ts_chain(requests_mock):
+async def test_simulate_future_lta_happy_path_with_ts_chain(pki_services):
     with freeze_time('2020-11-20'):
-        out = await _generate_pades_test_doc(requests_mock)
+        out = await _generate_pades_test_doc(pki_services)
 
     with freeze_time('2028-11-20'):
-        await _update_pades_test_doc(requests_mock, out)
+        await _update_pades_test_doc(pki_services, out)
 
         r = PdfFileReader(out)
         result = await ades.simulate_future_ades_lta_validation(
@@ -925,9 +921,9 @@ async def test_simulate_future_lta_happy_path_with_ts_chain(requests_mock):
 
 @pytest.mark.asyncio
 @freeze_time('2020-11-20')
-async def test_simulate_future_lta_no_revinfo_fail(requests_mock):
+async def test_simulate_future_lta_no_revinfo_fail(pki_services):
     out = await _generate_pades_test_doc(
-        requests_mock, embed_validation_info=False
+        pki_services, embed_validation_info=False
     )
     r = PdfFileReader(out)
     result = await ades.simulate_future_ades_lta_validation(
@@ -941,14 +937,14 @@ async def test_simulate_future_lta_no_revinfo_fail(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_simulate_future_lta_with_broken_ts_chain(requests_mock):
+async def test_simulate_future_lta_with_broken_ts_chain(pki_services):
     with freeze_time('2020-11-20'):
-        out = await _generate_pades_test_doc(requests_mock)
+        out = await _generate_pades_test_doc(pki_services)
 
     # gap too large
     with freeze_time('2031-11-20'):
         w = IncrementalPdfFileWriter(out)
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         await PdfTimeStamper(DUMMY_TS2).async_timestamp_pdf(
             w, md_algorithm='sha256', validation_context=vc, in_place=True
         )
@@ -966,10 +962,10 @@ async def test_simulate_future_lta_with_broken_ts_chain(requests_mock):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('with_dts', [True, False])
-async def test_pades_lta_expired_timestamp(requests_mock, with_dts):
+async def test_pades_lta_expired_timestamp(pki_services, with_dts):
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
-            requests_mock, use_pades_lta=with_dts
+            pki_services, use_pades_lta=with_dts
         )
 
     with freeze_time('2080-11-20'):
@@ -982,13 +978,13 @@ async def test_pades_lta_expired_timestamp(requests_mock, with_dts):
 
 
 @pytest.mark.asyncio
-async def test_pades_missing_dts(requests_mock):
+async def test_pades_missing_dts(pki_services):
     md_algorithm = 'sha256'
     trust_manager = SimpleTrustManager.build([ROOT_CERT])
 
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
-            requests_mock,
+            pki_services,
             md_algorithm=md_algorithm,
             signer=FROM_CA,
             timestamper=DUMMY_TS,
@@ -1014,12 +1010,12 @@ async def test_pades_missing_dts(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_pades_lta_happy_path_past_time_with_chain(requests_mock):
+async def test_pades_lta_happy_path_past_time_with_chain(pki_services):
     with freeze_time('2020-11-20'):
-        out = await _generate_pades_test_doc(requests_mock)
+        out = await _generate_pades_test_doc(pki_services)
 
     with freeze_time('2028-11-20'):
-        await _update_pades_test_doc(requests_mock, out)
+        await _update_pades_test_doc(pki_services, out)
 
     with freeze_time('2035-11-20'):
         r = PdfFileReader(out)
@@ -1133,7 +1129,7 @@ def _assert_certs_known(certs):
 
 @pytest.mark.parametrize('place', ['in_sig', 'in_cert', 'both'])
 @pytest.mark.asyncio
-async def test_pades_hash_algorithm_banned_but_poe_ok(requests_mock, place):
+async def test_pades_hash_algorithm_banned_but_poe_ok(pki_services, place):
     md_algorithm = 'sha256'
     signer = FROM_CA
     if place == 'in_sig' or place == 'both':
@@ -1147,7 +1143,7 @@ async def test_pades_hash_algorithm_banned_but_poe_ok(requests_mock, place):
         )
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
-            requests_mock, md_algorithm=md_algorithm, signer=signer
+            pki_services, md_algorithm=md_algorithm, signer=signer
         )
 
     with freeze_time('2029-11-20'):
@@ -1177,7 +1173,7 @@ async def test_pades_hash_algorithm_banned_but_poe_ok(requests_mock, place):
     ['in_sig', 'in_cert', 'both'],
 )
 @pytest.mark.asyncio
-async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock, place):
+async def test_pades_lta_hash_algorithm_banned_and_no_poe(pki_services, place):
     md_algorithm = 'sha256'
     signer = FROM_CA
     if place == 'in_sig' or place == 'both':
@@ -1192,7 +1188,7 @@ async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock, place):
         )
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
-            requests_mock, md_algorithm=md_algorithm, signer=signer
+            pki_services, md_algorithm=md_algorithm, signer=signer
         )
 
     with freeze_time('2029-11-20'):
@@ -1221,10 +1217,10 @@ async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock, place):
 
 
 @pytest.mark.asyncio
-async def test_pades_lta_algo_permaban(requests_mock):
+async def test_pades_lta_algo_permaban(pki_services):
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
-            requests_mock, md_algorithm='sha512'
+            pki_services, md_algorithm='sha512'
         )
 
     with freeze_time('2029-11-20'):
@@ -1249,7 +1245,7 @@ async def test_pades_lta_algo_permaban(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_pades_lta_live_ac_validation(requests_mock):
+async def test_pades_lta_live_ac_validation(pki_services, fetchers):
     with freeze_time('2020-11-01'):
         pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
         authorities = [
@@ -1275,7 +1271,6 @@ async def test_pades_lta_live_ac_validation(requests_mock):
             ),
         )
 
-        fetchers = RequestsFetcherBackend().get_fetchers()
         vc = ValidationContext(
             trust_roots=[pki_arch.get_cert('root')],
             allow_fetching=True,
@@ -1291,7 +1286,7 @@ async def test_pades_lta_live_ac_validation(requests_mock):
             revocation_mode='require',
         )
 
-        Illusionist(pki_arch).register(requests_mock)
+        pki_services.register(pki_arch)
 
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
@@ -1339,7 +1334,7 @@ async def test_pades_lta_live_ac_validation(requests_mock):
         assert role['role_name'].native == 'bigboss@example.com'
 
 
-async def _nontraditional_hybrid_lta_doc(requests_mock):
+async def _nontraditional_hybrid_lta_doc(pki_services):
     # this document reproduces the situation of #228:
     #  - No DSS or DTSes
     #  - declared PAdES (/ETSI.CAdES.detached)
@@ -1347,7 +1342,7 @@ async def _nontraditional_hybrid_lta_doc(requests_mock):
     #  - Leaf cert OCSP response in Adobe revinfo archival
     #  - Different TS root.
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = live_testing_vc(requests_mock, with_extra_tsa=True)
+    vc = live_testing_vc(pki_services, with_extra_tsa=True)
 
     custom_signer = signers.SimpleSigner(
         signing_cert=FROM_CA.signing_cert,
@@ -1405,9 +1400,9 @@ async def _nontraditional_hybrid_lta_doc(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_nontraditional_hybrid_lta(requests_mock):
+async def test_nontraditional_hybrid_lta(pki_services):
     with freeze_time('2020-11-20'):
-        out = await _nontraditional_hybrid_lta_doc(requests_mock)
+        out = await _nontraditional_hybrid_lta_doc(pki_services)
 
     modified_policy = SignatureValidationSpec(
         cert_validation_policy=CertValidationPolicySpec(
@@ -1430,9 +1425,9 @@ async def test_nontraditional_hybrid_lta(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_nontraditional_hybrid_lta_with_failed_timestamp(requests_mock):
+async def test_nontraditional_hybrid_lta_with_failed_timestamp(pki_services):
     with freeze_time('2020-11-20'):
-        out = await _nontraditional_hybrid_lta_doc(requests_mock)
+        out = await _nontraditional_hybrid_lta_doc(pki_services)
 
     with freeze_time('2022-11-20'):
         r = PdfFileReader(out)
@@ -1453,10 +1448,10 @@ async def test_nontraditional_hybrid_lta_with_failed_timestamp(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_pades_multi_sig_timestamp_algo_hedge_ok(requests_mock):
+async def test_pades_multi_sig_timestamp_algo_hedge_ok(pki_services):
     md_algorithm = 'sha256'
 
-    Illusionist(TESTING_CA_ECDSA).register(requests_mock)
+    pki_services.register(TESTING_CA_ECDSA)
     tsa_ecdsa = timestamps.HTTPTimeStamper(
         'http://pyhanko.tests/testing-ca-ecdsa/tsa/tsa',
         https=False,
@@ -1502,7 +1497,7 @@ async def test_pades_multi_sig_timestamp_algo_hedge_ok(requests_mock):
         )
 
         out = await _generate_pades_test_doc(
-            requests_mock,
+            pki_services,
             md_algorithm=md_algorithm,
             signer=signer,
             vc=vc,
@@ -1549,10 +1544,10 @@ async def test_pades_multi_sig_timestamp_algo_hedge_ok(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_pades_multi_doc_timestamp_algo_hedge_ok(requests_mock):
+async def test_pades_multi_doc_timestamp_algo_hedge_ok(pki_services):
     md_algorithm = 'sha256'
 
-    Illusionist(TESTING_CA_ECDSA).register(requests_mock)
+    pki_services.register(TESTING_CA_ECDSA)
     tsa_ecdsa = timestamps.HTTPTimeStamper(
         'http://pyhanko.tests/testing-ca-ecdsa/tsa/tsa',
         https=False,
@@ -1579,7 +1574,7 @@ async def test_pades_multi_doc_timestamp_algo_hedge_ok(requests_mock):
         )
 
         out = await _generate_pades_test_doc(
-            requests_mock,
+            pki_services,
             md_algorithm=md_algorithm,
             signer=signer,
             vc=vc,
@@ -1618,7 +1613,7 @@ async def test_pades_multi_doc_timestamp_algo_hedge_ok(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_pades_multi_sig_timestamp_with_unknown_digest(requests_mock):
+async def test_pades_multi_sig_timestamp_with_unknown_digest(pki_services):
     md_algorithm = 'sha256'
 
     class FunkyTimeStamper(DummyTimeStamper):
@@ -1637,7 +1632,7 @@ async def test_pades_multi_sig_timestamp_with_unknown_digest(requests_mock):
 
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
-            requests_mock,
+            pki_services,
             md_algorithm=md_algorithm,
             signer=FROM_CA,
             timestamper=FunkyTimeStamper(
@@ -1669,7 +1664,7 @@ async def test_pades_multi_sig_timestamp_with_unknown_digest(requests_mock):
 
 
 @pytest.mark.asyncio
-async def test_content_ts_with_different_digest_not_supported(requests_mock):
+async def test_content_ts_with_different_digest_not_supported(pki_services):
     class FunkyTimeStamper(DummyTimeStamper):
         def _build_tst_info(
             self,
@@ -1702,7 +1697,7 @@ async def test_content_ts_with_different_digest_not_supported(requests_mock):
         signature = cms.ContentInfo.load(signature.dump())
 
     with freeze_time('2020-12-25'):
-        live_testing_vc(requests_mock)
+        live_testing_vc(pki_services)
         with pytest.raises(TSTDigestNotAvailableError):
             await ades.ades_basic_validation(
                 signature['content'],

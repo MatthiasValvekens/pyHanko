@@ -205,7 +205,7 @@ def test_sign_crypt_aes256_new(password, file):
 
 @pytest.mark.parametrize('password, file', sign_crypt_new_params)
 @freeze_time('2020-11-01')
-def test_sign_encrypted_with_post_sign(requests_mock, password, file):
+def test_sign_encrypted_with_post_sign(pki_services, password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_aes256_files[file]))
     w.encrypt(password)
 
@@ -213,7 +213,7 @@ def test_sign_encrypted_with_post_sign(requests_mock, password, file):
         w,
         signers.PdfSignatureMetadata(
             field_name='Sig1',
-            validation_context=live_testing_vc(requests_mock),
+            validation_context=live_testing_vc(pki_services),
             subfilter=PADES,
             embed_validation_info=True,
             dss_settings=DSSContentSettings(

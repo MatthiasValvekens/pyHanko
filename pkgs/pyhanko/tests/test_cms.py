@@ -1673,7 +1673,7 @@ def get_ac_aware_signer(
     'ac_to_include',
     ['alice-role-with-rev', 'alice-role-norev', 'alice-role-with-rev-crl-only'],
 )
-async def test_embed_ac(requests_mock, ac_to_include):
+async def test_embed_ac(pki_services, ac_to_include):
     signer = get_ac_aware_signer(attr_cert=ac_to_include)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
@@ -1685,7 +1685,7 @@ async def test_embed_ac(requests_mock, ac_to_include):
     # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert -> 7 certs
     assert len(s.other_embedded_certs) == 5  # signer cert is excluded
     assert len(s.embedded_attr_certs) == 1
-    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    main_vc, ac_vc = live_ac_vcs(pki_services)
     status = await async_validate_pdf_signature(
         s, signer_validation_context=main_vc, ac_validation_context=ac_vc
     )
@@ -1698,7 +1698,7 @@ async def test_embed_ac(requests_mock, ac_to_include):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_embed_ac_revinfo_adobe_style(requests_mock):
+async def test_embed_ac_revinfo_adobe_style(pki_services, fetchers):
     signer = get_ac_aware_signer()
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
@@ -1709,12 +1709,7 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
             [pki_arch.get_cert('root')]
         ),
     )
-    from certomancer.integrations.illusionist import Illusionist
-    from pyhanko_certvalidator.fetchers.requests_fetchers import (
-        RequestsFetcherBackend,
-    )
 
-    fetchers = RequestsFetcherBackend().get_fetchers()
     main_vc = ValidationContext(
         trust_roots=[pki_arch.get_cert('root')],
         allow_fetching=True,
@@ -1729,7 +1724,7 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
         fetchers=fetchers,
         revocation_mode='require',
     )
-    Illusionist(pki_arch).register(requests_mock)
+    pki_services.register(pki_arch)
     out = await signers.async_sign_pdf(
         w,
         signers.PdfSignatureMetadata(
@@ -1777,12 +1772,12 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_ac_detached(requests_mock):
+async def test_ac_detached(pki_services):
     input_data = b'Hello world!'
     signer = get_ac_aware_signer()
     output = await signer.async_sign_general_data(input_data, 'sha256')
     assert output['content']['version'].native == 'v4'
-    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    main_vc, ac_vc = live_ac_vcs(pki_services)
     status = await async_validate_detached_cms(
         input_data,
         output['content'],
@@ -1799,11 +1794,11 @@ async def test_ac_detached(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_ac_attr_validation_fail(requests_mock):
+async def test_ac_attr_validation_fail(pki_services):
     input_data = b'Hello world!'
     signer = get_ac_aware_signer()
     output = await signer.async_sign_general_data(input_data, 'sha256')
-    main_vc, _ac_vc = live_ac_vcs(requests_mock)
+    main_vc, _ac_vc = live_ac_vcs(pki_services)
     status = await async_validate_detached_cms(
         input_data,
         output['content'],
@@ -1817,13 +1812,13 @@ async def test_ac_attr_validation_fail(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_ac_attr_validation_holder_mismatch(requests_mock):
+async def test_ac_attr_validation_holder_mismatch(pki_services):
     input_data = b'Hello world!'
     # sign with a key pair that's not the same as the holder of the AC
     # that we're embedding
     signer = get_ac_aware_signer('signer2')
     output = await signer.async_sign_general_data(input_data, 'sha256')
-    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    main_vc, ac_vc = live_ac_vcs(pki_services)
     status = await async_validate_detached_cms(
         input_data,
         output['content'],
@@ -1921,7 +1916,7 @@ async def test_parse_malformed_claimed_attrs(data, fatal):
 
 @pytest.mark.parametrize('bad_attr', [NONSENSICAL_ATTR, UNTYPABLE_ATTR])
 @pytest.mark.asyncio
-async def test_validate_with_malformed_claimed_attrs(bad_attr, requests_mock):
+async def test_validate_with_malformed_claimed_attrs(bad_attr, pki_services):
     # This should parse up to the first level and be reencoded by asn1crypto
     #  without asking any questions.
     cms_sig = await FROM_CA.async_sign_general_data(
@@ -1939,7 +1934,7 @@ async def test_validate_with_malformed_claimed_attrs(bad_attr, requests_mock):
     status = await async_validate_detached_cms(
         input_data=b'Hello world',
         signed_data=cms_sig['content'],
-        signer_validation_context=live_testing_vc(requests_mock),
+        signer_validation_context=live_testing_vc(pki_services),
     )
     assert isinstance(status, StandardCMSSignatureStatus)
     # The malformed attribute shouldn't have been processed,
@@ -2015,7 +2010,7 @@ ATTR_CERT_CFG = {
 
 
 @pytest.mark.asyncio
-async def test_parse_ac_with_malformed_attribute(requests_mock):
+async def test_parse_ac_with_malformed_attribute(pki_services):
     pki_arch = PKIArchitecture(
         arch_label=ArchLabel('test'),
         key_set=TESTING_CA.key_set,
@@ -2051,7 +2046,7 @@ async def test_parse_ac_with_malformed_attribute(requests_mock):
             )
         ),
     )
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     ac_vc = ValidationContext(
         trust_roots=[pki_arch.get_cert(CertLabel('ac-issuer'))],
         allow_fetching=False,

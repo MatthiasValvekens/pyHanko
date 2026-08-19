@@ -3,12 +3,10 @@ import datetime
 import os
 
 import pytest
-import requests_mock
 import tzlocal
 import yaml
 from asn1crypto import pem, x509
 from certomancer import PKIArchitecture
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, ServiceLabel
 from click.testing import CliRunner
 from freezegun import freeze_time
@@ -38,6 +36,7 @@ from pyhanko_testing_commons.test_data.samples import (
     TESTING_CA_ED25519,
     TESTING_CA_QUALIFIED,
 )
+from pyhanko_testing_commons.test_utils.live_http import live_pki_services
 
 pytest_plugins = ["pyhanko_testing_commons.test_utils.pkcs11_utils.fixtures"]
 
@@ -84,8 +83,8 @@ def pki_arch(pki_arch_name, pki_mocks_enabled):
     with freeze_time(FREEZE_DT):
         arch = CERTOMANCER_ARCHITECTURES[pki_arch_name]
         if pki_mocks_enabled:
-            with requests_mock.Mocker() as m:
-                Illusionist(arch).register(m)
+            with live_pki_services() as services:
+                services.register(arch)
                 yield arch
         else:
             yield arch

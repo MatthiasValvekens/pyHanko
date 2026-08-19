@@ -18,7 +18,6 @@ from io import BytesIO
 
 import pytest
 from asn1crypto import cms, core
-from certomancer.integrations.illusionist import Illusionist
 from freezegun import freeze_time
 from pyhanko.pdf_utils import generic, writer
 from pyhanko.pdf_utils.crypt import (
@@ -55,6 +54,7 @@ from pyhanko_testing_commons.test_data.samples import (
     PUBKEY_TEST_DECRYPTER,
     TESTING_CA_ECDSA,
 )
+from pyhanko_testing_commons.test_utils.live_http import PKIServiceRegistry
 from pyhanko_testing_commons.test_utils.signing_commons import (
     DUMMY_TS,
     ECC_ROOT_CERT,
@@ -62,7 +62,6 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     simple_ecc_v_context,
     val_trusted,
 )
-from requests_mock import Mocker
 
 DUMMY_PASSWORD = "secret"
 
@@ -90,7 +89,7 @@ def _fmt_arg(arg: typing.Any) -> str:
         return arg
     elif isinstance(arg, enum.Enum):
         return f"{arg.__class__.__name__}_{arg.name}"
-    elif isinstance(arg, Mocker):
+    elif isinstance(arg, PKIServiceRegistry):
         return ""  # ignore
     else:
         raise NotImplementedError(
@@ -356,14 +355,14 @@ def test_signature_nondefault_hash(encryption_type):
 
 @pdf_mac_good
 @freeze_time('2020-11-01')
-def test_pdf_mac_pades(requests_mock):
+def test_pdf_mac_pades(pki_services):
     w = init_sample_doc(EncryptionType.STANDARD)
 
     trust_roots = [ECC_ROOT_CERT]
     vc = ValidationContext(
         trust_roots=trust_roots, allow_fetching=True, other_certs=[]
     )
-    Illusionist(TESTING_CA_ECDSA).register(requests_mock)
+    pki_services.register(TESTING_CA_ECDSA)
 
     from .test_pades import PADES
 

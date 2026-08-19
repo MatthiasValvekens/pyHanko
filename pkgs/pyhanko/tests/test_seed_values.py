@@ -307,8 +307,8 @@ def test_cert_constraint_subject():
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_cert_constraint_issuer(requests_mock):
-    vc = live_testing_vc(requests_mock)
+async def test_cert_constraint_issuer(pki_services):
+    vc = live_testing_vc(pki_services)
     signer_validation_path = await CertificateValidator(
         FROM_CA.signing_cert, FROM_CA.cert_registry, validation_context=vc
     ).async_validate_usage(set())
@@ -346,8 +346,8 @@ async def test_cert_constraint_issuer(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_cert_constraint_composite(requests_mock):
-    vc = live_testing_vc(requests_mock)
+async def test_cert_constraint_composite(pki_services):
+    vc = live_testing_vc(pki_services)
     signer_validation_path = await CertificateValidator(
         FROM_CA.signing_cert, FROM_CA.cert_registry, validation_context=vc
     ).async_validate_usage(set())
@@ -527,11 +527,11 @@ async def test_sv_sign_subfilter_hint():
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_sv_sign_addrevinfo_req(requests_mock):
+async def test_sv_sign_addrevinfo_req(pki_services):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO, add_rev_info=True
     )
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     meta = signers.PdfSignatureMetadata(
         field_name='Sig',
         validation_context=vc,
@@ -839,7 +839,7 @@ def test_sv_subfilter_unsupported_partial():
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_sv_timestamp_url(requests_mock):
+async def test_sv_timestamp_url(pki_services):
     # state issues (see comment in signers.py), so create a fresh signer
     sv = fields.SigSeedValueSpec(
         timestamp_server_url=DUMMY_HTTP_TS.url, timestamp_required=True
@@ -852,10 +852,10 @@ async def test_sv_timestamp_url(requests_mock):
         ts_requested = True
         return ts_response_callback(*args, **kwargs)
 
-    requests_mock.post(
+    pki_services.post(
         DUMMY_HTTP_TS.url,
         content=ts_callback,
-        headers={'Content-Type': 'application/timestamp-reply'},
+        content_type='application/timestamp-reply',
     )
     # noinspection PyTypeChecker
     await sign_with_sv(sv, meta, timestamper=None)

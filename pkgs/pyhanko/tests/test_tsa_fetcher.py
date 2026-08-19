@@ -136,11 +136,11 @@ def test_dummy_timestamp():
 
 
 @freeze_time('2020-11-01')
-def test_http_timestamp(requests_mock):
+def test_http_timestamp(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
     # bad content-type
-    requests_mock.post(DUMMY_HTTP_TS.url, content=ts_response_callback)
+    pki_services.post(DUMMY_HTTP_TS.url, content=ts_response_callback)
     from pyhanko.sign.timestamps import TimestampRequestError
 
     with pytest.raises(TimestampRequestError):
@@ -152,10 +152,10 @@ def test_http_timestamp(requests_mock):
             existing_fields_only=True,
         )
 
-    requests_mock.post(
+    pki_services.post(
         DUMMY_HTTP_TS.url,
         content=ts_response_callback,
-        headers={'Content-Type': 'application/timestamp-reply'},
+        content_type='application/timestamp-reply',
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(

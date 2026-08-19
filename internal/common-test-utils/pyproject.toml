@@ -7,7 +7,14 @@ name = "common-test-utils"
 version = "0.dev0"
 description = "Internal package with common testing utils & test data"
 requires-python = ">=3.10"
-dependencies = ["certomancer", "pyhanko", "pyhanko_certvalidator"]
+dependencies = [
+    # web-api-async: live_http serves certomancer's aiohttp illusionist
+    "certomancer[web-api-async]",
+    # transitional: live_http still mirrors registrations into requests_mock
+    "requests-mock>=1.8.0",
+    "pyhanko",
+    "pyhanko_certvalidator",
+]
 
 [project.optional-dependencies]
 csc = ["certomancer-csc-dummy==0.4.2"]

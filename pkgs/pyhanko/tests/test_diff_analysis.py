@@ -968,9 +968,9 @@ def test_form_field_in_group_locked_postsign_modify_success(
 
 
 @freeze_time('2020-11-01')
-def test_form_field_postsign_fill_pades_lt(requests_mock):
+def test_form_field_postsign_fill_pades_lt(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1',
         validation_context=vc,
@@ -992,9 +992,9 @@ def test_form_field_postsign_fill_pades_lt(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_fieldmdp_all_pades_lta(requests_mock):
+def test_fieldmdp_all_pades_lta(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     sp = fields.SigFieldSpec(
         'SigNew',
         box=(10, 74, 140, 134),
@@ -1020,10 +1020,10 @@ def test_fieldmdp_all_pades_lta(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_inline_ap_pades_lta(requests_mock):
+def test_inline_ap_pades_lta(pki_services):
     out = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(out)
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     sp = fields.SigFieldSpec(
         'SigNew', box=(10, 74, 140, 134), empty_field_appearance=True
     )
@@ -1062,9 +1062,9 @@ def test_inline_ap_pades_lta(requests_mock):
     'fname',
     ['simple-acroform-states.pdf', 'simple-acroform-states-ap-indirect.pdf'],
 )
-def test_button_appearance_streams_pades_lta(requests_mock, fname):
+def test_button_appearance_streams_pades_lta(pki_services, fname):
     testfile = Path(PDF_DATA_DIR) / fname
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     meta = signers.PdfSignatureMetadata(
         field_name='Signature',
         validation_context=vc,
@@ -1084,9 +1084,9 @@ def test_button_appearance_streams_pades_lta(requests_mock, fname):
 
 
 @freeze_time('2020-11-01')
-def test_form_field_postsign_modify_pades_lt(requests_mock):
+def test_form_field_postsign_modify_pades_lt(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1',
         validation_context=vc,
@@ -1110,18 +1110,18 @@ def test_form_field_postsign_modify_pades_lt(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('certify_first', [True, False])
-def test_pades_double_sign(requests_mock, certify_first):
+def test_pades_double_sign(pki_services, certify_first):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
         field_name='Sig1',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
         certify=certify_first,
     )
     meta2 = signers.PdfSignatureMetadata(
         field_name='Sig2',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
@@ -1143,17 +1143,17 @@ def test_pades_double_sign(requests_mock, certify_first):
 
 
 @freeze_time('2020-11-01')
-def test_pades_double_sign_delete_dss(requests_mock):
+def test_pades_double_sign_delete_dss(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
         field_name='Sig1',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
     meta2 = signers.PdfSignatureMetadata(
         field_name='Sig2',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
@@ -1181,17 +1181,17 @@ def test_pades_double_sign_delete_dss(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_double_sign_delete_vri(requests_mock):
+def test_pades_double_sign_delete_vri(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
         field_name='Sig1',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
     meta2 = signers.PdfSignatureMetadata(
         field_name='Sig2',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
@@ -1218,7 +1218,7 @@ def test_pades_double_sign_delete_vri(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_double_sign_delete_entry_in_vri(requests_mock):
+def test_pades_double_sign_delete_entry_in_vri(pki_services):
     """
     This test documents the current diff_analysis checker's behaviour
     when it notices that VRI entries were deleted.
@@ -1229,13 +1229,13 @@ def test_pades_double_sign_delete_entry_in_vri(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
         field_name='Sig1',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
     meta2 = signers.PdfSignatureMetadata(
         field_name='Sig2',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
@@ -1269,7 +1269,7 @@ def test_pades_double_sign_delete_entry_in_vri(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('indirect', [True, False])
-def test_pades_vri_allow_ts_addition(requests_mock, indirect):
+def test_pades_vri_allow_ts_addition(pki_services, indirect):
     """
     This test verifies whether the diff analysis checker allows the /TS
     entry in VRI dictionaries (it's completely pointless, but nice to have
@@ -1278,7 +1278,7 @@ def test_pades_vri_allow_ts_addition(requests_mock, indirect):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     meta1 = signers.PdfSignatureMetadata(
         field_name='Sig1',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
@@ -1286,7 +1286,7 @@ def test_pades_vri_allow_ts_addition(requests_mock, indirect):
     w = IncrementalPdfFileWriter(out)
     meta2 = signers.PdfSignatureMetadata(
         field_name='Sig2',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
@@ -1321,11 +1321,11 @@ def test_pades_vri_allow_ts_addition(requests_mock, indirect):
 
 
 @freeze_time('2020-11-01')
-def test_pades_dss_object_clobber(requests_mock):
+def test_pades_dss_object_clobber(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
         field_name='Sig1',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
@@ -1397,11 +1397,11 @@ BOGUS_DSS_VALUES = [
 
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('bogus_dss', BOGUS_DSS_VALUES)
-def test_pades_dss_object_typing_tamper(requests_mock, bogus_dss):
+def test_pades_dss_object_typing_tamper(pki_services, bogus_dss):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
         field_name='Sig1',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
         subfilter=PADES,
         embed_validation_info=True,
     )
@@ -1892,14 +1892,14 @@ def test_signed_file_diff_proxied_objs():
 
 
 @freeze_time('2020-11-01')
-def test_pades_sign_twice_indirect_arrs(requests_mock):
+def test_pades_sign_twice_indirect_arrs(pki_services):
     testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
-    live_testing_vc(requests_mock)
+    live_testing_vc(pki_services)
     with open(testfile, 'rb') as f:
         w = IncrementalPdfFileWriter(f)
         meta2 = signers.PdfSignatureMetadata(
             field_name='Sig2',
-            validation_context=live_testing_vc(requests_mock),
+            validation_context=live_testing_vc(pki_services),
             subfilter=PADES,
             embed_validation_info=True,
         )
@@ -1916,9 +1916,9 @@ def test_pades_sign_twice_indirect_arrs(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_sign_update_dss(requests_mock):
+def test_pades_sign_update_dss(pki_services):
     testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test-2.pdf'
-    live_testing_vc(requests_mock)
+    live_testing_vc(pki_services)
     with open(testfile, 'rb') as f:
         w = IncrementalPdfFileWriter(f)
         # add an irrelevant cert, should be harmless
@@ -2056,7 +2056,7 @@ def test_sign_and_update_with_orphaned_obj_and_other_upd():
 
 
 @freeze_time('2020-11-01')
-def test_indir_ref_in_sigref_dict(requests_mock):
+def test_indir_ref_in_sigref_dict(pki_services):
     fname = PDF_DATA_DIR + '/certified-with-indirect-refs-in-dir.pdf'
     with open(fname, 'rb') as f:
         content = f.read()
@@ -2071,7 +2071,7 @@ def test_indir_ref_in_sigref_dict(requests_mock):
     out = PdfTimeStamper(timestamper=DUMMY_TS).timestamp_pdf(
         w,
         md_algorithm='sha256',
-        validation_context=live_testing_vc(requests_mock),
+        validation_context=live_testing_vc(pki_services),
     )
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]

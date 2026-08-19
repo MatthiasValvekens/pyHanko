@@ -36,12 +36,10 @@ from typing import (
 
 import aiohttp
 import aiohttp.web
-import requests_mock
 import tzlocal
 from asn1crypto import pem, tsp
 from certomancer import PKIArchitecture
 from certomancer.integrations.aiohttp_illusionist import AsyncIllusionist
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import (
     ArchLabel,
     CertLabel,
@@ -62,6 +60,7 @@ from pyhanko_testing_commons.test_data.certomancer_trust_lists import (
     certomancer_pki_as_trusted_list,
 )
 from pyhanko_testing_commons.test_utils import signing_commons
+from pyhanko_testing_commons.test_utils.live_http import live_pki_services
 
 __all__ = [
     'EXAMPLE_DOMAIN',
@@ -401,8 +400,8 @@ def _generate_signed_doc(
     _write_file(spec.path, out.getvalue())
 
 
-def _tsa_callback(request, _context):
-    req = tsp.TimeStampReq.load(request.body)
+def _tsa_callback(request_body: bytes) -> bytes:
+    req = tsp.TimeStampReq.load(request_body)
     return signing_commons.DUMMY_TS.request_tsa_response(req=req).dump()
 
 
@@ -516,16 +515,16 @@ def make_doc_env(spec: DocEnvSpec = DocEnvSpec()) -> dict:
             spec.trust is not None and spec.trust.fetch_revocation
         ) or needs_pades
 
-        mocker = requests_mock.Mocker(real_http=False)
-        mocker.start()
-        closers.append(mocker.stop)
-        mocker.post(
+        services_cm = live_pki_services()
+        services = services_cm.__enter__()
+        closers.append(lambda: services_cm.__exit__(None, None, None))
+        services.post(
             arch.service_registry.get_tsa_info(spec.timestamping.service).url,
             content=_tsa_callback,
-            headers={'Content-Type': 'application/timestamp-reply'},
+            content_type='application/timestamp-reply',
         )
         if register_services:
-            Illusionist(arch).register(mocker)
+            services.register(arch)
 
         for dest, source in spec.files.items():
             _write_file(dest, _resolve_source(source))

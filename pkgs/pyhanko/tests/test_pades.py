@@ -5,7 +5,6 @@ from io import BytesIO
 
 import pytest
 from asn1crypto import cms, core, tsp
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko.pdf_utils.generic import pdf_name
@@ -58,9 +57,6 @@ from pyhanko.sign.validation.policy_decl import (
 )
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.context import CertValidationPolicySpec
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
-)
 from pyhanko_certvalidator.policy_decl import (
     NO_REVOCATION,
     REQUIRE_REVINFO,
@@ -127,8 +123,8 @@ def _simple_pades_check(trust_roots, emb_sig, norev=False):
     )
 
 
-def ts_response_callback(request, _context):
-    req = tsp.TimeStampReq.load(request.body)
+def ts_response_callback(request_body: bytes) -> bytes:
+    req = tsp.TimeStampReq.load(request_body)
     return DUMMY_TS.request_tsa_response(req=req).dump()
 
 
@@ -234,12 +230,12 @@ def test_pades_revinfo_ts_dummydata():
 
 
 @freeze_time('2020-11-01')
-def test_pades_revinfo_http_ts_dummydata(requests_mock):
+def test_pades_revinfo_http_ts_dummydata(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    requests_mock.post(
+    pki_services.post(
         DUMMY_HTTP_TS.url,
         content=ts_response_callback,
-        headers={'Content-Type': 'application/timestamp-reply'},
+        content_type='application/timestamp-reply',
     )
     out = signers.sign_pdf(
         w,
@@ -264,9 +260,9 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_revinfo_live_no_timestamp(requests_mock):
+def test_pades_revinfo_live_no_timestamp(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     out = signers.sign_pdf(
         w,
         signers.PdfSignatureMetadata(
@@ -284,9 +280,9 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_dss_content(requests_mock):
+def test_pades_dss_content(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     out = signers.sign_pdf(
         w,
         signers.PdfSignatureMetadata(
@@ -308,11 +304,11 @@ def test_pades_dss_content(requests_mock):
     assert len(dss.crls) == len(vc.crls) == 1
 
 
-def test_pades_revinfo_live(requests_mock):
+def test_pades_revinfo_live(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
     with freeze_time('2020-11-01'):
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         out = signers.sign_pdf(
             w,
             signers.PdfSignatureMetadata(
@@ -347,9 +343,9 @@ def test_pades_revinfo_live(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_revinfo_live_update(requests_mock):
+def test_pades_revinfo_live_update(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     out = signers.sign_pdf(
         w,
         signers.PdfSignatureMetadata(
@@ -396,9 +392,9 @@ def test_update_no_timestamps():
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_pades_revinfo_live_update_to_disk(requests_mock, tmp_path):
+async def test_pades_revinfo_live_update_to_disk(pki_services, tmp_path):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     out = await signers.async_sign_pdf(
         w,
         signers.PdfSignatureMetadata(
@@ -433,22 +429,22 @@ async def test_pades_revinfo_live_update_to_disk(requests_mock, tmp_path):
         assert emb_sig is r.embedded_regular_signatures[0]
 
 
-def test_pades_revinfo_live_lta(requests_mock):
+def test_pades_revinfo_live_lta(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    _test_pades_revinfo_live_lta(w, requests_mock)
+    _test_pades_revinfo_live_lta(w, pki_services)
 
 
-def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
+def test_pades_revinfo_live_lta_in_place(pki_services, tmp_path):
     from pathlib import Path
 
     inout_file: Path = tmp_path / "test.pdf"
     inout_file.write_bytes(MINIMAL_ONE_FIELD)
     with inout_file.open('r+b') as f:
         w = IncrementalPdfFileWriter(f)
-        _test_pades_revinfo_live_lta(w, requests_mock, in_place=True)
+        _test_pades_revinfo_live_lta(w, pki_services, in_place=True)
 
 
-def test_pades_revinfo_live_lta_direct_flush(requests_mock, tmp_path):
+def test_pades_revinfo_live_lta_direct_flush(pki_services, tmp_path):
     from pathlib import Path
 
     in_file: Path = tmp_path / "test.pdf"
@@ -458,10 +454,10 @@ def test_pades_revinfo_live_lta_direct_flush(requests_mock, tmp_path):
         out_file.touch()
         with out_file.open('r+b') as out:
             w = IncrementalPdfFileWriter(inf)
-            _test_pades_revinfo_live_lta(w, requests_mock, output=out)
+            _test_pades_revinfo_live_lta(w, pki_services, output=out)
 
 
-def test_pades_revinfo_live_lta_direct_flush_newfile(requests_mock, tmp_path):
+def test_pades_revinfo_live_lta_direct_flush_newfile(pki_services, tmp_path):
     # test transparent handling of non-readable/seekable output buffers
     from pathlib import Path
 
@@ -471,16 +467,16 @@ def test_pades_revinfo_live_lta_direct_flush_newfile(requests_mock, tmp_path):
     with in_file.open('rb') as inf:
         with out_file.open('wb') as out:
             w = IncrementalPdfFileWriter(inf)
-            _test_pades_revinfo_live_lta_sign(w, requests_mock, output=out)
+            _test_pades_revinfo_live_lta_sign(w, pki_services, output=out)
         with out_file.open('rb') as out:
             _test_pades_revinfo_live_lta_validate(
-                out, requests_mock, no_write=True
+                out, pki_services, no_write=True
             )
 
 
-def _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs):
+def _test_pades_revinfo_live_lta_sign(w, pki_services, **kwargs):
     with freeze_time('2020-11-01'):
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         out = signers.sign_pdf(
             w,
             signers.PdfSignatureMetadata(
@@ -498,7 +494,7 @@ def _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs):
 
 
 def _test_pades_revinfo_live_lta_validate(
-    out, requests_mock, no_write=False, has_more_sigs=False
+    out, pki_services, no_write=False, has_more_sigs=False
 ):
     if has_more_sigs:
         expected_modlevel = ModificationLevel.FORM_FILLING
@@ -544,7 +540,7 @@ def _test_pades_revinfo_live_lta_validate(
     with freeze_time('2028-12-01'):
         r = PdfFileReader(out)
 
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         out = PdfTimeStamper(DUMMY_TS2).update_archival_timestamp_chain(r, vc)
         r = PdfFileReader(out)
         ades_status = _simple_pades_check(TRUST_ROOTS, r.embedded_signatures[0])
@@ -568,15 +564,15 @@ def _test_pades_revinfo_live_lta_validate(
         assert ades_status.ades_subindic == AdESIndeterminate.NO_POE
 
 
-def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
-    out = _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs)
-    _test_pades_revinfo_live_lta_validate(out, requests_mock)
+def _test_pades_revinfo_live_lta(w, pki_services, **kwargs):
+    out = _test_pades_revinfo_live_lta_sign(w, pki_services, **kwargs)
+    _test_pades_revinfo_live_lta_validate(out, pki_services)
 
 
 @freeze_time('2020-11-01')
-def test_pades_lta_dss_indirect_arrs(requests_mock):
+def test_pades_lta_dss_indirect_arrs(pki_services):
     testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
-    live_testing_vc(requests_mock)
+    live_testing_vc(pki_services)
     with open(testfile, 'rb') as f:
         r = PdfFileReader(f)
         ades_status = _simple_pades_check(
@@ -589,11 +585,11 @@ def test_pades_lta_dss_indirect_arrs(requests_mock):
         assert ades_status.api_status.bottom_line
 
 
-def test_pades_lta_sign_twice(requests_mock):
+def test_pades_lta_sign_twice(pki_services):
     stream = BytesIO(MINIMAL_TWO_FIELDS)
     w = IncrementalPdfFileWriter(stream)
     with freeze_time('2020-10-01'):
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         signers.sign_pdf(
             w,
             signers.PdfSignatureMetadata(
@@ -610,7 +606,7 @@ def test_pades_lta_sign_twice(requests_mock):
 
     w = IncrementalPdfFileWriter(stream)
     with freeze_time('2020-11-01'):
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         signers.sign_pdf(
             w,
             signers.PdfSignatureMetadata(
@@ -627,7 +623,7 @@ def test_pades_lta_sign_twice(requests_mock):
 
     # test if the first sig still validates
     _test_pades_revinfo_live_lta_validate(
-        stream, requests_mock, no_write=True, has_more_sigs=True
+        stream, pki_services, no_write=True, has_more_sigs=True
     )
 
     # and the second one (i.e. 3rd in the embedded_signatures list),
@@ -640,11 +636,11 @@ def test_pades_lta_sign_twice(requests_mock):
         assert ades_status.api_status.bottom_line
 
 
-def test_pades_lta_sign_twice_post_expiry(requests_mock):
+def test_pades_lta_sign_twice_post_expiry(pki_services):
     stream = BytesIO(MINIMAL_TWO_FIELDS)
     w = IncrementalPdfFileWriter(stream)
     with freeze_time('2020-10-01'):
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         signers.sign_pdf(
             w,
             signers.PdfSignatureMetadata(
@@ -681,10 +677,10 @@ def test_pades_lta_sign_twice_post_expiry(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_standalone_document_timestamp(requests_mock):
+def test_standalone_document_timestamp(pki_services):
     pdf_ts = signers.PdfTimeStamper(timestamper=DUMMY_TS)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     out = pdf_ts.timestamp_pdf(w, md_algorithm='sha256', validation_context=vc)
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -707,7 +703,7 @@ def test_standalone_document_timestamp(requests_mock):
 
 
 @pytest.mark.parametrize('with_vri', [True, False])
-def test_add_revinfo_later(requests_mock, with_vri):
+def test_add_revinfo_later(pki_services, with_vri):
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
 
@@ -723,7 +719,7 @@ def test_add_revinfo_later(requests_mock, with_vri):
 
     # fast forward 1 month
     with freeze_time('2020-12-01'):
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         r = PdfFileReader(buf)
         emb_sig = r.embedded_signatures[0]
         add_validation_info(emb_sig, vc, in_place=True, add_vri_entry=with_vri)
@@ -736,7 +732,7 @@ def test_add_revinfo_later(requests_mock, with_vri):
 
 
 @pytest.mark.parametrize('with_vri', [True, False])
-def test_fix_incomplete_revinfo_later(requests_mock, with_vri):
+def test_fix_incomplete_revinfo_later(pki_services, with_vri):
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
 
@@ -748,7 +744,7 @@ def test_fix_incomplete_revinfo_later(requests_mock, with_vri):
             allow_fetching=True,
             other_certs=[],
         )
-        Illusionist(TESTING_CA).register(requests_mock)
+        pki_services.register(TESTING_CA)
         signers.sign_pdf(
             w,
             signers.PdfSignatureMetadata(
@@ -764,7 +760,7 @@ def test_fix_incomplete_revinfo_later(requests_mock, with_vri):
 
     # fast forward 1 month
     with freeze_time('2020-12-01'):
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         r = PdfFileReader(buf)
         emb_sig = r.embedded_signatures[0]
         add_validation_info(emb_sig, vc, in_place=True, add_vri_entry=with_vri)
@@ -776,7 +772,7 @@ def test_fix_incomplete_revinfo_later(requests_mock, with_vri):
         assert status.api_status.bottom_line
 
 
-def test_add_revinfo_and_timestamp(requests_mock):
+def test_add_revinfo_and_timestamp(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
     # create signature without revocation info
@@ -790,7 +786,7 @@ def test_add_revinfo_and_timestamp(requests_mock):
 
     # fast forward 1 month
     with freeze_time('2020-12-01'):
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         r = PdfFileReader(out)
         emb_sig = r.embedded_signatures[0]
         out = add_validation_info(emb_sig, vc)
@@ -907,13 +903,13 @@ async def test_sign_with_wrong_content_sig():
 
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('different_tsa', [True, False])
-def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
+def test_interrupted_pades_lta_signature(pki_services, different_tsa):
     # simulate a PAdES-LTA workflow with remote signing
     # (our hypothetical remote signer just signs digests, not full CMS objects)
-    requests_mock.post(
+    pki_services.post(
         DUMMY_HTTP_TS.url,
         content=ts_response_callback,
-        headers={'Content-Type': 'application/timestamp-reply'},
+        content_type='application/timestamp-reply',
     )
 
     def instantiate_external_signer(sig_value: bytes):
@@ -928,7 +924,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
     async def prep_doc():
         # 2048-bit RSA sig is 256 bytes long -> placeholder
         ext_signer = instantiate_external_signer(sig_value=bytes(256))
-        vc = live_testing_vc(requests_mock)
+        vc = live_testing_vc(pki_services)
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
         pdf_signer = signers.PdfSigner(
             signers.PdfSignatureMetadata(
@@ -990,7 +986,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
 
         # fresh VC
         validation_context = live_testing_vc(
-            requests_mock, with_extra_tsa=different_tsa
+            pki_services, with_extra_tsa=different_tsa
         )
         await PdfTBSDocument.async_finish_signing(
             output_handle,
@@ -1102,7 +1098,7 @@ NOOP_POLICY = CertRevTrustPolicy(
 )
 
 
-def _lazy_pades_signature(requests_mock):
+def _lazy_pades_signature(pki_services):
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     # set up a signer that doesn't embed anything
     #  (but still goes through the motions)
@@ -1112,7 +1108,7 @@ def _lazy_pades_signature(requests_mock):
             field_name='Sig1',
             subfilter=PADES,
             validation_context=live_testing_vc(
-                requests_mock, revinfo_policy=NOOP_POLICY
+                pki_services, revinfo_policy=NOOP_POLICY
             ),
             embed_validation_info=True,
             use_pades_lta=True,
@@ -1136,7 +1132,7 @@ def _lazy_pades_signature(requests_mock):
         DSSContentSettings(),
     ],
 )
-def test_pades_two_revisions(requests_mock, dss_settings):
+def test_pades_two_revisions(pki_services, dss_settings):
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
         w,
@@ -1144,7 +1140,7 @@ def test_pades_two_revisions(requests_mock, dss_settings):
             field_name='Sig1',
             subfilter=PADES,
             dss_settings=dss_settings,
-            validation_context=live_testing_vc(requests_mock),
+            validation_context=live_testing_vc(pki_services),
             embed_validation_info=True,
         ),
         timestamper=DUMMY_TS,
@@ -1184,7 +1180,7 @@ def test_pades_two_revisions(requests_mock, dss_settings):
         ),
     ],
 )
-def test_pades_lta_two_revisions(requests_mock, dss_settings):
+def test_pades_lta_two_revisions(pki_services, dss_settings):
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
         w,
@@ -1192,7 +1188,7 @@ def test_pades_lta_two_revisions(requests_mock, dss_settings):
             field_name='Sig1',
             subfilter=PADES,
             dss_settings=dss_settings,
-            validation_context=live_testing_vc(requests_mock),
+            validation_context=live_testing_vc(pki_services),
             embed_validation_info=True,
             use_pades_lta=True,
         ),
@@ -1206,7 +1202,7 @@ def test_pades_lta_two_revisions(requests_mock, dss_settings):
 
 
 @freeze_time('2020-11-01')
-def test_pades_lta_noskip(requests_mock):
+def test_pades_lta_noskip(pki_services):
     dss_settings = DSSContentSettings(
         placement=SigDSSPlacementPreference.SEPARATE_REVISION,
         include_vri=False,
@@ -1219,7 +1215,7 @@ def test_pades_lta_noskip(requests_mock):
             field_name='Sig1',
             subfilter=PADES,
             dss_settings=dss_settings,
-            validation_context=live_testing_vc(requests_mock),
+            validation_context=live_testing_vc(pki_services),
             embed_validation_info=True,
             use_pades_lta=True,
         ),
@@ -1233,7 +1229,7 @@ def test_pades_lta_noskip(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_post_ts_autosuppress(requests_mock):
+def test_pades_post_ts_autosuppress(pki_services):
     # test if the post-timestamp DSS update is automatically suppressed
     # if we sign with the exact same TSA for both the sig & the document TS
     # (keeping the VC constant as well)
@@ -1248,7 +1244,7 @@ def test_pades_post_ts_autosuppress(requests_mock):
             field_name='Sig1',
             subfilter=PADES,
             dss_settings=dss_settings,
-            validation_context=live_testing_vc(requests_mock),
+            validation_context=live_testing_vc(pki_services),
             embed_validation_info=True,
             use_pades_lta=True,
         ),
@@ -1267,7 +1263,7 @@ def test_pades_post_ts_autosuppress(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_max_autosuppress(requests_mock):
+def test_pades_max_autosuppress(pki_services):
     # test if all timestamp-related DSS updates are suppressed
     # if we sign with the exact same TSA for both the sig & the document TS
     # (keeping the VC constant as well) and all relevant DSS updates were
@@ -1283,7 +1279,7 @@ def test_pades_max_autosuppress(requests_mock):
             field_name='Sig1',
             subfilter=PADES,
             dss_settings=dss_settings,
-            validation_context=live_testing_vc(requests_mock),
+            validation_context=live_testing_vc(pki_services),
             embed_validation_info=True,
             use_pades_lta=True,
         ),
@@ -1301,7 +1297,7 @@ def test_pades_max_autosuppress(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_independent_tsa(requests_mock):
+def test_pades_independent_tsa(pki_services):
     # test signing/validation behaviour with an independent TSA
 
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
@@ -1311,7 +1307,7 @@ def test_pades_independent_tsa(requests_mock):
             field_name='Sig1',
             subfilter=PADES,
             validation_context=live_testing_vc(
-                requests_mock, with_extra_tsa=True
+                pki_services, with_extra_tsa=True
             ),
             embed_validation_info=True,
         ),
@@ -1360,11 +1356,11 @@ def test_sign_with_policy():
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_pades_lta_no_embed_root(requests_mock):
+async def test_pades_lta_no_embed_root(pki_services):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     cr = SimpleCertificateStore()
     cr.register_multiple(FROM_CA.cert_registry)
-    vc = live_testing_vc(requests_mock)
+    vc = live_testing_vc(pki_services)
     no_embed_root_signer = signers.SimpleSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
@@ -1400,7 +1396,7 @@ async def test_pades_lta_no_embed_root(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_pades_live_ac_presign_validation(requests_mock):
+async def test_pades_live_ac_presign_validation(pki_services, fetchers):
     # integration test for heavy-duty autofetching logic with ACs
     # NOTE: certificate autofetching is not tested due to lack of availability
     # in Illusionist (at the time of writing)
@@ -1429,7 +1425,6 @@ async def test_pades_live_ac_presign_validation(requests_mock):
         ),
     )
 
-    fetchers = RequestsFetcherBackend().get_fetchers()
     vc = ValidationContext(
         trust_roots=[pki_arch.get_cert('root')],
         allow_fetching=True,
@@ -1444,7 +1439,7 @@ async def test_pades_live_ac_presign_validation(requests_mock):
         fetchers=fetchers,
         revocation_mode='require',
     )
-    Illusionist(pki_arch).register(requests_mock)
+    pki_services.register(pki_arch)
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = await signers.async_sign_pdf(
@@ -1506,7 +1501,7 @@ async def test_pades_live_ac_presign_validation(requests_mock):
 
 # noinspection PyDeprecation
 @pytest.mark.asyncio
-async def test_pades_lta_live_ac_presign_validation(requests_mock):
+async def test_pades_lta_live_ac_presign_validation(pki_services, fetchers):
     # Same as the above, but with LTA instead (+some time manipulation)
 
     with freeze_time('2020-11-01'):
@@ -1534,7 +1529,6 @@ async def test_pades_lta_live_ac_presign_validation(requests_mock):
             ),
         )
 
-        fetchers = RequestsFetcherBackend().get_fetchers()
         vc = ValidationContext(
             trust_roots=[pki_arch.get_cert('root')],
             allow_fetching=True,
@@ -1549,7 +1543,7 @@ async def test_pades_lta_live_ac_presign_validation(requests_mock):
             fetchers=fetchers,
             revocation_mode='require',
         )
-        Illusionist(pki_arch).register(requests_mock)
+        pki_services.register(pki_arch)
 
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
@@ -1599,14 +1593,14 @@ async def test_pades_lta_live_ac_presign_validation(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_cades_signer_attrs_autofill_dss(requests_mock):
+async def test_cades_signer_attrs_autofill_dss(pki_services):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel('signer1')),
         signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
         cert_registry=SimpleCertificateStore(),  # no certs here on purpose
     )
-    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    main_vc, ac_vc = live_ac_vcs(pki_services, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
         w,
@@ -1640,7 +1634,7 @@ async def test_cades_signer_attrs_autofill_dss(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_cades_signer_attrs_validate_acs(requests_mock):
+async def test_cades_signer_attrs_validate_acs(pki_services):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel('signer1')),
@@ -1655,7 +1649,7 @@ async def test_cades_signer_attrs_validate_acs(requests_mock):
             ]
         ),
     )
-    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    main_vc, ac_vc = live_ac_vcs(pki_services, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
         w,
@@ -1684,7 +1678,7 @@ async def test_cades_signer_attrs_validate_acs(requests_mock):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert len(s.embedded_attr_certs) == 0  # nothing here
-    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    main_vc, ac_vc = live_ac_vcs(pki_services)
     status = await async_validate_pdf_signature(
         s, signer_validation_context=main_vc, ac_validation_context=ac_vc
     )
@@ -1722,7 +1716,7 @@ async def test_cades_signer_attrs_validate_acs(requests_mock):
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('pass_ac_vc', [True, False])
 @pytest.mark.asyncio
-async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
+async def test_cades_signer_attrs_claimed_only(pki_services, pass_ac_vc):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
         w,
@@ -1745,7 +1739,7 @@ async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert len(s.embedded_attr_certs) == 0  # nothing here
-    main_vc = live_testing_vc(requests_mock)
+    main_vc = live_testing_vc(pki_services)
     status = await async_validate_pdf_signature(
         s,
         signer_validation_context=main_vc,
@@ -1776,7 +1770,7 @@ async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
+async def test_cades_signer_attrs_validate_acs_no_claimed(pki_services):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel('signer1')),
@@ -1791,7 +1785,7 @@ async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
             ]
         ),
     )
-    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    main_vc, ac_vc = live_ac_vcs(pki_services, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
         w,
@@ -1815,7 +1809,7 @@ async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert len(s.embedded_attr_certs) == 0  # nothing here
-    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    main_vc, ac_vc = live_ac_vcs(pki_services)
     status = await async_validate_pdf_signature(
         s, signer_validation_context=main_vc, ac_validation_context=ac_vc
     )
@@ -1842,7 +1836,7 @@ async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
+async def test_cades_signer_attrs_validate_acs_wrong_vc(pki_services):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel('signer1')),
@@ -1857,7 +1851,7 @@ async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
             ]
         ),
     )
-    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    main_vc, ac_vc = live_ac_vcs(pki_services, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
         w,
@@ -1886,7 +1880,7 @@ async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert len(s.embedded_attr_certs) == 0  # nothing here
-    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    main_vc, ac_vc = live_ac_vcs(pki_services)
 
     # validate with the wrong AC VC
     status = await async_validate_pdf_signature(
@@ -1910,7 +1904,7 @@ async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
+async def test_cades_signer_attrs_validate_acs_missing_vc(pki_services):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel('signer1')),
@@ -1925,7 +1919,7 @@ async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
             ]
         ),
     )
-    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    main_vc, ac_vc = live_ac_vcs(pki_services, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
         w,
@@ -1954,7 +1948,7 @@ async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert len(s.embedded_attr_certs) == 0  # nothing here
-    main_vc, _ = live_ac_vcs(requests_mock)
+    main_vc, _ = live_ac_vcs(pki_services)
 
     # validate with the wrong AC VC
     status = await async_validate_pdf_signature(
@@ -1983,7 +1977,7 @@ async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
 )
 @pytest.mark.asyncio
 async def test_cades_signer_attrs_unknown_attrs(
-    requests_mock, as_signed_assertions, pass_ac_vc
+    pki_services, as_signed_assertions, pass_ac_vc
 ):
     class CustomAttrProvider(CMSAttributeProvider):
         attribute_type = 'signer_attributes_v2'
@@ -2036,7 +2030,7 @@ async def test_cades_signer_attrs_unknown_attrs(
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert len(s.embedded_attr_certs) == 0  # nothing here
-    main_vc = live_testing_vc(requests_mock)
+    main_vc = live_testing_vc(pki_services)
     status = await async_validate_pdf_signature(
         s,
         signer_validation_context=main_vc,
@@ -2071,7 +2065,7 @@ async def test_cades_signer_attrs_unknown_attrs(
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('pass_ac_vc', [True, False])
 @pytest.mark.asyncio
-async def test_cades_signer_attrs_multivalued(requests_mock, pass_ac_vc):
+async def test_cades_signer_attrs_multivalued(pki_services, pass_ac_vc):
     class CustomSigner(signers.SimpleSigner):
         async def signed_attrs(self, *args, **kwargs):
             signed_attrs = await super().signed_attrs(*args, **kwargs)
@@ -2103,7 +2097,7 @@ async def test_cades_signer_attrs_multivalued(requests_mock, pass_ac_vc):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert len(s.embedded_attr_certs) == 0  # nothing here
-    main_vc = live_testing_vc(requests_mock)
+    main_vc = live_testing_vc(pki_services)
     with pytest.raises(SignatureValidationError, match='Expected single'):
         await async_validate_pdf_signature(
             s,
