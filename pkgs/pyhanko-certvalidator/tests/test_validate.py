@@ -29,7 +29,10 @@ from pyhanko_certvalidator.fetchers import (
     FetcherBackend,
     Fetchers,
     OCSPFetcher,
-    requests_fetchers,
+)
+from pyhanko_certvalidator.fetchers.common_utils import (
+    complete_certificate_fetch_jobs,
+    gather_aia_issuer_urls,
 )
 from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.path import QualifiedPolicy, ValidationPath
@@ -683,23 +686,38 @@ def test_408020_cps_pointer_qualifier_test20():
     )
 
 
-class MockRequestsCertificateFetcher(
-    requests_fetchers.RequestsCertificateFetcher
-):
-    def __init__(self, *args, order, **kwargs):
-        super().__init__(*args, **kwargs)
+class MockCertificateFetcher(CertificateFetcher):
+    def __init__(self, *, order):
         self.order = order
         root_ca = load_cert_object('multilayer', 'certs', 'root.cert.pem')
         middle_ca = load_cert_object('multilayer', 'certs', 'interm1.cert.pem')
         end_ca = load_cert_object('multilayer', 'certs', 'interm2.cert.pem')
         self.certs = {'root': root_ca, 'middle': middle_ca, 'end': end_ca}
+        self._fetched: list[x509.Certificate] = []
 
-    async def fetch_certs(self, *args, **kwargs) -> Iterable[x509.Certificate]:
-        return [
+    async def _fetch_certs(self, url) -> Iterable[x509.Certificate]:
+        results = [
             self.certs[self.order[0]],
             self.certs[self.order[1]],
             self.certs[self.order[2]],
         ]
+        self._fetched.extend(results)
+        return results
+
+    def fetch_cert_issuers(self, cert):
+        fetch_jobs = [
+            self._fetch_certs(url) for url in gather_aia_issuer_urls(cert)
+        ]
+        return complete_certificate_fetch_jobs(fetch_jobs)
+
+    def fetch_crl_issuers(self, certificate_list):
+        fetch_jobs = [
+            self._fetch_certs(url) for url in certificate_list.issuer_cert_urls
+        ]
+        return complete_certificate_fetch_jobs(fetch_jobs)
+
+    def fetched_certs(self) -> Iterable[x509.Certificate]:
+        return self._fetched
 
 
 @pytest.mark.parametrize(
@@ -727,7 +745,7 @@ async def test_building_trust_path_fetched_in_different_orders(cert_order):
     cert = load_cert_object('multilayer', 'certs', 'alice.cert.pem')
     registry = CertificateRegistry.build(
         certs=(cert,),
-        cert_fetcher=MockRequestsCertificateFetcher(order=cert_order),
+        cert_fetcher=MockCertificateFetcher(order=cert_order),
     )
     builder = PathBuilder(trust_manager=trust_manager, registry=registry)
     paths = await builder.async_build_paths(end_entity_cert=cert)
