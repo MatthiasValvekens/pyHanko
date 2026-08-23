@@ -90,6 +90,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
+import aiohttp
 import tzlocal
 from asn1crypto import algos, x509
 from cryptography.hazmat.primitives import hashes
@@ -100,11 +101,6 @@ from pyhanko_certvalidator.registry import (
     SimpleCertificateStore,
 )
 from pyhanko_certvalidator.util import get_pyca_cryptography_hash
-
-try:
-    import aiohttp
-except ImportError:  # pragma: nocover
-    raise ImportError("Install pyHanko with [async_http]")
 
 __all__ = [
     'CSCAuthorizationInfo',
