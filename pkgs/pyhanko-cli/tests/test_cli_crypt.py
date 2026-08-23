@@ -408,7 +408,7 @@ def test_decrypt_with_private_key_and_passfile(cli_runner, pubkey_decryption):
     with open(INPUT_PATH, 'wb') as inf:
         inf.write(MINIMAL_PUBKEY_AES256)
 
-    with open('passfile', 'w') as passf:
+    with open('passfile', 'w', encoding='utf-8') as passf:
         passf.write("secret")
 
     output_path = 'out.pdf'

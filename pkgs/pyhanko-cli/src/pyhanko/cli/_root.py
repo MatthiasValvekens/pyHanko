@@ -51,7 +51,7 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
     config_text = None
     if config is None:
         try:
-            with open(DEFAULT_CONFIG_FILE, 'r') as f:
+            with open(DEFAULT_CONFIG_FILE, 'r', encoding='utf-8') as f:
                 config_text = f.read()
             config = DEFAULT_CONFIG_FILE
         except FileNotFoundError:
@@ -62,7 +62,7 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
             )
     else:
         try:
-            with open(config, 'r') as f:
+            with open(config, 'r', encoding='utf-8') as f:
                 config_text = f.read()
         except OSError as e:
             raise click.ClickException(

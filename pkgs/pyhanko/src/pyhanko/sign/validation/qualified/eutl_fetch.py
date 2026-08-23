@@ -81,7 +81,7 @@ class FileSystemTLCache(TLCache):
 
         index = cache_path / 'index.json'
         if index.exists():
-            with index.open('r') as inf:
+            with index.open('r', encoding='utf-8') as inf:
                 index_data = json.load(inf)
                 for key, entry in index_data.items():
                     exp_ts = datetime.fromtimestamp(
@@ -99,7 +99,7 @@ class FileSystemTLCache(TLCache):
             raise KeyError
         cached_file_path = self._root / fname
         try:
-            with cached_file_path.open('r') as inf:
+            with cached_file_path.open('r', encoding='utf-8') as inf:
                 content = inf.read()
         except OSError as e:
             logger.warning(
@@ -114,7 +114,7 @@ class FileSystemTLCache(TLCache):
         fname = hashlib.sha256(key.encode('utf8')).hexdigest()
         index = self._root / 'index.json'
         if index.exists():
-            with index.open('r') as inf:
+            with index.open('r', encoding='utf-8') as inf:
                 index_data = json.load(inf)
         else:
             index_data = {}
@@ -122,9 +122,9 @@ class FileSystemTLCache(TLCache):
             'exp_epoch_seconds': exp_ts.timestamp(),
             'fname': fname,
         }
-        with index.open('w') as outf:
+        with index.open('w', encoding='utf-8') as outf:
             json.dump(index_data, outf)
-        with (self._root / fname).open('w') as outf:
+        with (self._root / fname).open('w', encoding='utf-8') as outf:
             outf.write(value)
         self._cache[key] = (exp_ts, fname)
 

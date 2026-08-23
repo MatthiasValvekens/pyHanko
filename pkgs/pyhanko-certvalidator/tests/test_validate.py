@@ -327,7 +327,7 @@ class OCSPTestCase:
 
 def read_openssl_ocsp_test_params():
     data_path = os.path.join(FIXTURES_DIR, 'openssl-ocsp', 'openssl-ocsp.json')
-    with open(data_path, 'r') as inf:
+    with open(data_path, 'r', encoding='utf-8') as inf:
         cases = json.load(inf)
     return [OCSPTestCase.from_json(obj) for obj in cases]
 
@@ -442,7 +442,7 @@ class PKITSTestCase:
 
 def read_pkits_test_params():
     data_path = os.path.join(FIXTURES_DIR, 'nist_pkits', 'pkits.json')
-    with open(data_path, 'r') as inf:
+    with open(data_path, 'r', encoding='utf-8') as inf:
         cases = json.load(inf)
     return [PKITSTestCase.from_json(obj) for obj in cases]
 
@@ -607,7 +607,7 @@ def read_pkits_user_notice_test_params():
     data_path = os.path.join(
         FIXTURES_DIR, 'nist_pkits', 'pkits-user-notice.json'
     )
-    with open(data_path, 'r') as inf:
+    with open(data_path, 'r', encoding='utf-8') as inf:
         cases = json.load(inf)
     return [PKITSUserNoticeTestCase.from_json(obj) for obj in cases]
 

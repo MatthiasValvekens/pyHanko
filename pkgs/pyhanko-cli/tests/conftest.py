@@ -151,7 +151,7 @@ def p12_keys(pki_arch, post_validate):
 
 
 def _write_config(config: dict, fname: str = 'pyhanko.yml'):
-    with open(fname, 'w') as outf:
+    with open(fname, 'w', encoding='utf-8') as outf:
         yaml.dump(config, outf)
 
 

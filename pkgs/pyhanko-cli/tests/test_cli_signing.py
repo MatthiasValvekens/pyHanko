@@ -339,7 +339,7 @@ def test_cli_addsig_pemder_with_setup_encrypted_key(
         args = []
         extra = {}
     elif loc == 'passfile':
-        with open('passfile', 'w') as passf:
+        with open('passfile', 'w', encoding='utf-8') as passf:
             passf.write(DUMMY_PASSPHRASE)
         args = ['--passfile', 'passfile']
         extra = {}
@@ -432,7 +432,7 @@ def test_cli_addsig_pemder_setup_does_not_exist(cli_runner):
 
 
 def test_cli_addsig_pemder_with_unreadable_additional_certs(cli_runner):
-    with open("bad-cert.pem", "w") as outf:
+    with open("bad-cert.pem", "w", encoding='utf-8') as outf:
         outf.write("blah")
     result = cli_runner.invoke(
         cli_root,
@@ -623,7 +623,7 @@ def test_cli_addsig_p12_with_setup(cli_runner, p12_keys, passphrase_loc):
         }
     elif passphrase_loc == 'file':
         args = ['--passfile', 'passfile']
-        with open('passfile', 'w') as pf:
+        with open('passfile', 'w', encoding='utf-8') as pf:
             pf.write(DUMMY_PASSPHRASE)
 
     _write_config(cfg)
