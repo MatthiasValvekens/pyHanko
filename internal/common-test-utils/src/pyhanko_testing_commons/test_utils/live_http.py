@@ -7,20 +7,18 @@ asked for and anything else still fails to resolve.
 import asyncio
 import threading
 from collections.abc import Awaitable, Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime
-from typing import TypeVar
+from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
 import aiohttp
 import aiohttp.test_utils
 import aiohttp.web
-import requests_mock
 from certomancer.integrations.aiohttp_illusionist import (
     AsyncIllusionist,
     _FakeResolver,
 )
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import PKIArchitecture
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers import util as _session_mod
 
@@ -80,9 +78,8 @@ class PKIServiceRegistry:
     ``Illusionist(arch).register(mocker)``.
     """
 
-    def __init__(self, mocker: requests_mock.Mocker) -> None:
+    def __init__(self, mocker: Any | None) -> None:
         self._routes: dict[tuple[str, str], _Handler] = {}
-        # transitional: still serves the code paths that run on ``requests``
         self._mocker = mocker
 
     def register(
@@ -105,7 +102,10 @@ class PKIServiceRegistry:
             for route in resource:
                 key = (route.method, resource.canonical)
                 self._routes[key] = route.handler
-        Illusionist(arch, at_time=at_time).register(self._mocker)
+        if self._mocker is not None:
+            from certomancer.integrations.illusionist import Illusionist
+
+            Illusionist(arch, at_time=at_time).register(self._mocker)
 
     def post(
         self,
@@ -138,11 +138,14 @@ class PKIServiceRegistry:
             )
 
         self._routes['POST', urlsplit(url).path] = handle
-        self._mocker.post(
-            url,
-            content=lambda request, _context: content(request.body),
-            headers=({'Content-Type': content_type} if content_type else {}),
-        )
+        if self._mocker is not None:
+            self._mocker.post(
+                url,
+                content=lambda request, _context: content(request.body),
+                headers=(
+                    {'Content-Type': content_type} if content_type else {}
+                ),
+            )
 
     async def _dispatch(
         self, request: aiohttp.web.Request
@@ -186,13 +189,16 @@ def redirect_default_sessions(port: int) -> Iterator[None]:
 
 @contextmanager
 def live_pki_services() -> Iterator[PKIServiceRegistry]:
-    """Start the PKI service server and route default sessions to it.
+    """Start the PKI service server and route default sessions to it."""
 
-    The ambient equivalent of ``requests_mock.Mocker()``; the yielded registry
-    stands in for the mocker that architectures get registered against.
-    """
+    try:
+        import requests_mock
 
-    with requests_mock.Mocker(real_http=False) as mocker:
+        mocker_cm = requests_mock.Mocker(real_http=False)
+    except ImportError:
+        mocker_cm = nullcontext()
+
+    with mocker_cm as mocker:
         registry = PKIServiceRegistry(mocker)
         app = aiohttp.web.Application()
         app.router.add_route('*', '/{tail:.*}', registry._dispatch)

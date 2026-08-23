@@ -59,19 +59,36 @@ options, including: validation at a specific moment in time, whitelisting and re
  - *cryptography*
  - *uritools*
  - *oscrypto*
- - *requests* or *aiohttp* (use the latter for more efficient asyncio, requires resource management)
- - Python 3.7 or higher
+ - Python 3.10 or higher
+
+Fetching validation data and certificates over the network is an opt-in feature
+requiring additional dependencies.
+
+ - `async-http` &mdash; *aiohttp* and *certifi*, the preferred backend
+ - `requests` &mdash; *requests*, used as a fallback if *aiohttp* isn't installed
+
+If both are available, `aiohttp` is used unless the caller specifies otherwise.
+
+Note: `pyhanko` depends on `pyhanko-certvalidator[async-http]`, so this subtlety is only
+relevant for those who use `pyhanko-certvalidator` as a standalone library without pyHanko.
 
  ### Note on compatibility
 
  Starting with `pyhanko-certvalidator` version `0.17.0`, the library has been refactored to use asynchronous I/O as much as possible. Most high-level API entrypoints can still be used synchronously, but have been deprecated in favour of their asyncio equivalents. 
- As part of this move, the OCSP and CRL clients now have two separate implementations: a `requests`-based one, and an `aiohttp`-based one. The latter is probably more performant, but requires more resource management efforts on the caller's part, which was impossible to implement without making major breaking changes to the public API that would make the migration path more complicated. Therefore, the `requests`-based fetcher will remain the default for the time being.
+ As part of this move, the OCSP and CRL clients now have two separate implementations: a `requests`-based one, and an `aiohttp`-based one. The latter is more performant and is preferred whenever it's installed; `requests` is used as a fallback.
 
 
 ## Installation
 
 ```bash
 pip install pyhanko-certvalidator
+```
+
+To also install a backend for fetching revocation info and certificates over
+the network:
+
+```bash
+pip install 'pyhanko-certvalidator[async-http]'
 ```
 
 ## License
