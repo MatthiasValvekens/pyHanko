@@ -276,6 +276,23 @@ def test_sign_with_trust():
 
 
 @freeze_time('2020-11-01')
+def test_basic_signature_validation_offline():
+    """Fetch-free sanity check for basic signature validation, exercised
+    by the backend-agnostic smoke run."""
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    vc = ValidationContext(trust_roots=TRUST_ROOTS, allow_fetching=False)
+    status = validate_pdf_signature(s, vc)
+    assert status.intact
+    assert status.valid
+    assert status.trusted
+
+
+@freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_sign_with_trust_async():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
