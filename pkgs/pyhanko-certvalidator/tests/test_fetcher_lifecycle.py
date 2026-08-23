@@ -1,6 +1,15 @@
 """Tests for the ownership rules around implicitly provisioned fetchers."""
 
 import pytest
+
+# aiohttp is an optional dependency; skip the whole module (rather than
+# erroring out at collection time) if it isn't installed. `nosmoke` alone
+# doesn't help here, since a marker can only be applied once the module has
+# already been imported.
+pytest.importorskip('aiohttp')
+
+pytestmark = pytest.mark.nosmoke
+
 from pyhanko_certvalidator.context import (
     USE_DEFAULT_FETCHERS,
     CertValidationPolicySpec,

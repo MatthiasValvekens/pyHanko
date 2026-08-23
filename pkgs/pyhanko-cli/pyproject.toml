@@ -67,7 +67,7 @@ testing = [
     {include-group = "testing-base"},
     "aiohttp>=3.9,<3.15",
     "pytest-aiohttp>=1.0.4,<1.2.0",
-    "pyhanko[pkcs11,opentype,async_http,image-support,qr,etsi]"
+    "pyhanko[pkcs11,opentype,async-http,image-support,qr,etsi]"
 ]
 testing-pkcs11-setup = [
     "certomancer[pkcs11]>=0.16.0",
