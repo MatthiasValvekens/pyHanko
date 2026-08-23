@@ -2275,11 +2275,11 @@ name = "pyhanko"
 version = "0.0.0.dev1"
 source = { editable = "pkgs/pyhanko" }
 dependencies = [
+    { name = "aiohttp" },
     { name = "asn1crypto" },
     { name = "cryptography" },
     { name = "lxml" },
     { name = "pyhanko-certvalidator" },
-    { name = "requests" },
     { name = "tzlocal" },
 ]
 
@@ -2337,6 +2337,7 @@ testing-pkcs11-setup = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.9,<3.15" },
     { name = "aiohttp", marker = "extra == 'async-http'", specifier = ">=3.9,<3.15" },
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "cryptography", specifier = ">=48.0.0" },
@@ -2347,7 +2348,6 @@ requires-dist = [
     { name = "python-barcode", marker = "extra == 'image-support'", specifier = "==0.16.1" },
     { name = "python-pkcs11", marker = "extra == 'pkcs11'", specifier = "~=0.9.3" },
     { name = "qrcode", marker = "extra == 'qr'", specifier = ">=7.3.1" },
-    { name = "requests", specifier = ">=2.31.0" },
     { name = "signxml", marker = "extra == 'etsi'", specifier = ">=5.1.0" },
     { name = "tzlocal", specifier = ">=4.3" },
     { name = "uharfbuzz", marker = "extra == 'opentype'", specifier = ">=0.25.0,<0.56.0" },
@@ -2388,7 +2388,9 @@ name = "pyhanko-certvalidator"
 version = "0.0.0.dev1"
 source = { editable = "pkgs/pyhanko-certvalidator" }
 dependencies = [
+    { name = "aiohttp" },
     { name = "asn1crypto" },
+    { name = "certifi" },
     { name = "cryptography" },
     { name = "oscrypto" },
     { name = "requests" },
@@ -2412,8 +2414,10 @@ testing-base = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.9,<3.15" },
     { name = "aiohttp", marker = "extra == 'async-http'", specifier = ">=3.9,<3.15" },
     { name = "asn1crypto", specifier = ">=1.5.1" },
+    { name = "certifi", specifier = ">=2023.5.7" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "oscrypto", specifier = ">=1.1.0" },
     { name = "requests", specifier = ">=2.31.0" },

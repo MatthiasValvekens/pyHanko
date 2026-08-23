@@ -6,12 +6,17 @@ from asn1crypto import tsp
 from .api import TimeStamper
 from .common_utils import TimestampRequestError, set_tsp_headers
 
-__all__ = ['HTTPTimeStamper']
+__all__ = [
+    # Reexport HTTPTimeStamper for backwards compatibility, but this import
+    # path is deprecated.
+    'HTTPTimeStamper',
+    'RequestsHTTPTimeStamper',
+]
 
 
-class HTTPTimeStamper(TimeStamper):
+class RequestsHTTPTimeStamper(TimeStamper):
     """
-    Standard HTTP-based timestamp client.
+    HTTP-based timestamp client with 'requests'.
     """
 
     def __init__(self, url, https=False, timeout=5, auth=None, headers=None):
@@ -74,3 +79,14 @@ class HTTPTimeStamper(TimeStamper):
 
         response = await to_thread(task)
         return response
+
+
+HTTPTimeStamper = RequestsHTTPTimeStamper
+"""
+Deprecated alias for :class:`.RequestsHTTPTimeStamper`.
+
+.. deprecated:: 0.37.0
+
+    Deprecated in favour of :class:`.RequestsHTTPTimeStamper`
+    and :class:`~pyhanko.sign.timestamps.aiohttp_client.HTTPTimeStamper`.
+"""
