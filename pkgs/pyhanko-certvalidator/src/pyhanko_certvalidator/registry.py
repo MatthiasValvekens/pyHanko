@@ -3,6 +3,7 @@ import asyncio
 import warnings
 from collections import defaultdict
 from collections.abc import AsyncGenerator, Iterable, Iterator
+from importlib.util import find_spec
 
 from asn1crypto import x509
 
@@ -253,9 +254,29 @@ class TrustManager:
 
 
 def _system_trust_roots() -> list[x509.Certificate]:
-    # Deferred import: oscrypto initialises the platform's crypto backend at
-    # import time, and this is the only remaining place where we need it.
-    from oscrypto import trust_list
+    if find_spec('oscrypto') is None:
+        warnings.warn(
+            "Reading the operating system's trust list is deprecated "
+            "and requires oscrypto, which is not installed. "
+            "You can install the missing dependency "
+            "by running \"pip install 'pyhanko-certvalidator[system-trust]'\". "
+            "The validation context will be initialised with an empty "
+            "list of trust roots. "
+            "Relying on the operating system's trust list is deprecated "
+            "and will stop working in a future release; pass 'trust_roots' "
+            "explicitly.",
+            DeprecationWarning,
+        )
+        return []
+    else:
+        from oscrypto import trust_list
+
+        warnings.warn(
+            "Relying on the operating system's trust list is "
+            "deprecated and will stop working in a future release; "
+            "pass 'trust_roots' explicitly",
+            DeprecationWarning,
+        )
 
     # Note: the entries also carry the trust and reject OIDs recorded by the
     # platform, which pyhanko-certvalidator (and its predecessor certvalidator)
@@ -299,15 +320,16 @@ class SimpleTrustManager(TrustManager):
                 This parameter exists to supplement the operating system's
                 trust list, and will be removed in a future release.
                 Pass all trust roots through ``trust_roots`` instead.
+        :raises ImportError:
+            Raised if both ``trust_roots`` and ``extra_trust_roots`` are left
+            unspecified (or the latter alone) and ``oscrypto`` is not
+            installed, since reading the operating system's trust list
+            requires it. Install it via the
+            ``pyhanko-certvalidator[system-trust]`` extra.
         :return:
         """
         if trust_roots is None:
-            warnings.warn(
-                "Relying on the operating system's trust list is deprecated "
-                "and will stop working in a future release; pass 'trust_roots' "
-                "explicitly",
-                DeprecationWarning,
-            )
+            # noinspection PyDeprecation
             trust_roots = _system_trust_roots()
         else:
             trust_roots = list(trust_roots)
