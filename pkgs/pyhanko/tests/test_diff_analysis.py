@@ -73,6 +73,34 @@ from .test_pades import PADES
 
 
 @freeze_time('2020-11-01')
+def test_diff_analysis_offline():
+    """Fetch-free sanity check for diff analysis, exercised by the
+    backend-agnostic smoke run."""
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS,
+        ),
+        signer=FROM_CA,
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
+    info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
+    w.set_info(info)
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+    assert status.docmdp_ok
+
+
+@freeze_time('2020-11-01')
 def test_no_changes_policy():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(

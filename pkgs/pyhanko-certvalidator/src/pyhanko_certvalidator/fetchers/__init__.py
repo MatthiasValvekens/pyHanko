@@ -1,3 +1,5 @@
+from importlib.util import find_spec
+
 from .api import (
     CertificateFetcher,
     CRLFetcher,
@@ -24,9 +26,24 @@ def _default_fetcher_backend() -> FetcherBackend:
     Which backend that is, is internal policy; the resources it holds are the
     responsibility of whoever called this, which is why there is no public
     equivalent.
+
+    The preference order is ``aiohttp`` first, then ``requests``, falling
+    back to an :class:`ImportError` if neither is installed.
     """
 
-    # deferred so that aiohttp is not imported by code paths that never fetch
-    from .aiohttp_fetchers import AIOHttpFetcherBackend
+    # deferred so that no HTTP library is imported by code paths that never
+    # fetch
+    if find_spec('aiohttp') is not None:
+        from .aiohttp_fetchers import AIOHttpFetcherBackend
 
-    return AIOHttpFetcherBackend()
+        return AIOHttpFetcherBackend()
+    if find_spec('requests') is not None:
+        from .requests_fetchers import RequestsFetcherBackend
+
+        return RequestsFetcherBackend()
+    raise ImportError(
+        "Fetching revocation info and certificates over the network "
+        "requires an HTTP backend, but neither 'aiohttp' nor 'requests' is "
+        "installed. You can install the missing dependencies by running "
+        "\"pip install 'pyhanko-certvalidator[async-http]'\"."
+    )

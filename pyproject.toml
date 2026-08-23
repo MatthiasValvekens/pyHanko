@@ -65,7 +65,7 @@ docs = [
 ]
 docs-build = [
     { include-group = "docs" },
-    "pyhanko[opentype,qr,image-support,pkcs11,async-http,etsi]",
+    "pyhanko[opentype,qr,image-support,pkcs11,etsi]",
     "pyhanko-certvalidator",
     "pyhanko-cli",
 ]

@@ -9,13 +9,13 @@ description = "Internal package with common testing utils & test data"
 requires-python = ">=3.10"
 dependencies = [
     "certomancer[web-api-async]",
-    "requests-mock>=1.8.0",
     "pyhanko",
     "pyhanko_certvalidator",
 ]
 
 [project.optional-dependencies]
 csc = ["certomancer-csc-dummy==0.4.2"]
+requests = ["requests-mock>=1.8.0"]
 
 [tool.setuptools]
 include-package-data = true

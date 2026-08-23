@@ -658,12 +658,14 @@ dependencies = [
     { name = "certomancer", extra = ["web-api-async"] },
     { name = "pyhanko" },
     { name = "pyhanko-certvalidator" },
-    { name = "requests-mock" },
 ]
 
 [package.optional-dependencies]
 csc = [
     { name = "certomancer-csc-dummy" },
+]
+requests = [
+    { name = "requests-mock" },
 ]
 
 [package.metadata]
@@ -672,9 +674,9 @@ requires-dist = [
     { name = "certomancer-csc-dummy", marker = "extra == 'csc'", specifier = "==0.4.2" },
     { name = "pyhanko", editable = "pkgs/pyhanko" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
-    { name = "requests-mock", specifier = ">=1.8.0" },
+    { name = "requests-mock", marker = "extra == 'requests'", specifier = ">=1.8.0" },
 ]
-provides-extras = ["csc"]
+provides-extras = ["csc", "requests"]
 
 [[package]]
 name = "coverage"
@@ -1189,6 +1191,7 @@ dependencies = [
     { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -1205,6 +1208,7 @@ requires-dist = [
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 
 [[package]]
@@ -2274,7 +2278,7 @@ dependencies = [
     { name = "asn1crypto" },
     { name = "cryptography" },
     { name = "lxml" },
-    { name = "pyhanko-certvalidator" },
+    { name = "pyhanko-certvalidator", extra = ["async-http"] },
     { name = "tzlocal" },
 ]
 
@@ -2298,13 +2302,14 @@ qr = [
     { name = "qrcode" },
 ]
 requests = [
+    { name = "pyhanko-certvalidator", extra = ["requests"] },
     { name = "requests" },
 ]
 
 [package.dev-dependencies]
 testing = [
     { name = "certomancer", extra = ["web-api-async"] },
-    { name = "common-test-utils", extra = ["csc"] },
+    { name = "common-test-utils", extra = ["csc", "requests"] },
     { name = "freezegun" },
     { name = "pytest" },
     { name = "pytest-aiohttp" },
@@ -2333,7 +2338,8 @@ requires-dist = [
     { name = "fonttools", marker = "extra == 'opentype'", specifier = ">=4.33.3" },
     { name = "lxml", specifier = ">=5.4.0" },
     { name = "pillow", marker = "extra == 'image-support'", specifier = ">=7.2.0" },
-    { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
+    { name = "pyhanko-certvalidator", extras = ["async-http"], editable = "pkgs/pyhanko-certvalidator" },
+    { name = "pyhanko-certvalidator", extras = ["requests"], marker = "extra == 'requests'", editable = "pkgs/pyhanko-certvalidator" },
     { name = "python-barcode", marker = "extra == 'image-support'", specifier = "==0.16.1" },
     { name = "python-pkcs11", marker = "extra == 'pkcs11'", specifier = "~=0.9.3" },
     { name = "qrcode", marker = "extra == 'qr'", specifier = ">=7.3.1" },
@@ -2349,7 +2355,7 @@ provides-extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "r
 testing = [
     { name = "certomancer", extras = ["web-api-async"], specifier = ">=0.16.0" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
-    { name = "common-test-utils", extras = ["csc"], editable = "internal/common-test-utils" },
+    { name = "common-test-utils", extras = ["csc", "requests"], editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
@@ -2373,15 +2379,17 @@ name = "pyhanko-certvalidator"
 version = "0.0.0.dev1"
 source = { editable = "pkgs/pyhanko-certvalidator" }
 dependencies = [
-    { name = "aiohttp" },
     { name = "asn1crypto" },
-    { name = "certifi" },
     { name = "cryptography" },
     { name = "oscrypto" },
     { name = "uritools" },
 ]
 
 [package.optional-dependencies]
+async-http = [
+    { name = "aiohttp" },
+    { name = "certifi" },
+]
 requests = [
     { name = "requests" },
 ]
@@ -2393,15 +2401,22 @@ testing-base = [
     { name = "freezegun" },
     { name = "pytest" },
     { name = "pytest-aiohttp" },
+    { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "requests" },
+]
+testing-core = [
+    { name = "freezegun" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", specifier = ">=3.9,<3.15" },
+    { name = "aiohttp", marker = "extra == 'async-http'", specifier = ">=3.9,<3.15" },
     { name = "asn1crypto", specifier = ">=1.5.1" },
-    { name = "certifi", specifier = ">=2023.5.7" },
+    { name = "certifi", marker = "extra == 'async-http'", specifier = ">=2023.5.7" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "oscrypto", specifier = ">=1.1.0" },
     { name = "requests", marker = "extra == 'requests'", specifier = ">=2.31.0" },
@@ -2416,8 +2431,15 @@ testing-base = [
     { name = "freezegun", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
+    { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
     { name = "requests", specifier = ">=2.31.0" },
+]
+testing-core = [
+    { name = "freezegun", specifier = ">=1.1.0" },
+    { name = "pytest", specifier = ">=6.1.1" },
+    { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
+    { name = "pytest-cov", specifier = ">=4.0,<7.2" },
 ]
 
 [[package]]
@@ -2599,7 +2621,7 @@ docs = [
     { name = "sphinx-rtd-theme" },
 ]
 docs-build = [
-    { name = "pyhanko", extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "etsi"], editable = "pkgs/pyhanko" },
+    { name = "pyhanko", extras = ["opentype", "qr", "image-support", "pkcs11", "etsi"], editable = "pkgs/pyhanko" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
     { name = "pyhanko-cli", editable = "pkgs/pyhanko-cli" },
     { name = "sphinx" },
@@ -2609,7 +2631,7 @@ docs-doctest = [
     { name = "certomancer", extras = ["web-api", "web-api-async"], specifier = ">=0.15.1" },
     { name = "common-test-utils", editable = "internal/common-test-utils" },
     { name = "freezegun", specifier = ">=1.1.0" },
-    { name = "pyhanko", extras = ["opentype", "qr", "image-support", "pkcs11", "async-http", "etsi"], editable = "pkgs/pyhanko" },
+    { name = "pyhanko", extras = ["opentype", "qr", "image-support", "pkcs11", "etsi"], editable = "pkgs/pyhanko" },
     { name = "pyhanko-certvalidator", editable = "pkgs/pyhanko-certvalidator" },
     { name = "pyhanko-cli", editable = "pkgs/pyhanko-cli" },
     { name = "sphinx" },
