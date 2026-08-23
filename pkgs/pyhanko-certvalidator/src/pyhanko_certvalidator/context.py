@@ -160,6 +160,12 @@ class ValidationContext:
             a CRL or OCSP responder, an HTTP request will be made to obtain
             information for revocation checking.
 
+        :raises ImportError:
+            Raised if ``allow_fetching`` is ``True``, no explicit
+            ``fetcher_backend``/``fetchers`` is supplied, and neither
+            ``aiohttp`` nor ``requests`` is installed. Install one of them,
+            e.g. via the ``pyhanko-certvalidator[async-http]`` extra.
+
         :param revocation_mode:
             A unicode string of the revocation mode to use: "soft-fail" (the
             default), "hard-fail" or "require". In "soft-fail" mode, any sort of
@@ -590,6 +596,10 @@ def bootstrap_validation_data_handlers(
         that will be taken as true by fiat.
     :return:
         A :class:`.ValidationDataHandlers` object.
+    :raises ImportError:
+        Raised if ``fetchers`` is left at its default (:const:`USE_DEFAULT_FETCHERS`)
+        and neither ``aiohttp`` nor ``requests`` is installed. Install one of
+        them, e.g. via the ``pyhanko-certvalidator[async-http]`` extra.
     """
 
     _fetchers: Fetchers | None

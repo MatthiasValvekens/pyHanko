@@ -244,6 +244,12 @@ jobs:
         # we remove setup-python's problem matchers because
         # they aren't really an asset given the way pyHanko is tested
         run: echo "::remove-matcher owner=python::"
+      - name: Run pyhanko-certvalidator smoke tests with no HTTP backend
+        run: |
+          uv run --directory pkgs/pyhanko-certvalidator --no-dev --exact --group testing-core \
+            pytest $COVERAGE_SCOPE \
+            -m "not nosmoke" --cov-report=xml:python-smoke-test-certvalidator-coverage.xml \
+            tests
       - name: Run library smoke tests with minimal deps
         # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
         # the PKCS#11 parts
@@ -266,7 +272,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-smoke-tests
-          path: "pkgs/pyhanko/*-coverage.xml"
+          path: |
+            pkgs/pyhanko/*-coverage.xml
+            pkgs/pyhanko-certvalidator/*-coverage.xml
   doctest:
     runs-on: ubuntu-latest
     steps:

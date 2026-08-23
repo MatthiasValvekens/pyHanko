@@ -1,10 +1,9 @@
+from importlib.util import find_spec
+
 import pytest
 import pytest_asyncio
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
     AIOHttpFetcherBackend,
-)
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
 )
 
 pytest_plugins = [
@@ -19,7 +18,11 @@ def expect_deprecation():
         yield
 
 
-FETCHER_BACKENDS = ('requests', 'aiohttp')
+FETCHER_BACKENDS = (
+    ('requests', 'aiohttp')
+    if find_spec('requests') is not None
+    else ('aiohttp',)
+)
 
 
 @pytest.fixture(scope="module", params=FETCHER_BACKENDS)
@@ -31,11 +34,14 @@ def fetcher_backend_type(request) -> str:
 async def fetchers(fetcher_backend_type):
     """A set of fetchers to share between several validation contexts."""
 
-    backend = (
-        AIOHttpFetcherBackend()
-        if fetcher_backend_type == 'aiohttp'
-        else RequestsFetcherBackend()
-    )
+    if fetcher_backend_type == 'aiohttp':
+        backend = AIOHttpFetcherBackend()
+    else:
+        from pyhanko_certvalidator.fetchers.requests_fetchers import (
+            RequestsFetcherBackend,
+        )
+
+        backend = RequestsFetcherBackend()
     try:
         yield backend.get_fetchers()
     finally:

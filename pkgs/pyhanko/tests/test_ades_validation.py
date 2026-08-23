@@ -38,6 +38,8 @@ from pyhanko.sign.validation.policy_decl import (
     LocalKnowledge,
     PdfSignatureValidationSpec,
     QualificationRequirements,
+    RevinfoOnlineFetchingRule,
+    RevocationInfoGatheringSpec,
     SignatureValidationSpec,
     bootstrap_validation_data_handlers,
 )
@@ -1707,6 +1709,44 @@ async def test_content_ts_with_different_digest_not_supported(pki_services):
                 signature['content'],
                 validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
             )
+
+
+@pytest.mark.asyncio
+async def test_ades_basic_validation_offline():
+    """Fetch-free sanity check for the ``ades_basic_validation`` entry
+    point, exercised by the backend-agnostic smoke run."""
+
+    with freeze_time('2020-11-01'):
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+        out = await signers.async_sign_pdf(
+            w,
+            signers.PdfSignatureMetadata(field_name='Sig1', subfilter=PADES),
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
+        )
+
+    offline_spec = SignatureValidationSpec(
+        cert_validation_policy=CertValidationPolicySpec(
+            trust_manager=SimpleTrustManager.build(TRUST_ROOTS),
+            revinfo_policy=certv_policy_decl.CertRevTrustPolicy(
+                certv_policy_decl.RevocationCheckingPolicy.from_legacy(
+                    'soft-fail'
+                )
+            ),
+        ),
+        revinfo_gathering_policy=RevocationInfoGatheringSpec(
+            online_fetching_rule=RevinfoOnlineFetchingRule.LOCAL_ONLY
+        ),
+    )
+
+    with freeze_time('2020-11-05'):
+        r = PdfFileReader(out)
+        result = await ades.ades_basic_validation(
+            r.embedded_signatures[0].signed_data,
+            validation_spec=offline_spec,
+            raw_digest=r.embedded_signatures[0].compute_digest(),
+        )
+    assert result.ades_subindic == AdESPassed.OK
 
 
 def test_bootstrap_handlers_default_backend():
