@@ -58,7 +58,6 @@ options, including: validation at a specific moment in time, whitelisting and re
  - *asn1crypto*
  - *cryptography*
  - *uritools*
- - *oscrypto*
  - Python 3.10 or higher
 
 Fetching validation data and certificates over the network is an opt-in feature
