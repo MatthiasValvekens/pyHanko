@@ -2381,7 +2381,6 @@ source = { editable = "pkgs/pyhanko-certvalidator" }
 dependencies = [
     { name = "asn1crypto" },
     { name = "cryptography" },
-    { name = "oscrypto" },
     { name = "uritools" },
 ]
 
@@ -2393,12 +2392,16 @@ async-http = [
 requests = [
     { name = "requests" },
 ]
+system-trust = [
+    { name = "oscrypto" },
+]
 
 [package.dev-dependencies]
 testing-base = [
     { name = "aiohttp" },
     { name = "certifi" },
     { name = "freezegun" },
+    { name = "oscrypto" },
     { name = "pytest" },
     { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
@@ -2418,17 +2421,18 @@ requires-dist = [
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "certifi", marker = "extra == 'async-http'", specifier = ">=2023.5.7" },
     { name = "cryptography", specifier = ">=48.0.0" },
-    { name = "oscrypto", specifier = ">=1.1.0" },
+    { name = "oscrypto", marker = "extra == 'system-trust'", specifier = ">=1.1.0" },
     { name = "requests", marker = "extra == 'requests'", specifier = ">=2.31.0" },
     { name = "uritools", specifier = ">=3.0.1" },
 ]
-provides-extras = ["async-http", "requests"]
+provides-extras = ["async-http", "requests", "system-trust"]
 
 [package.metadata.requires-dev]
 testing-base = [
     { name = "aiohttp", specifier = ">=3.9,<3.15" },
     { name = "certifi", specifier = ">=2023.5.7" },
     { name = "freezegun", specifier = ">=1.1.0" },
+    { name = "oscrypto", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
