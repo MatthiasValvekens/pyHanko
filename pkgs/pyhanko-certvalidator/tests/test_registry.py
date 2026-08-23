@@ -39,13 +39,34 @@ def test_build_paths_custom_ca_certs():
     ]
 
 
-def test_system_trust_fallback_deprecated(monkeypatch):
+@pytest.mark.nosmoke
+def test_system_trust_fallback_deprecation_warning(monkeypatch):
+    from pyhanko_certvalidator.registry import _system_trust_roots
+
+    with pytest.warns(DeprecationWarning, match="operating system's trust"):
+        roots = _system_trust_roots()
+    assert len(roots) > 0
+
+
+def test_system_trust_fallback(monkeypatch):
     monkeypatch.setattr(
         'pyhanko_certvalidator.registry._system_trust_roots', list
     )
-    with pytest.warns(DeprecationWarning, match="operating system's trust"):
-        manager = SimpleTrustManager.build()
+    manager = SimpleTrustManager.build()
     assert not list(manager.iter_certs())
+
+
+def test_system_trust_roots_raises_informative_warning_without_oscrypto(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        'pyhanko_certvalidator.registry.find_spec', lambda name: None
+    )
+    from pyhanko_certvalidator.registry import _system_trust_roots
+
+    with pytest.warns(DeprecationWarning):
+        roots = _system_trust_roots()
+    assert len(roots) == 0
 
 
 def test_extra_trust_roots_deprecated():
