@@ -387,7 +387,7 @@ with some :ref:`fiat PoE <local-knowledge>` can be very useful as a sanity check
 
     AdESPassed.OK
 
-.. _local-knowlege:
+.. _local-knowledge:
 
 Supplying additional validation material
 -----------------------------------------
