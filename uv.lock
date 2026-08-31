@@ -2320,7 +2320,6 @@ testing-base = [
     { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "requests" },
 ]
 testing-pkcs11-setup = [
     { name = "certomancer", extra = ["pkcs11"] },
@@ -2366,7 +2365,6 @@ testing-base = [
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0,<2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
-    { name = "requests", specifier = ">=2.31.0" },
 ]
 testing-pkcs11-setup = [{ name = "certomancer", extras = ["pkcs11"], specifier = ">=0.16.0" }]
 
@@ -2380,13 +2378,12 @@ dependencies = [
     { name = "certifi" },
     { name = "cryptography" },
     { name = "oscrypto" },
-    { name = "requests" },
     { name = "uritools" },
 ]
 
 [package.optional-dependencies]
-async-http = [
-    { name = "aiohttp" },
+requests = [
+    { name = "requests" },
 ]
 
 [package.dev-dependencies]
@@ -2397,20 +2394,20 @@ testing-base = [
     { name = "pytest" },
     { name = "pytest-aiohttp" },
     { name = "pytest-cov" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9,<3.15" },
-    { name = "aiohttp", marker = "extra == 'async-http'", specifier = ">=3.9,<3.15" },
     { name = "asn1crypto", specifier = ">=1.5.1" },
     { name = "certifi", specifier = ">=2023.5.7" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "oscrypto", specifier = ">=1.1.0" },
-    { name = "requests", specifier = ">=2.31.0" },
+    { name = "requests", marker = "extra == 'requests'", specifier = ">=2.31.0" },
     { name = "uritools", specifier = ">=3.0.1" },
 ]
-provides-extras = ["async-http"]
+provides-extras = ["async-http", "requests"]
 
 [package.metadata.requires-dev]
 testing-base = [
@@ -2420,6 +2417,7 @@ testing-base = [
     { name = "pytest", specifier = ">=6.1.1" },
     { name = "pytest-aiohttp", specifier = ">=1.0.4,<1.2.0" },
     { name = "pytest-cov", specifier = ">=4.0,<7.2" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 
 [[package]]

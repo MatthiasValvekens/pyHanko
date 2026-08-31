@@ -85,11 +85,11 @@ testing-base = [
     "pytest-cov>=4.0,<7.2",
     "pytest-asyncio>=1.1.0,<2.0",
     "pytest-aiohttp>=1.0.4,<1.2.0",
-    "requests>=2.31.0",
 ]
 testing = [
     { include-group = "testing-base" },
     "common-test-utils[csc]",
+    "requests>=2.31.0",
 ]
 testing-pkcs11-setup = [
     "certomancer[pkcs11]>=0.16.0",
