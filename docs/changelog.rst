@@ -6,6 +6,71 @@ Release history
 pyHanko
 -------
 
+
+.. _release-0.37.0:
+
+0.37.0
+======
+
+*Release date:* 2026-09-01
+
+Breaking changes
+----------------
+
+ * ``requests`` was relegated to the optional dependency group ``[requests]``
+   due to the change in default fetching backends (see below).
+ * Deprecate fallback to OS trust list through ``oscrypto``.
+ * Remove long-standing deprecated APIs
+
+     * ``Signer.sign``, ``Signer.sign_prescribed_attributes``, ``Signer.sign_general_data``
+     * ``validate_cms_signature``, ``validate_detached_cms``
+     * ``PdfSigner.digest_doc_for_signing``
+     * ``open_pkcs11_session(token_label=...)``
+     * ``find_cms_attribute``
+
+ * The ``HTTPTimeStamper`` reshuffle (see below) should not be a breaking change
+   for most users, but code that relies on subclassing these objects will likely
+   need some attention.
+
+
+Dependency changes
+------------------
+
+ * ``aiohttp`` was moved to the default dependency list.
+   ``requests`` was relegated to the optional dependencies (see below).
+   The ``[async-http]`` optional dependency group was kept around
+   to avoid breaking dependency resolution downstream, but is now empty.
+
+
+New features and enhancements
+-----------------------------
+
+Validation
+^^^^^^^^^^
+
+ * Let :class:`~pyhanko.sign.validation.qualified.eutl_fetch.FileSystemTLCache`
+   accept a ``str`` path.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Make ``aiohttp`` the default backend for fetching validation data
+   and timestamp tokens
+
+     * ``HTTPTimeStamper`` absorbs ``AIOHttpTimeStamper``, which becomes a deprecated
+      subclass.
+     * Requests-based version renamed to ``RequestsHTTPTimeStamper``.
+
+ * Make ``aiohttp`` resource management more hands-off.
+
+
+Bugs fixed
+----------
+
+ * Resolve ``/Parent`` and mark ancestors when inserting a page.
+ * Specify ``encoding="utf-8"`` on all text file reads.
+
+
 .. _release-0.36.2:
 
 0.36.2
@@ -2698,6 +2763,24 @@ Initial release.
 pyhanko-certvalidator
 ---------------------
 
+.. _certvalidator-release-0.32.0:
+
+0.32.0
+======
+
+*Release date:* 2026-09-01
+
+
+ * Make ``aiohttp`` the default backend for fetching.
+   ``aiohttp`` was accordingly moved to the default dependency list.
+   ``requests`` was relegated to the optional dependencies.
+ * Fix overflow on extreme not-before/not-after.
+ * Deprecate fallback to OS trust list through ``oscrypto``.
+ * Implement the :rfc:`9618` policy graph algorithm.
+ * Make ``aiohttp`` resource management more hands-off.
+ * Remove ``DEFAULT_FETCHER_BACKEND``.
+ * Specify ``encoding="utf-8"`` on all text file reads.
+
 
 .. _certvalidator-release-0.31.4:
 
@@ -3433,6 +3516,19 @@ The impact on the high-level API should be small to nonexistent, but caution whe
 -----------
 pyhanko-cli
 -----------
+
+.. _cli-release-0.5.0:
+
+0.5.0
+=====
+
+*Release date:* 2026-09-01
+
+
+ * Deprecate fallback to OS trust list through ``oscrypto``.
+ * Fix ``--trust-replace`` being ignored when trust is configured in config.
+ * Leaving ``eutl-territories`` empty is an error now, since there is no
+   reasonable fallback option anymore.
 
 
 .. _cli-release-0.4.2:
