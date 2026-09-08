@@ -844,7 +844,11 @@ async def async_validate_pdf_signature(
     subfilter_str = sig_object.get('/SubFilter', None)
     _validate_subfilter(
         subfilter_str,
-        (SigSeedSubFilter.ADOBE_PKCS7_DETACHED, SigSeedSubFilter.PADES),
+        (
+            SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
+            SigSeedSubFilter.PADES,
+            SigSeedSubFilter.PBAD_PADES,
+        ),
         "%s is not a recognized SubFilter type in signatures.",
     )
 

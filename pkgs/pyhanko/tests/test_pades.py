@@ -2142,3 +2142,22 @@ async def test_interrupted_nonstrict_with_psi():
 
     r = PdfFileReader(output, strict=False)
     await async_val_trusted(r.embedded_signatures[0], extd=True)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_brazilian_pades():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    w.ensure_output_version(version=(2, 0))
+    out = await signers.async_sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=fields.SigSeedSubFilter.PBAD_PADES
+        ),
+        signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    assert sig_obj.get_object()['/SubFilter'] == '/PBAD.PAdES'
+    await async_val_trusted(r.embedded_signatures[0])

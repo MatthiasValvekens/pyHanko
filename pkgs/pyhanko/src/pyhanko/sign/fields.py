@@ -679,6 +679,7 @@ class SigSeedSubFilter(Enum):
     ADOBE_PKCS7_DETACHED = pdf_name("/adbe.pkcs7.detached")
     PADES = pdf_name("/ETSI.CAdES.detached")
     ETSI_RFC3161 = pdf_name("/ETSI.RFC3161")
+    PBAD_PADES = pdf_name("/PBAD.PAdES")
 
 
 @unique

@@ -1648,7 +1648,10 @@ class PdfSigningSession:
         self.md_algorithm = md_algorithm
         self.timestamper = timestamper
         self.subfilter = subfilter
-        self.use_pades = subfilter == SigSeedSubFilter.PADES
+        self.use_pades = subfilter in (
+            SigSeedSubFilter.PADES,
+            SigSeedSubFilter.PBAD_PADES,
+        )
         self.system_time = system_time or datetime.now(
             tz=tzlocal.get_localzone()
         )
