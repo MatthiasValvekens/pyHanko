@@ -2763,6 +2763,17 @@ Initial release.
 pyhanko-certvalidator
 ---------------------
 
+.. _certvalidator-release-0.32.1:
+
+0.32.1
+======
+
+*Release date:* 2026-09-10
+
+
+ * Fix host name normalisation in name constraints.
+
+
 .. _certvalidator-release-0.32.0:
 
 0.32.0
