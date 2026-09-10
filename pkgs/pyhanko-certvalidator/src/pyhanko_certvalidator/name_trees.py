@@ -14,7 +14,27 @@ class NameConstraintError(ValueError):
     pass
 
 
+# RFC 4343 § 3
+_ASCII_CASE_FOLD = str.maketrans(
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'
+)
+
+
+def _normalise_host(host: str) -> str:
+    # strip trailing . for notation including the root zone,
+    # apply RFC 4343 case folding rule
+    if len(host) > 1 and host[-1] == '.':
+        host = host[:-1]
+    return host.translate(_ASCII_CASE_FOLD)
+
+
 def host_tree_contains(base_host: str, other_host: str) -> bool:
+    base_host = _normalise_host(base_host)
+    other_host = _normalise_host(other_host)
+    if not base_host:
+        raise NameConstraintError(
+            "A constraint with an empty host name is undefined."
+        )
     # if the constraint starts with '.', it specifies a domain, and must be
     # expanded with one or more labels, otherwise it refers to a single host.
     if base_host[0] == '.':
@@ -50,8 +70,8 @@ def uri_tree_contains(base: str, other: str) -> bool:
 def dns_tree_contains(base: str, other: str):
     # check if 'other' consists of adding zero or more labels to 'base'
     #  (from the left)
-    base_labels = base.split('.')
-    other_labels = other.split('.')
+    base_labels = _normalise_host(base).split('.')
+    other_labels = _normalise_host(other).split('.')
     if len(other_labels) < len(base_labels):
         return False
     return len(other_labels) >= len(base_labels) and all(
@@ -63,11 +83,13 @@ def email_tree_contains(base: str, other: str):
     # use rpartition instead of rsplit to deal with the case where there's no @
     # uniformly
     base_mailbox, _, base_host_or_domain = base.rpartition('@')
-    _other_mailbox, _, other_host_or_domain = other.rpartition('@')
+    other_mailbox, _, other_host_or_domain = other.rpartition('@')
 
     if base_mailbox:
-        # only exact match
-        return base == other
+        # only exact match (modulo case folding/normalisation rules)
+        base_norm = _normalise_host(base_host_or_domain)
+        other_norm = _normalise_host(other_host_or_domain)
+        return base_mailbox == other_mailbox and base_norm == other_norm
     else:
         return host_tree_contains(base_host_or_domain, other_host_or_domain)
 

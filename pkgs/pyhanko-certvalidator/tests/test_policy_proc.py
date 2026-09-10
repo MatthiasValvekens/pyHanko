@@ -11,6 +11,9 @@ from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.errors import PathValidationError
 from pyhanko_certvalidator.name_trees import (
     GeneralNameType,
+    NameSubtree,
+    PKIXSubtrees,
+    default_excluded_subtrees,
     x509_names_to_subtrees,
 )
 from pyhanko_certvalidator.path import ValidationPath
@@ -214,3 +217,126 @@ def test_trust_anchor_authority_consistency():
     )
 
     assert anchor.authority == without_cert
+
+
+def _excluded_subtree(name_type: GeneralNameType, base: str) -> PKIXSubtrees:
+    # start from the defaults so that every name type has an entry; the
+    # validator looks up each type it encounters in the path
+    trees = default_excluded_subtrees()
+    trees[name_type] = {NameSubtree.from_name(name_type, base)}
+    return trees
+
+
+async def _nist_ee_path(ca_cert: str, ee_cert: str):
+    context = ValidationContext(
+        trust_roots=[load_nist_cert('TrustAnchorRootCertificate.crt')],
+        other_certs=[load_nist_cert(ca_cert)],
+        revocation_mode='soft-fail',
+    )
+    (path,) = await context.path_builder.async_build_paths(
+        load_nist_cert(ee_cert)
+    )
+    assert path.pkix_len == 2
+    return context, path
+
+
+# Testing certificate from PKITS test suite
+#  DNS -> testserver.testcertificates.gov
+#  RFC822 -> Test21EE@mailserver.testcertificates.gov
+#  URI -> http://testserver.testcertificates.gov/index.html
+NC_DNS = (
+    'nameConstraintsDNS1CACert.crt',
+    'ValidDNSnameConstraintsTest30EE.crt',
+)
+NC_EMAIL = (
+    'nameConstraintsRFC822CA1Cert.crt',
+    'ValidRFC822nameConstraintsTest21EE.crt',
+)
+NC_URI = (
+    'nameConstraintsURI1CACert.crt',
+    'ValidURInameConstraintsTest34EE.crt',
+)
+
+
+@freeze_time('2022-05-01')
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'certs,name_type,base',
+    [
+        (NC_DNS, GeneralNameType.DNS_NAME, 'TESTSERVER.TESTCERTIFICATES.GOV'),
+        (NC_DNS, GeneralNameType.DNS_NAME, 'TestCertificates.GOV'),
+        (NC_DNS, GeneralNameType.DNS_NAME, 'testserver.testcertificates.gov.'),
+        (NC_DNS, GeneralNameType.DNS_NAME, 'TESTCERTIFICATES.GOV.'),
+        (
+            NC_EMAIL,
+            GeneralNameType.RFC822_NAME,
+            'Test21EE@MAILSERVER.TESTCERTIFICATES.GOV',
+        ),
+        (
+            NC_EMAIL,
+            GeneralNameType.RFC822_NAME,
+            'Test21EE@mailserver.testcertificates.gov.',
+        ),
+        (NC_EMAIL, GeneralNameType.RFC822_NAME, '.TESTCERTIFICATES.GOV'),
+        (
+            NC_EMAIL,
+            GeneralNameType.RFC822_NAME,
+            'MAILSERVER.TESTCERTIFICATES.GOV',
+        ),
+        (
+            NC_URI,
+            GeneralNameType.UNIFORM_RESOURCE_IDENTIFIER,
+            'TESTSERVER.TESTCERTIFICATES.GOV',
+        ),
+        (
+            NC_URI,
+            GeneralNameType.UNIFORM_RESOURCE_IDENTIFIER,
+            '.TESTCERTIFICATES.GOV',
+        ),
+        (
+            NC_URI,
+            GeneralNameType.UNIFORM_RESOURCE_IDENTIFIER,
+            'testserver.testcertificates.gov.',
+        ),
+    ],
+)
+async def test_excluded_subtree_catches_differently_cased_name(
+    certs, name_type, base
+):
+    context, path = await _nist_ee_path(*certs)
+    # sanity check: the path is fine without the extra constraint
+    await async_validate_path(context, path)
+
+    params = PKIXValidationParams(
+        initial_excluded_subtrees=_excluded_subtree(name_type, base)
+    )
+    with pytest.raises(PathValidationError, match='some names.*excluded'):
+        await async_validate_path(context, path, parameters=params)
+
+
+@freeze_time('2022-05-01')
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'certs,name_type,base',
+    [
+        (NC_DNS, GeneralNameType.DNS_NAME, 'OTHER.TESTCERTIFICATES.GOV'),
+        (NC_DNS, GeneralNameType.DNS_NAME, 'ESTCERTIFICATES.GOV'),
+        # RFC 5280 s 7.5: the local part stays case-sensitive
+        (
+            NC_EMAIL,
+            GeneralNameType.RFC822_NAME,
+            'test21ee@mailserver.testcertificates.gov',
+        ),
+        (
+            NC_URI,
+            GeneralNameType.UNIFORM_RESOURCE_IDENTIFIER,
+            'OTHER.TESTCERTIFICATES.GOV',
+        ),
+    ],
+)
+async def test_excluded_subtree_does_not_overmatch(certs, name_type, base):
+    context, path = await _nist_ee_path(*certs)
+    params = PKIXValidationParams(
+        initial_excluded_subtrees=_excluded_subtree(name_type, base)
+    )
+    await async_validate_path(context, path, parameters=params)
