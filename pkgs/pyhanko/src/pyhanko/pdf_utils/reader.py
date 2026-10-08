@@ -1095,7 +1095,6 @@ class HistoricalResolver(PdfHandler):
             cur_path: misc.ConsList[str | int],
             seen_in_path: misc.ConsList[generic.Reference],
             *,
-            is_page_tree,
             page_tree_objs,
             is_struct_tree,
             struct_tree_objs,
@@ -1119,7 +1118,15 @@ class HistoricalResolver(PdfHandler):
                 collected[obj_ref].add(cur_path)
                 seen_in_path = seen_in_path.cons(obj_ref)
                 obj = self(obj_ref)
-                if not is_page_tree and obj_ref in page_tree_objs:
+                # Only enter a page tree node via its canonical path through
+                # the tree. Following any other reference into it (e.g. link
+                # destinations pointing to other pages, or a /Kids array that
+                # is not part of the page tree) blows up the number of paths
+                # combinatorially in documents with many cross-page links.
+                # Checking the path structurally is not enough, since
+                # anything can contain a /Kids entry.
+                canonical_path = page_tree_objs.get(obj_ref, cur_path)
+                if cur_path != canonical_path:
                     return
                 if not is_struct_tree and obj_ref in struct_tree_objs:
                     return
@@ -1134,12 +1141,6 @@ class HistoricalResolver(PdfHandler):
                         v,
                         cur_path.cons(k),
                         seen_in_path,
-                        is_page_tree=is_page_tree
-                        or (
-                            cur_path.head == '/Root'
-                            and k == '/Pages'
-                            and cur_path.tail == misc.ConsList.empty()
-                        ),
                         page_tree_objs=page_tree_objs,
                         # for the struct tree: we definitely want to
                         # consider the /ParentTree as an "external" feature
@@ -1162,20 +1163,20 @@ class HistoricalResolver(PdfHandler):
                         v,
                         cur_path.cons(ix),
                         seen_in_path,
-                        is_page_tree=is_page_tree,
                         page_tree_objs=page_tree_objs,
                         is_struct_tree=is_struct_tree,
                         struct_tree_objs=struct_tree_objs,
                     )
 
-        def _collect_page_tree_refs(pages_obj):
-            for kid in pages_obj['/Kids']:
+        def _collect_page_tree_refs(pages_obj, path):
+            for ix, kid in enumerate(pages_obj['/Kids']):
+                kid_path = path.cons('/Kids').cons(ix)
                 # should always be true, but hey
                 if isinstance(kid, generic.IndirectObject):
-                    yield kid.reference
+                    yield kid.reference, kid_path
                 kid = kid.get_object()
                 if kid.get('/Type', None) == '/Pages':
-                    yield from _collect_page_tree_refs(kid)
+                    yield from _collect_page_tree_refs(kid, kid_path)
 
         def _collect_struct_tree_refs(struct_elem):
             try:
@@ -1211,13 +1212,18 @@ class HistoricalResolver(PdfHandler):
                 yield from _collect_struct_tree_refs(child)
 
         pages_ref = self.root.raw_get('/Pages')
-        page_tree_nodes = set()
-        for ref in _collect_page_tree_refs(pages_obj=pages_ref.get_object()):
+        pages_path = misc.ConsList.sing('/Root').cons('/Pages')
+        page_tree_nodes = {}
+        if isinstance(pages_ref, generic.IndirectObject):
+            page_tree_nodes[pages_ref.reference] = pages_path
+        for ref, path in _collect_page_tree_refs(
+            pages_ref.get_object(), pages_path
+        ):
             if ref in page_tree_nodes:
                 raise misc.PdfReadError(
                     "Circular reference in page tree in mapping stage"
                 )
-            page_tree_nodes.add(ref)
+            page_tree_nodes[ref] = path
         struct_tree_nodes = set()
         try:
             struct_tree_root_ref = self.root.raw_get('/StructTreeRoot')
@@ -1234,7 +1240,6 @@ class HistoricalResolver(PdfHandler):
             self.trailer_view,
             misc.ConsList.empty(),
             misc.ConsList.empty(),
-            is_page_tree=False,
             page_tree_objs=page_tree_nodes,
             is_struct_tree=False,
             struct_tree_objs=struct_tree_nodes,

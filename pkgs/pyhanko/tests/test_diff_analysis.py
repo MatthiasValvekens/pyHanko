@@ -17,7 +17,7 @@ from pyhanko.pdf_utils.reader import (
     PdfFileReader,
     RawPdfPath,
 )
-from pyhanko.pdf_utils.writer import copy_into_new_writer
+from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.pdf_utils.xref import ObjectStream
 from pyhanko.sign import PdfTimeStamper, fields, signers
 from pyhanko.sign.diff_analysis import (
@@ -55,6 +55,7 @@ from pyhanko_testing_commons.test_data.samples import (
     TEXTFIELD_GROUP,
     TEXTFIELD_GROUP_VAR,
     read_all,
+    simple_page,
 )
 from pyhanko_testing_commons.test_utils.signing_commons import (
     DUMMY_TS,
@@ -70,6 +71,124 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
 )
 
 from .test_pades import PADES
+
+
+def _cross_linked_pages(n_pages: int) -> bytes:
+    # every page carries a link to every other page
+    w = PdfFileWriter()
+    pages = [w.insert_page(simple_page(w, f'Page {i}')) for i in range(n_pages)]
+    for src in pages:
+        for dest in pages:
+            if dest == src:
+                continue
+            link = generic.DictionaryObject(
+                {
+                    pdf_name('/Type'): pdf_name('/Annot'),
+                    pdf_name('/Subtype'): pdf_name('/Link'),
+                    pdf_name('/Rect'): generic.ArrayObject(
+                        map(generic.NumberObject, (0, 0, 10, 10))
+                    ),
+                    pdf_name('/A'): generic.DictionaryObject(
+                        {
+                            pdf_name('/S'): pdf_name('/GoTo'),
+                            pdf_name('/D'): generic.ArrayObject(
+                                [dest, pdf_name('/Fit')]
+                            ),
+                        }
+                    ),
+                }
+            )
+            w.register_annotation(src, w.add_object(link))
+    out = BytesIO()
+    w.write(out)
+    return out.getvalue()
+
+
+@freeze_time('2020-11-01')
+def test_cross_linked_pages_do_not_blow_up_paths():
+    w = IncrementalPdfFileWriter(BytesIO(_cross_linked_pages(8)))
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            certify=True,
+            docmdp_permissions=fields.MDPPerm.NO_CHANGES,
+        ),
+        signer=FROM_CA,
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
+    w.set_info(generic.DictionaryObject({pdf_name('/CreationDate'): dt}))
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    # Following link destinations back into the page tree used to produce
+    # hundreds of thousands of paths here (and never finished on real
+    # documents with more pages).
+    resolver = r.get_historical_resolver(r.xrefs.total_revisions - 1)
+    resolver._load_reverse_xref_cache()
+    cache = resolver._indirect_object_access_cache
+    assert cache is not None
+    assert sum(len(paths) for paths in cache.values()) < 1000
+
+    status = val_trusted(r.embedded_signatures[0], extd=True)
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+    assert status.docmdp_ok
+
+
+def _build_and_map_paths(n_pages: int, tweak):
+    w = PdfFileWriter()
+    pages = [w.insert_page(simple_page(w, f'Page {i}')) for i in range(n_pages)]
+    tweak(w, pages)
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    resolver = r.get_historical_resolver(r.xrefs.total_revisions - 1)
+    resolver._load_reverse_xref_cache()
+    cache = resolver._indirect_object_access_cache
+    assert cache is not None
+    first_page_contents = r.root['/Pages']['/Kids'][0].raw_get('/Contents')
+    return cache, cache[first_page_contents.reference]
+
+
+def test_page_tree_not_reentered_via_foreign_kids():
+    def tweak(w, pages):
+        # /Kids arrays outside the page tree must not count as tree edges
+        for p in pages:
+            p.get_object()['/Foo'] = generic.DictionaryObject(
+                {
+                    pdf_name('/Kids'): generic.ArrayObject(
+                        q for q in pages if q != p
+                    )
+                }
+            )
+
+    cache, contents_paths = _build_and_map_paths(7, tweak)
+    assert contents_paths == {
+        RawPdfPath('/Root', '/Pages', '/Kids', 0, '/Contents')
+    }
+    assert sum(len(paths) for paths in cache.values()) < 1000
+
+
+def test_page_tree_root_not_reentered_from_outside():
+    def tweak(w, pages):
+        w.root['/Foo'] = w.root.raw_get('/Pages')
+
+    _, contents_paths = _build_and_map_paths(4, tweak)
+    assert contents_paths == {
+        RawPdfPath('/Root', '/Pages', '/Kids', 0, '/Contents')
+    }
+
+
+def test_page_tree_direct_root_node():
+    def tweak(w, pages):
+        w.root['/Pages'] = w.root['/Pages']
+
+    _, contents_paths = _build_and_map_paths(4, tweak)
+    assert contents_paths == {
+        RawPdfPath('/Root', '/Pages', '/Kids', 0, '/Contents')
+    }
 
 
 @freeze_time('2020-11-01')
