@@ -28,6 +28,7 @@ from .crypt import (
     StandardSecurityHandler,
 )
 from .crypt.api import PdfMacStatus
+from .decode_limits import DecodeContext, DecodeLimits, DecodePurpose
 from .metadata.info import view_from_info_dict
 from .metadata.model import DocumentMetadata
 from .misc import PdfReadError, PdfStrictReadError
@@ -178,7 +179,12 @@ class PdfFileReader(PdfHandler):
     has_xref_stream = False
     xrefs: XRefCache
 
-    def __init__(self, stream, strict: bool = True):
+    def __init__(
+        self,
+        stream,
+        strict: bool = True,
+        decode_limits: DecodeLimits | None = None,
+    ):
         """
         Initializes a PdfFileReader object.  This operation can take some time,
         as the PDF stream's cross-reference tables are read into memory.
@@ -188,9 +194,20 @@ class PdfFileReader(PdfHandler):
         :param bool strict: Determines whether user should be warned of all
             problems and also causes some correctable problems to be fatal.
             Defaults to ``True``.
+        :param decode_limits:
+            Limits to apply when decoding streams in this document.
+            If not specified, the defaults in :class:`.DecodeLimits` apply,
+            which are intended for documents from untrusted sources.
+            Pass :meth:`.DecodeLimits.for_trusted_input` to disable all limits.
+
+            .. versionadded:: 0.38.0
         """
         self._security_handler: SecurityHandler | None = None
         self.strict = strict
+        stream.seek(0, os.SEEK_END)
+        self._decode_context = DecodeContext(
+            decode_limits or DecodeLimits(), input_size=stream.tell()
+        )
         self.resolved_objects: dict[tuple[int, int], generic.PdfObject] = {}
         self._header_version = None
         self._input_version = None
@@ -205,6 +222,10 @@ class PdfFileReader(PdfHandler):
         self.has_xref_stream = xref_builder.has_xref_stream
 
         self._embedded_signatures = None
+
+    @property
+    def decode_context(self) -> DecodeContext:
+        return self._decode_context
 
     @property
     def security_handler(self):
@@ -267,7 +288,7 @@ class PdfFileReader(PdfHandler):
                 raise PdfStrictReadError("Object stream does not contain index")
             else:
                 return generic.NullObject()
-        stream_data = BytesIO(stream.data)
+        stream_data = BytesIO(stream.read_data(DecodePurpose.OBJECT_STREAM))
         first_object = stream['/First']
         for i in range(stream['/N']):
             try:
@@ -871,10 +892,18 @@ class HistoricalResolver(PdfHandler):
         id_arr = self._trailer['/ID']
         return id_arr[0].original_bytes, id_arr[1].original_bytes
 
+    @property
+    def decode_context(self) -> DecodeContext:
+        return self._decode_context
+
     def __init__(self, reader: PdfFileReader, revision):
         self.cache: dict[generic.Reference, generic.PdfObject] = {}
         self.reader = reader
         self.revision = revision
+        # A historical revision re-decodes streams that the current revision
+        # may already have decoded, so charging those to the reader's budget
+        # would make validating multi-revision documents fail spuriously.
+        self._decode_context = reader.decode_context.fresh()
         self._trailer = self.reader.trailer.flatten(self.revision)
         self._trailer.container_ref = generic.TrailerReference(self)
         self._indirect_object_access_cache: (

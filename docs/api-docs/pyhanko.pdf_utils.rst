@@ -31,6 +31,14 @@ pyhanko.pdf\_utils.content module
    :undoc-members:
    :show-inheritance:
 
+pyhanko.pdf\_utils.decode\_limits module
+---------------------------------------
+
+.. automodule:: pyhanko.pdf_utils.decode_limits
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 pyhanko.pdf\_utils.embed module
 -------------------------------
 

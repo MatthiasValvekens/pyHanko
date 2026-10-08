@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 
 from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.decode_limits import DecodePurpose
 from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 
 from ..commons import safe_whitelist
@@ -94,7 +95,10 @@ class MetadataUpdateRule(WhitelistRule):
             from lxml import etree
 
             parser = etree.XMLParser(resolve_entities=False, encoding='utf-8')
-            root = etree.fromstring(metadata_stream.data, parser=parser)
+            root = etree.fromstring(
+                metadata_stream.read_data(DecodePurpose.XMP_METADATA),
+                parser=parser,
+            )
         except Exception as e:  # noqa: BLE001
             raise SuspiciousModification(
                 "/Metadata XML syntax could not be validated", e

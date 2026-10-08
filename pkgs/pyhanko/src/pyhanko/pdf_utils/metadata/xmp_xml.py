@@ -9,6 +9,7 @@ from typing import (
 import tzlocal
 from lxml import etree
 from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.decode_limits import DecodePurpose
 
 from ..crypt.api import SecurityHandler
 from ..misc import get_and_apply, isoparse
@@ -169,7 +170,9 @@ class MetadataStream(generic.StreamObject):
     @property
     def xmp(self) -> list[model.XmpStructure]:
         if self._xmp is None:
-            self._xmp = parse_xmp(BytesIO(self.data))
+            self._xmp = parse_xmp(
+                BytesIO(self.read_data(DecodePurpose.XMP_METADATA))
+            )
         return self._xmp
 
     def update_xmp_with_meta(self, meta: model.DocumentMetadata):

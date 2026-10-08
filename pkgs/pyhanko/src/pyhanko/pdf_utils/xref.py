@@ -16,6 +16,7 @@ from itertools import chain
 from typing import ClassVar
 
 from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.decode_limits import DecodePurpose
 from pyhanko.pdf_utils.generic import EncryptedObjAccess, pdf_name
 from pyhanko.pdf_utils.misc import PdfReadError, PdfStrictReadError, peek
 from pyhanko.pdf_utils.rw_common import PdfHandler
@@ -208,6 +209,16 @@ def parse_xref_table(stream, strict: bool) -> Iterator[XRefEntry]:
             stream.seek(-7, os.SEEK_CUR)
 
 
+def _expected_xref_stream_size(idx_pairs, entry_sizes) -> int | None:
+    try:
+        entry_count = sum(size for _, size in misc.pair_iter(idx_pairs))
+        # allow for a PNG predictor tag byte on every row
+        return entry_count * (sum(entry_sizes) + 1)
+    except (TypeError, ValueError):
+        # leave it to the parser to complain
+        return None
+
+
 def parse_xref_stream(
     xref_stream: generic.StreamObject, strict: bool = True
 ) -> Iterator[XRefEntry]:
@@ -224,11 +235,16 @@ def parse_xref_stream(
         A generator object yielding :class:`.XRefEntry` objects.
     """
 
-    stream_data = BytesIO(xref_stream.data)
     # Index pairs specify the subsections in the dictionary. If
     # none create one subsection that spans everything.
     idx_pairs = xref_stream.get("/Index", [0, xref_stream.get("/Size")])
     entry_sizes = xref_stream.get("/W")
+    stream_data = BytesIO(
+        xref_stream.read_data(
+            DecodePurpose.XREF_STREAM,
+            expected_size=_expected_xref_stream_size(idx_pairs, entry_sizes),
+        )
+    )
 
     def get_entry(ix):
         # Reads the correct number of bytes for each entry. See the

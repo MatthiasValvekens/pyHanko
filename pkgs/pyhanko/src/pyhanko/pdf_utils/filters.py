@@ -15,6 +15,7 @@ import zlib
 from io import BytesIO
 
 from .crypt.api import SecurityHandler
+from .decode_limits import check_output_size
 from .misc import PdfStreamError, Singleton
 
 __all__ = [
@@ -47,6 +48,34 @@ class Decoder:
             Decoded data.
         """
         raise NotImplementedError
+
+    def decode_bounded(
+        self, data: bytes, decode_params: dict, max_output_size: int | None
+    ) -> bytes:
+        """
+        Decode a stream, refusing to produce more than a given number of bytes.
+
+        The default implementation decodes the entire stream and checks the
+        size afterwards. Decoders that can expand their input by a large
+        factor should override this method to stop early.
+
+        This is internal API.
+
+        :param data:
+            Data to decode.
+        :param decode_params:
+            Decoder parameters, sourced from the ``/DecoderParams`` entry
+            associated with this filter.
+        :param max_output_size:
+            Maximal number of bytes to produce, or ``None`` if unbounded.
+        :return:
+            Decoded data.
+        :raises PdfDecodeLimitError:
+            If the decoded data would exceed ``max_output_size`` bytes.
+        """
+        result = self.decode(data, decode_params)
+        check_output_size(len(result), max_output_size)
+        return result
 
     def encode(self, data: bytes, decode_params: dict) -> bytes:
         """
@@ -93,6 +122,22 @@ def _png_decode(data: memoryview, columns):
     return output.getvalue()
 
 
+def _bounded_decompress(data: bytes, max_output_size: int | None) -> bytes:
+    if max_output_size is None:
+        return decompress(data)
+    decompressor = zlib.decompressobj()
+    # Ask for one byte more than allowed, so we can tell
+    # "exactly at the limit" apart from "over the limit".
+    result = decompressor.decompress(data, max_output_size + 1)
+    check_output_size(len(result), max_output_size)
+    if not decompressor.eof:
+        # zlib.decompress() fails on truncated input; keep that behaviour
+        raise zlib.error(
+            "Error -5 while decompressing data: incomplete or truncated stream"
+        )
+    return result
+
+
 class FlateDecode(Decoder, metaclass=Singleton):
     """
     Implementation of the ``/FlateDecode`` filter.
@@ -103,8 +148,12 @@ class FlateDecode(Decoder, metaclass=Singleton):
     """
 
     def decode(self, data: bytes, decode_params):
-        # there's lots of slicing ahead, so let's reduce copying overhead
-        data_view = memoryview(decompress(data))
+        return self.decode_bounded(data, decode_params, max_output_size=None)
+
+    def decode_bounded(
+        self, data: bytes, decode_params, max_output_size: int | None
+    ):
+        decompressed = _bounded_decompress(data, max_output_size)
         predictor = 1
         if decode_params:
             try:
@@ -114,12 +163,13 @@ class FlateDecode(Decoder, metaclass=Singleton):
 
         # predictor 1 == no predictor
         if predictor == 1:
-            return data_view
+            return decompressed
 
         columns = decode_params["/Columns"]
         # PNG prediction:
         if 10 <= predictor <= 15:
-            return _png_decode(data_view, columns)
+            # there's lots of slicing ahead, so let's reduce copying overhead
+            return _png_decode(memoryview(decompressed), columns)
         else:
             # unsupported predictor
             raise NotImplementedError(

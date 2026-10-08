@@ -29,6 +29,7 @@ from asn1crypto import cms, keys, tsp, x509
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto.crl import CertificateList
 from asn1crypto.ocsp import OCSPResponse
+from pyhanko.pdf_utils.decode_limits import DecodePurpose
 from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.sign.ades.report import (
     AdESFailure,
@@ -1679,7 +1680,7 @@ def _read_validation_objects_from_dss(
     dss: DocumentSecurityStore,
 ) -> Generator[_PrimaFaciePOEItem, None, None]:
     for crl_obj in dss.crls:
-        data = crl_obj.get_object().data
+        data = crl_obj.get_object().read_data(DecodePurpose.CRL)
         yield _PrimaFaciePOEItem(
             digest=digest_for_poe(data),
             validation_object=ValidationObject(
@@ -1688,7 +1689,7 @@ def _read_validation_objects_from_dss(
             ),
         )
     for ocsp_obj in dss.ocsps:
-        data = ocsp_obj.get_object().data
+        data = ocsp_obj.get_object().read_data(DecodePurpose.OCSP_RESPONSE)
         yield _PrimaFaciePOEItem(
             digest=digest_for_poe(data),
             validation_object=ValidationObject(
@@ -1697,7 +1698,7 @@ def _read_validation_objects_from_dss(
             ),
         )
     for cert_obj in dss.certs.values():
-        data = cert_obj.get_object().data
+        data = cert_obj.get_object().read_data(DecodePurpose.CERTIFICATE)
         yield _PrimaFaciePOEItem(
             digest=digest_for_poe(data),
             validation_object=ValidationObject(
@@ -2108,11 +2109,17 @@ def _dss_to_local_knowledge(
             cont
             for resp in dss.ocsps
             for cont in OCSPContainer.load_multi(
-                OCSPResponse.load(resp.get_object().data)
+                OCSPResponse.load(
+                    resp.get_object().read_data(DecodePurpose.OCSP_RESPONSE)
+                )
             )
         ]
         dss_crls = [
-            CRLContainer(crl_data=CertificateList.load(crl.get_object().data))
+            CRLContainer(
+                crl_data=CertificateList.load(
+                    crl.get_object().read_data(DecodePurpose.CRL)
+                )
+            )
             for crl in dss.crls
         ]
         dss_certs = list(dss.load_certs())

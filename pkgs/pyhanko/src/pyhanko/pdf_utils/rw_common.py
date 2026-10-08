@@ -1,6 +1,7 @@
 """Utilities common to reading and writing PDF files."""
 
 from . import generic, misc
+from .decode_limits import DEFAULT_DECODE_CONTEXT, DecodeContext
 from .metadata.model import DocumentMetadata
 from .misc import PdfError
 
@@ -39,6 +40,19 @@ class PdfHandler:
             A PDF object.
         """
         raise NotImplementedError
+
+    @property
+    def decode_context(self) -> DecodeContext:
+        """
+        The context that governs the limits applied when decoding streams
+        associated with this :class:`.PdfHandler`.
+
+        This is internal API.
+
+        :return:
+            A :class:`.DecodeContext`.
+        """
+        return DEFAULT_DECODE_CONTEXT
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:

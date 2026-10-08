@@ -23,6 +23,7 @@ __all__ = [
     'FormFillingError',
     'IndirectObjectExpected',
     'OrderedEnum',
+    'PdfDecodeLimitError',
     'PdfError',
     'PdfReadError',
     'PdfStreamError',
@@ -300,6 +301,14 @@ class PdfWriteError(PdfError):
 
 class PdfStreamError(PdfReadError):
     pass
+
+
+class PdfDecodeLimitError(PdfStreamError):
+    """
+    Raised when decoding a stream would exceed the configured limits.
+
+    .. versionadded:: 0.38.0
+    """
 
 
 def peek(itr):

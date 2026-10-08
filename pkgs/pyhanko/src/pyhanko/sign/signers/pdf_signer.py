@@ -19,6 +19,7 @@ from asn1crypto.core import VOID
 from cryptography.hazmat.primitives import hashes
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt import pdfmac
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -1007,7 +1008,9 @@ class PdfTimeStamper:
             reader.stream.seek(0)
             misc.chunked_write(bytearray(chunk_size), reader.stream, res_output)
 
-        pdf_out = IncrementalPdfFileWriter(res_output)
+        pdf_out = IncrementalPdfFileWriter(
+            res_output, decode_limits=reader.decode_context.limits
+        )
         if last_timestamp is not None:
             assert tst_status is not None
             # update the DSS
@@ -2247,11 +2250,13 @@ class PdfSigningSession:
                 credential = security_handler.extract_credential()
                 if credential is not None:
                     credential_ser = credential.serialise()
-            # Preserve strict mode setting if we're doing
+            # Preserve strict mode and decode limits if we're doing
             # an incremental signature
             strict = True
+            decode_limits = None
             if isinstance(self.pdf_out, IncrementalPdfFileWriter):
                 strict = self.pdf_out.prev.strict
+                decode_limits = self.pdf_out.prev.decode_context.limits
 
             post_signing_instr = PostSignInstructions(
                 validation_info=validation_info,
@@ -2268,6 +2273,7 @@ class PdfSigningSession:
                 embed_roots=embed_roots,
                 file_credential=credential_ser,
                 strict=strict,
+                decode_limits=decode_limits,
             )
         return PdfTBSDocument(
             cms_writer=self.cms_writer,
@@ -2366,6 +2372,14 @@ class PostSignInstructions:
 
     Controls whether to open the signed document in strict mode before applying
     post-signing instructions.
+    """
+
+    decode_limits: DecodeLimits | None = None
+    """
+    .. versionadded:: 0.38.0
+
+    Decoding limits to apply when opening the signed document before applying
+    post-signing instructions. If ``None``, the defaults apply.
     """
 
 
@@ -2810,10 +2824,13 @@ class PdfPostSignatureDocument:
                 **dss_op_kwargs,
                 file_credential=instr.file_credential,
                 strict=instr.strict,
+                decode_limits=instr.decode_limits,
             )
         if timestamper is not None:
             # append a document timestamp after the DSS update
-            w = IncrementalPdfFileWriter(output, strict=instr.strict)
+            w = IncrementalPdfFileWriter(
+                output, strict=instr.strict, decode_limits=instr.decode_limits
+            )
             if (
                 w.security_handler is not None
                 and instr.file_credential is not None

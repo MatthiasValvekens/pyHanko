@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any, Optional, Union
 
+from .decode_limits import DEFAULT_DECODE_CONTEXT, DecodeContext, DecodePurpose
 from .misc import (
     IndirectObjectExpected,
     PdfError,
@@ -1610,6 +1611,13 @@ class StreamObject(DictionaryObject):
                     f"Filters of type {filter_type} are not supported."
                 )
 
+    def _decode_context(self) -> DecodeContext:
+        ref = self.container_ref
+        handler = ref.get_pdf_handler() if ref is not None else None
+        if handler is None:
+            return DEFAULT_DECODE_CONTEXT
+        return handler.decode_context
+
     def strip_filters(self):
         """
         Ensure the stream is decoded, and remove any filters.
@@ -1628,14 +1636,44 @@ class StreamObject(DictionaryObject):
         :raises .misc.PdfStreamError:
             If the stream could not be decoded.
         """
+        return self.read_data()
+
+    def read_data(
+        self,
+        purpose: DecodePurpose = DecodePurpose.GENERIC,
+        expected_size: int | None = None,
+    ) -> bytes:
+        """
+        Return the decoded stream data as bytes, applying the decoding limits
+        for the given purpose.
+        If the stream hasn't been decoded yet, it will be decoded on-the-fly.
+        Once decoded, the data is cached, and subsequent calls return
+        the cached data regardless of the limits.
+
+        This is internal API.
+
+        :param purpose:
+            The purpose for which the stream is decoded.
+        :param expected_size:
+            The expected decoded size of the stream, if known.
+        :raises .misc.PdfStreamError:
+            If the stream could not be decoded.
+        :raises .misc.PdfDecodeLimitError:
+            If decoding the stream would exceed the applicable limits.
+        """
         if self._data is None:
             data = self._encoded_data
             if data is None:
                 raise PdfStreamError("No data available.")
+            context = self._decode_context()
+            stream_cap = context.stream_output_cap(
+                len(data), purpose=purpose, expected_size=expected_size
+            )
             for filter_cls, decode_params in self._stream_decoders():
-                data = filter_cls.decode(data, decode_params)
-            if isinstance(data, memoryview):
-                data = data.tobytes()
+                data = filter_cls.decode_bounded(
+                    data, decode_params, context.stage_output_cap(stream_cap)
+                )
+                context.record_output(len(data))
             self._data = data
         assert self._data is not None
         return self._data

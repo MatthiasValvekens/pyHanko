@@ -6,6 +6,7 @@ import os
 
 from . import generic, misc
 from .crypt import EnvelopeKeyDecrypter
+from .decode_limits import DecodeLimits
 from .generic import pdf_name
 from .metadata.model import DocumentMetadata
 from .reader import PdfFileReader, parse_catalog_version
@@ -33,17 +34,28 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         Ingest the source file in strict mode. The default is ``True``.
     :param prev:
         Explicitly pass in a PDF reader. This parameter is internal API.
+    :param decode_limits:
+        Limits to apply when decoding streams in the input document.
+        Ignored if ``prev`` is passed in.
+
+        .. versionadded:: 0.38.0
     """
 
     IO_CHUNK_SIZE = 4096
     _force_write_when_empty = False
 
     def __init__(
-        self, input_stream, prev: PdfFileReader | None = None, strict=True
+        self,
+        input_stream,
+        prev: PdfFileReader | None = None,
+        strict=True,
+        decode_limits: DecodeLimits | None = None,
     ):
         self.input_stream = input_stream
         if prev is None:
-            prev = PdfFileReader(input_stream, strict=strict)
+            prev = PdfFileReader(
+                input_stream, strict=strict, decode_limits=decode_limits
+            )
         self.prev = prev
         self.trailer = trailer = prev.trailer
         root_ref = trailer.raw_get('/Root')

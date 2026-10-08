@@ -9,6 +9,7 @@ from asn1crypto import ocsp as asn1_ocsp
 from asn1crypto import x509
 from asn1crypto.x509 import Certificate
 from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.decode_limits import DecodeLimits, DecodePurpose
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import get_and_apply
@@ -118,13 +119,15 @@ class DocumentSecurityStore:
 
         ocsps_seen = {}
         for ocsp_ref in self.ocsps:
-            ocsp_bytes = ocsp_ref.get_object().data
+            ocsp_bytes = ocsp_ref.get_object().read_data(
+                DecodePurpose.OCSP_RESPONSE
+            )
             ocsps_seen[ocsp_bytes] = ocsp_ref
         self._ocsps_seen = ocsps_seen
 
         crls_seen = {}
         for crl_ref in self.crls:
-            crl_bytes = crl_ref.get_object().data
+            crl_bytes = crl_ref.get_object().read_data(DecodePurpose.CRL)
             crls_seen[crl_bytes] = crl_ref
         self._crls_seen = crls_seen
         self._modified = False
@@ -271,7 +274,9 @@ class DocumentSecurityStore:
         """
         for cert_ref in self.certs.values():
             cert_stream: generic.StreamObject = cert_ref.get_object()
-            cert = Certificate.load(cert_stream.data)
+            cert = Certificate.load(
+                cert_stream.read_data(DecodePurpose.CERTIFICATE)
+            )
             yield cert
 
     def as_validation_context(
@@ -293,14 +298,18 @@ class DocumentSecurityStore:
         ocsps = list(validation_context_kwargs.pop('ocsps', ()))
         for ocsp_ref in self.ocsps:
             ocsp_stream: generic.StreamObject = ocsp_ref.get_object()
-            resp = asn1_ocsp.OCSPResponse.load(ocsp_stream.data)
+            resp = asn1_ocsp.OCSPResponse.load(
+                ocsp_stream.read_data(DecodePurpose.OCSP_RESPONSE)
+            )
             ocsps.append(resp)
         validation_context_kwargs['ocsps'] = ocsps
 
         crls = list(validation_context_kwargs.pop('crls', ()))
         for crl_ref in self.crls:
             crl_stream: generic.StreamObject = crl_ref.get_object()
-            crl = asn1_crl.CertificateList.load(crl_stream.data)
+            crl = asn1_crl.CertificateList.load(
+                crl_stream.read_data(DecodePurpose.CRL)
+            )
             crls.append(crl)
         validation_context_kwargs['crls'] = crls
 
@@ -326,21 +335,27 @@ class DocumentSecurityStore:
         cert_ref_list = get_and_apply(dss_dict, '/Certs', list, default=[])
         for cert_ref in cert_ref_list:
             cert_stream: generic.StreamObject = cert_ref.get_object()
-            cert: Certificate = Certificate.load(cert_stream.data)
+            cert: Certificate = Certificate.load(
+                cert_stream.read_data(DecodePurpose.CERTIFICATE)
+            )
             cert_refs[cert.issuer_serial] = cert_ref
 
         ocsp_refs = get_and_apply(dss_dict, '/OCSPs', list, default=[])
         ocsps = []
         for ocsp_ref in ocsp_refs:
             ocsp_stream: generic.StreamObject = ocsp_ref.get_object()
-            resp = asn1_ocsp.OCSPResponse.load(ocsp_stream.data)
+            resp = asn1_ocsp.OCSPResponse.load(
+                ocsp_stream.read_data(DecodePurpose.OCSP_RESPONSE)
+            )
             ocsps.append(resp)
 
         crl_refs = get_and_apply(dss_dict, '/CRLs', list, default=[])
         crls = []
         for crl_ref in crl_refs:
             crl_stream: generic.StreamObject = crl_ref.get_object()
-            crl = asn1_crl.CertificateList.load(crl_stream.data)
+            crl = asn1_crl.CertificateList.load(
+                crl_stream.read_data(DecodePurpose.CRL)
+            )
             crls.append(crl)
 
         # shallow-copy the VRI dictionary
@@ -488,6 +503,7 @@ class DocumentSecurityStore:
         embed_roots: bool = True,
         file_credential: SerialisedCredential | None = None,
         strict: bool = True,
+        decode_limits: DecodeLimits | None = None,
     ):
         """
         Wrapper around :meth:`supply_dss_in_writer`.
@@ -536,8 +552,15 @@ class DocumentSecurityStore:
         :param strict:
             If ``True``, enforce strict validation of the input stream.
             Default is ``True``.
+        :param decode_limits:
+            .. versionadded:: 0.38.0
+
+            Limits to apply when decoding streams in the input document.
+            If not specified, the defaults in :class:`.DecodeLimits` apply.
         """
-        pdf_out = IncrementalPdfFileWriter(output_stream, strict=strict)
+        pdf_out = IncrementalPdfFileWriter(
+            output_stream, strict=strict, decode_limits=decode_limits
+        )
         if pdf_out.security_handler is not None and file_credential is not None:
             pdf_out.security_handler.authenticate(file_credential)
         dss = cls.supply_dss_in_writer(

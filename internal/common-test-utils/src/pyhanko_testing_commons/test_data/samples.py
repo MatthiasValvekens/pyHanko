@@ -101,6 +101,37 @@ def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     )
 
 
+def minimal_with_oversized_objstm():
+    """
+    Copy :const:`MINIMAL` into a writer that puts all non-stream objects in an
+    object stream padded beyond the default object stream decode limits,
+    so the result cannot be opened without relaxing them.
+    The writer is returned unwritten so that callers can e.g. encrypt it.
+    """
+    from io import BytesIO
+
+    from pyhanko.pdf_utils import generic
+    from pyhanko.pdf_utils.reader import PdfFileReader
+    from pyhanko.pdf_utils.writer import copy_into_new_writer
+
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL)), {'stream_xrefs': True}
+    )
+    objstm = w.prepare_object_stream()
+    # Not just the catalog: later revisions rewrite that, while e.g. the page
+    # tree still has to be read from the object stream.
+    for gen, idnum in list(w.objects):
+        obj = w.objects[(gen, idnum)]
+        if not isinstance(obj, generic.StreamObject):
+            del w.objects[(gen, idnum)]
+            objstm.add_object(idnum, obj)
+            w.objs_in_streams[idnum] = obj
+    # zeros compress extremely well, so the encoded stream stays tiny
+    padding = generic.ByteStringObject(bytes(3 * 1024 * 1024))
+    w.add_object(padding, obj_stream=objstm)
+    return w
+
+
 PUBKEY_TEST_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
     f"{CRYPTO_DATA_DIR}/keys-rsa/signer.key.pem",
     f"{CRYPTO_DATA_DIR}/testing-ca/interm/decrypter1.cert.pem",
