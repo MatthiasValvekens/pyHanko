@@ -2329,3 +2329,19 @@ def test_operator_literal_hash():
     assert hash(generic.TextStringObject("aaa")) != hash(
         generic.OperatorLiteral("aaa")
     )
+
+
+def test_circular_xref_sections():
+    with (
+        open(PDF_DATA_DIR + '/circular-xref-chain.pdf', 'rb') as f,
+        pytest.raises(misc.PdfReadError, match="startxref loop"),
+    ):
+        PdfFileReader(f)
+
+
+def test_malformed_prev():
+    with (
+        open(PDF_DATA_DIR + '/xref-malformed-prev.pdf', 'rb') as f,
+        pytest.raises(misc.PdfReadError, match="Expected /Prev to be a number"),
+    ):
+        PdfFileReader(f)

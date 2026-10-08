@@ -652,6 +652,17 @@ def _check_xref_consistency(all_sections: list[XRefSection]):
                 )
 
 
+def _prev(trailer: generic.DictionaryObject):
+    prev_startxref = trailer.get('/Prev')
+    if prev_startxref is not None and not isinstance(
+        prev_startxref, generic.NumberObject
+    ):
+        raise misc.PdfReadError(
+            f"Expected /Prev to be a number, not {prev_startxref!r}"
+        )
+    return prev_startxref
+
+
 class XRefBuilder:
     err_limit = 10
 
@@ -702,7 +713,7 @@ class XRefBuilder:
         self.sections.append(XRefSection(xref_meta_info, xref_section_data))
 
         self.trailer.add_trailer_revision(xrefstream)
-        return xrefstream.get('/Prev')
+        return _prev(xrefstream)
 
     def _read_xref_table(self, declared_startxref: int):
         stream = self.stream
@@ -771,7 +782,7 @@ class XRefBuilder:
         self.sections.append(XRefSection(xref_meta_info, xref_section_data))
 
         self.trailer.add_trailer_revision(new_trailer)
-        return new_trailer.get('/Prev')
+        return _prev(new_trailer)
 
     def read_xrefs(self):
         # read all cross reference tables and their trailers
@@ -780,7 +791,15 @@ class XRefBuilder:
         # Tracks the number of times we retried to read a particular xref
         # section
         err_count = 0
+        startxrefs_seen = set()
         while startxref is not None:
+            # Would be even better if we could just verify that
+            # /Prev always comes before the current startxref,
+            # but unfortunately Linearised PDF relies on being able to
+            # have forward-referencing /Prev pointers...
+            if startxref in startxrefs_seen:
+                raise PdfReadError(f"startxref loop detected at {startxref}")
+            startxrefs_seen.add(startxref)
             if (self.strict and err_count) or err_count > self.err_limit:
                 raise PdfStrictReadError("Failed to locate xref section")
             if not err_count:
