@@ -4,8 +4,14 @@ import click
 from pyhanko.cli._root import cli_root
 from pyhanko.cli.config import CLIConfig
 from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE, pyhanko_exception_manager
-from pyhanko.cli.utils import _index_page, logger, readable_file
+from pyhanko.cli.utils import (
+    _index_page,
+    logger,
+    no_decode_limits_option,
+    readable_file,
+)
 from pyhanko.config.errors import ConfigurationError
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 
 __all__ = ['select_style', 'stamp']
@@ -74,6 +80,7 @@ PARAM_REGEX = re.compile("([a-zA-Z0-9_]+):(.*)")
     multiple=True,
     type=str,
 )
+@no_decode_limits_option
 @click.pass_context
 def stamp(
     ctx,
@@ -85,6 +92,7 @@ def stamp(
     page: int,
     stamp_url: str,
     text_param: list,
+    decode_limits: DecodeLimits,
 ):
     cli_config: CLIConfig | None = ctx.obj.config
     if cli_config is None:
@@ -111,6 +119,7 @@ def stamp(
                 y=y,
                 url=stamp_url,
                 text_params=text_params,
+                decode_limits=decode_limits,
             )
         else:
             text_stamp_file(
@@ -121,4 +130,5 @@ def stamp(
                 x=x,
                 y=y,
                 text_params=text_params,
+                decode_limits=decode_limits,
             )

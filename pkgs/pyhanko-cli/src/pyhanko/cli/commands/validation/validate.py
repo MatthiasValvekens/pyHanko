@@ -14,9 +14,10 @@ from pyhanko.cli._trust import (
 from pyhanko.cli.commands.signing import signing
 from pyhanko.cli.plugin_api import prompt_for_password
 from pyhanko.cli.runtime import pyhanko_exception_manager
-from pyhanko.cli.utils import logger
+from pyhanko.cli.utils import logger, no_decode_limits_option
 from pyhanko.keys import load_certs_from_pemder
 from pyhanko.pdf_utils import crypt
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.pdf_utils.misc import isoparse
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import validation
@@ -142,15 +143,17 @@ def _attempt_iso_dt_parse(dt_str) -> datetime:
     return dt
 
 
-def _open_file_for_validation(infile, no_strict_syntax, password):
+def _open_file_for_validation(
+    infile, no_strict_syntax, password, decode_limits: DecodeLimits
+):
     if no_strict_syntax:
         logger.info(
             "Strict PDF syntax is disabled; this could impact validation "
             "results. Use caution."
         )
-        r = PdfFileReader(infile, strict=False)
-    else:
-        r = PdfFileReader(infile)
+    r = PdfFileReader(
+        infile, strict=not no_strict_syntax, decode_limits=decode_limits
+    )
     sh = r.security_handler
     if isinstance(sh, crypt.StandardSecurityHandler):
         auth_result = None
@@ -272,6 +275,7 @@ def _open_file_for_validation(infile, no_strict_syntax, password):
     default=False,
     show_default=True,
 )
+@no_decode_limits_option
 @click.pass_context
 def validate_signatures(
     ctx: click.Context,
@@ -294,6 +298,7 @@ def validate_signatures(
     no_diff_analysis,
     validation_time,
     no_strict_syntax,
+    decode_limits,
 ):
     if sum((soft_revocation_check, force_revinfo, no_revocation_check)) > 1:
         raise click.ClickException(
@@ -356,7 +361,9 @@ def validate_signatures(
                 raise click.ClickException(status_str)
             return
 
-        r = _open_file_for_validation(infile, no_strict_syntax, password)
+        r = _open_file_for_validation(
+            infile, no_strict_syntax, password, decode_limits
+        )
         all_signatures_ok = True
         for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
@@ -453,6 +460,7 @@ def validate_signatures(
     default=False,
     show_default=True,
 )
+@no_decode_limits_option
 @click.pass_context
 def ades_validate_signatures(
     ctx: click.Context,
@@ -472,6 +480,7 @@ def ades_validate_signatures(
     validation_time,
     no_strict_syntax,
     require_qualified,
+    decode_limits,
 ):
     _assert_consistent_print_settings(pretty_print, executive_summary)
     cert_policy, other_certs = (
@@ -525,7 +534,9 @@ def ades_validate_signatures(
     )
 
     with pyhanko_exception_manager():
-        r = _open_file_for_validation(infile, no_strict_syntax, password)
+        r = _open_file_for_validation(
+            infile, no_strict_syntax, password, decode_limits
+        )
         all_signatures_ok = True
         for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()

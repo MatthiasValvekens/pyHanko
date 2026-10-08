@@ -1,6 +1,7 @@
 import logging
 
 import click
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.sign import fields
 
 logger = logging.getLogger("cli")
@@ -18,6 +19,25 @@ def _warn_empty_passphrase():
 
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 writable_file = click.Path(writable=True, dir_okay=False)
+
+
+def _decode_limits_from_flag(_ctx, _param, no_decode_limits: bool):
+    if no_decode_limits:
+        return DecodeLimits.for_trusted_input()
+    return DecodeLimits.for_untrusted_input()
+
+
+no_decode_limits_option = click.option(
+    '--no-decode-limits',
+    'decode_limits',
+    help=(
+        'do not limit the amount of data decompressed from the input PDF '
+        '(only use this with trusted input)'
+    ),
+    is_flag=True,
+    default=False,
+    callback=_decode_limits_from_flag,
+)
 
 
 def _index_page(page):

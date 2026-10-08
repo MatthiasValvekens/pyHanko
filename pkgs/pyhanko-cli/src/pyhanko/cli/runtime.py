@@ -56,6 +56,13 @@ def pyhanko_exception_manager():
             "--no-strict-syntax to try again.\n"
             f"Error message: {e.msg}"
         )
+    except misc.PdfDecodeLimitError as e:
+        exception = e
+        msg = (
+            "PDF file exceeds the limits on decompressed data; if you trust "
+            "the file, rerun with --no-decode-limits to try again.\n"
+            f"Error message: {e.msg}"
+        )
     except misc.PdfReadError as e:
         exception = e
         msg = f"Failed to read PDF file: {e.msg}"

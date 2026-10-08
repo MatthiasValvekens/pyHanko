@@ -1,3 +1,4 @@
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 from .qr import QRStamp, QRStampStyle
@@ -14,10 +15,13 @@ def _stamp_file(
     dest_page: int,
     x: int,
     y: int,
+    decode_limits: DecodeLimits | None,
     **stamp_kwargs,
 ):
     with open(input_name, 'rb') as fin:
-        pdf_out = IncrementalPdfFileWriter(fin, strict=False)
+        pdf_out = IncrementalPdfFileWriter(
+            fin, strict=False, decode_limits=decode_limits
+        )
         stamp = stamp_class(writer=pdf_out, style=style, **stamp_kwargs)
         stamp.apply(dest_page, x, y)
 
@@ -33,6 +37,7 @@ def text_stamp_file(
     x: int,
     y: int,
     text_params=None,
+    decode_limits: DecodeLimits | None = None,
 ):
     """
     Add a text stamp to a file.
@@ -51,6 +56,11 @@ def text_stamp_file(
         Vertical position of the stamp's lower left corner on the page.
     :param text_params:
         Additional parameters for text template interpolation.
+    :param decode_limits:
+        Limits to apply when decoding streams in the input file.
+        If not specified, the defaults in :class:`.DecodeLimits` apply.
+
+        .. versionadded:: 0.38.0
     """
     _stamp_file(
         input_name,
@@ -60,6 +70,7 @@ def text_stamp_file(
         dest_page,
         x,
         y,
+        decode_limits,
         text_params=text_params,
     )
 
@@ -73,6 +84,7 @@ def qr_stamp_file(
     y: int,
     url: str,
     text_params=None,
+    decode_limits: DecodeLimits | None = None,
 ):
     """
     Add a QR stamp to a file.
@@ -93,6 +105,11 @@ def qr_stamp_file(
         URL for the QR code to point to.
     :param text_params:
         Additional parameters for text template interpolation.
+    :param decode_limits:
+        Limits to apply when decoding streams in the input file.
+        If not specified, the defaults in :class:`.DecodeLimits` apply.
+
+        .. versionadded:: 0.38.0
     """
 
     _stamp_file(
@@ -103,6 +120,7 @@ def qr_stamp_file(
         dest_page,
         x,
         y,
+        decode_limits,
         url=url,
         text_params=text_params,
     )

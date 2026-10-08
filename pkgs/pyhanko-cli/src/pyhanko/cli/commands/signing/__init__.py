@@ -10,7 +10,10 @@ from pyhanko.cli.commands.signing.plugin import (
     preconfigured_identity_command,
 )
 from pyhanko.cli.commands.stamp import select_style
-from pyhanko.cli.utils import parse_field_location_spec
+from pyhanko.cli.utils import (
+    no_decode_limits_option,
+    parse_field_location_spec,
+)
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import fields, signers
 from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
@@ -153,6 +156,7 @@ def signing():
     default=False,
     show_default=True,
 )
+@no_decode_limits_option
 @click.pass_context
 def addsig(
     ctx: click.Context,
@@ -181,6 +185,7 @@ def addsig(
     detach,
     detach_pem,
     no_strict_syntax,
+    decode_limits,
 ):
     ctx_obj: CLIContext = ctx.obj
     ctx_obj.existing_fields_only = existing_only or field is None
@@ -257,6 +262,7 @@ def addsig(
     ctx_obj.stamp_style = select_style(ctx, style_name, stamp_url)
     ctx_obj.stamp_url = stamp_url
     ctx_obj.lenient = no_strict_syntax
+    ctx_obj.decode_limits = decode_limits
     ctx_obj.ux.visible_signature_desired = bool(style_name or new_field_spec)
 
 
@@ -306,6 +312,7 @@ writable_file = click.Path(writable=True, dir_okay=False)
     type=str,
     default=None,
 )
+@no_decode_limits_option
 @click.pass_context
 def timestamp(
     ctx,
@@ -319,6 +326,7 @@ def timestamp(
     eutl_territories,
     other_certs,
     timestamp_url,
+    decode_limits,
 ):
     with pyhanko_exception_manager():
         vc_kwargs = build_vc_kwargs(
@@ -336,7 +344,7 @@ def timestamp(
         )
         timestamper = HTTPTimeStamper(timestamp_url)
         with open(infile, 'rb') as inf:
-            w = IncrementalPdfFileWriter(inf)
+            w = IncrementalPdfFileWriter(inf, decode_limits=decode_limits)
             pdf_timestamper = signers.PdfTimeStamper(timestamper)
             with open(outfile, 'wb') as outf:
                 pdf_timestamper.timestamp_pdf(

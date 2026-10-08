@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pyhanko.pdf_utils import generic, layout, writer
 from pyhanko.pdf_utils.content import ImportedPdfPage, RawContent
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -33,6 +34,7 @@ from pyhanko_testing_commons.test_data.samples import (
     MINIMAL_PATH,
     PDF_DATA_DIR,
     TEST_DIR,
+    minimal_with_oversized_objstm,
 )
 from pyhanko_testing_commons.test_utils.layout_test_utils import (
     compare_output,
@@ -104,6 +106,31 @@ def test_simple_qr_noto_stamp(tmp_path):
         y=50,
         url='https://example.com',
     )
+
+
+@pytest.mark.parametrize(
+    'stamp_file,extra_kwargs',
+    [
+        (text_stamp_file, {}),
+        (qr_stamp_file, {'url': 'https://example.com'}),
+    ],
+)
+def test_stamp_file_decode_limits(tmp_path, stamp_file, extra_kwargs):
+    infile: Path = tmp_path / "test-in.pdf"
+    outfile: Path = tmp_path / "test-out.pdf"
+    with infile.open('wb') as f:
+        minimal_with_oversized_objstm().write(f)
+    stamp_file(
+        str(infile),
+        str(outfile),
+        QRStampStyle(stamp_text="Hi"),
+        dest_page=0,
+        x=70,
+        y=50,
+        decode_limits=DecodeLimits.for_trusted_input(),
+        **extra_kwargs,
+    )
+    assert outfile.stat().st_size > infile.stat().st_size
 
 
 def empty_page(stream_xrefs=False):

@@ -11,6 +11,7 @@ from certomancer.registry import CertLabel, ServiceLabel
 from click.testing import CliRunner
 from freezegun import freeze_time
 from pyhanko.cli._ctx import PasswordPrompter
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.pdf_utils.misc import PdfStrictReadError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import (
@@ -167,7 +168,11 @@ def _test_log(msg: str, *args):
 def _validate_last_sig_in(root: x509.Certificate, pdf_file, *, strict):
     with open(pdf_file, 'rb') as result:
         _test_log(f"Validating last signature in {pdf_file}...")
-        r = PdfFileReader(result, strict=strict)
+        r = PdfFileReader(
+            result,
+            strict=strict,
+            decode_limits=DecodeLimits.for_trusted_input(),
+        )
         # Little hack for the tests with encrypted files
         if r.security_handler is not None:
             r.decrypt("ownersecret")
@@ -211,7 +216,9 @@ def post_validate(root_cert_data):
     if os.path.isfile(INPUT_PATH):
         try:
             with open(INPUT_PATH, 'rb') as inf:
-                PdfFileReader(inf)
+                PdfFileReader(
+                    inf, decode_limits=DecodeLimits.for_trusted_input()
+                )
         except PdfStrictReadError:
             _test_log(
                 f"Input file {INPUT_PATH} can't be opened in strict mode, "

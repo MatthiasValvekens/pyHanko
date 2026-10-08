@@ -106,6 +106,7 @@ def _callback_logic(
                 infile_path=infile,
                 lenient=cli_ctx.lenient,
                 prompter=cli_ctx.ux.prompter,
+                decode_limits=cli_ctx.decode_limits,
             ) as w:
                 if cli_ctx.ux.visible_signature_desired:
                     _ensure_field_visible(

@@ -4,21 +4,29 @@ import click
 from pyhanko.cli._ctx import PasswordPrompter
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.crypt import AuthStatus
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 
 class OpenForSigning:
     def __init__(
-        self, infile_path: str, lenient: bool, prompter: PasswordPrompter
+        self,
+        infile_path: str,
+        lenient: bool,
+        prompter: PasswordPrompter,
+        decode_limits: DecodeLimits | None = None,
     ):
         self.infile_path = infile_path
         self.lenient = lenient
         self.prompter = prompter
+        self.decode_limits = decode_limits
         self.handle: BinaryIO | None = None
 
     def __enter__(self) -> IncrementalPdfFileWriter:
         self.handle = infile = open(self.infile_path, 'rb')
-        writer = IncrementalPdfFileWriter(infile, strict=not self.lenient)
+        writer = IncrementalPdfFileWriter(
+            infile, strict=not self.lenient, decode_limits=self.decode_limits
+        )
 
         # TODO make this an option higher up the tree
         if writer.prev.encrypted:
@@ -48,9 +56,14 @@ class OpenForSigning:
 
 
 def open_for_signing(
-    infile_path: str, lenient: bool, prompter: PasswordPrompter
+    infile_path: str,
+    lenient: bool,
+    prompter: PasswordPrompter,
+    decode_limits: DecodeLimits | None = None,
 ):
-    return OpenForSigning(infile_path, lenient, prompter=prompter)
+    return OpenForSigning(
+        infile_path, lenient, prompter=prompter, decode_limits=decode_limits
+    )
 
 
 def get_text_params(ctx):

@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from pyhanko.cli.config import CLIConfig
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.sign.fields import SigFieldSpec
 from pyhanko.sign.signers import PdfSignatureMetadata
 from pyhanko.stamp import BaseStampStyle
@@ -124,6 +125,11 @@ class CLIContext:
     lenient: bool = False
     """
     Process PDF files in nonstrict mode.
+    """
+
+    decode_limits: DecodeLimits = field(default_factory=DecodeLimits)
+    """
+    Limits to apply when decoding streams in input PDF files.
     """
 
     ux: UXContext = field(default_factory=UXContext)

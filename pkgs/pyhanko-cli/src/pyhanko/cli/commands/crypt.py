@@ -2,11 +2,16 @@ import click
 from pyhanko.cli._root import cli_root
 from pyhanko.cli.plugin_api import prompt_for_password
 from pyhanko.cli.runtime import pyhanko_exception_manager
-from pyhanko.cli.utils import _warn_empty_passphrase, readable_file
+from pyhanko.cli.utils import (
+    _warn_empty_passphrase,
+    no_decode_limits_option,
+    readable_file,
+)
 from pyhanko.keys import load_certs_from_pemder
 from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.crypt import StandardSecurityHandler
 from pyhanko.pdf_utils.crypt.permissions import PubKeyPermissions
+from pyhanko.pdf_utils.decode_limits import DecodeLimits
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 
@@ -30,7 +35,8 @@ __all__ = ['decrypt', 'encrypt_file']
     'can decrypt the output file',
     type=click.Path(readable=True, dir_okay=False),
 )
-def encrypt_file(infile, outfile, password, recipient):
+@no_decode_limits_option
+def encrypt_file(infile, outfile, password, recipient, decode_limits):
     if password and recipient:
         raise click.ClickException(
             "Specify either a password or a list of recipients."
@@ -43,7 +49,7 @@ def encrypt_file(infile, outfile, password, recipient):
         recipient_certs = list(load_certs_from_pemder(cert_files=recipient))
 
     with pyhanko_exception_manager(), open(infile, 'rb') as inf:
-        r = PdfFileReader(inf)
+        r = PdfFileReader(inf, decode_limits=decode_limits)
         w = copy_into_new_writer(r)
 
         if recipient_certs:
@@ -83,9 +89,10 @@ decrypt_force_flag = click.option(
     type=str,
 )
 @decrypt_force_flag
-def decrypt_with_password(infile, outfile, password, force):
+@no_decode_limits_option
+def decrypt_with_password(infile, outfile, password, force, decode_limits):
     with pyhanko_exception_manager(), open(infile, 'rb') as inf:
-        r = PdfFileReader(inf)
+        r = PdfFileReader(inf, decode_limits=decode_limits)
         if r.security_handler is None:
             raise click.ClickException("File is not encrypted.")
         elif not isinstance(r.security_handler, StandardSecurityHandler):
@@ -139,7 +146,10 @@ def decrypt_with_password(infile, outfile, password, force):
     show_default=True,
 )
 @decrypt_force_flag
-def decrypt_with_pemder(infile, outfile, key, cert, passfile, force, no_pass):
+@no_decode_limits_option
+def decrypt_with_pemder(
+    infile, outfile, key, cert, passfile, force, no_pass, decode_limits
+):
     if passfile is not None:
         passphrase = passfile.read()
         passfile.close()
@@ -157,14 +167,18 @@ def decrypt_with_pemder(infile, outfile, key, cert, passfile, force, no_pass):
         key, cert, key_passphrase=passphrase
     )
 
-    _decrypt_pubkey(sedk, infile, outfile, force)
+    _decrypt_pubkey(sedk, infile, outfile, force, decode_limits)
 
 
 def _decrypt_pubkey(
-    sedk: crypt.SimpleEnvelopeKeyDecrypter, infile, outfile, force
+    sedk: crypt.SimpleEnvelopeKeyDecrypter,
+    infile,
+    outfile,
+    force,
+    decode_limits: DecodeLimits,
 ):
     with pyhanko_exception_manager(), open(infile, 'rb') as inf:
-        r = PdfFileReader(inf)
+        r = PdfFileReader(inf, decode_limits=decode_limits)
         if r.security_handler is None:
             raise click.ClickException("File is not encrypted.")
         if not isinstance(r.security_handler, crypt.PubKeySecurityHandler):
@@ -202,7 +216,8 @@ def _decrypt_pubkey(
     show_default='stdin',
 )
 @decrypt_force_flag
-def decrypt_with_pkcs12(infile, outfile, pfx, passfile, force):
+@no_decode_limits_option
+def decrypt_with_pkcs12(infile, outfile, pfx, passfile, force, decode_limits):
     if passfile is None:
         passphrase = prompt_for_password(prompt='Key passphrase: ').encode(
             'utf-8'
@@ -214,4 +229,4 @@ def decrypt_with_pkcs12(infile, outfile, pfx, passfile, force):
         pfx, passphrase=passphrase
     )
 
-    _decrypt_pubkey(sedk, infile, outfile, force)
+    _decrypt_pubkey(sedk, infile, outfile, force, decode_limits)

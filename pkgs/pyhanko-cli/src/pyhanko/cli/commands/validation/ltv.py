@@ -2,6 +2,7 @@ import click
 from pyhanko.cli._trust import build_vc_kwargs, trust_options
 from pyhanko.cli.commands.signing import signing
 from pyhanko.cli.runtime import pyhanko_exception_manager
+from pyhanko.cli.utils import no_decode_limits_option
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers, validation
@@ -30,6 +31,7 @@ __all__ = ['lta_update', 'ltv_fix']
     default=False,
     show_default=True,
 )
+@no_decode_limits_option
 @click.pass_context
 def lta_update(
     ctx,
@@ -43,6 +45,7 @@ def lta_update(
     other_certs,
     timestamp_url,
     retroactive_revinfo,
+    decode_limits,
 ):
     with pyhanko_exception_manager():
         vc_kwargs = build_vc_kwargs(
@@ -59,7 +62,7 @@ def lta_update(
             revocation_policy='hard-fail',
         )
         timestamper = HTTPTimeStamper(timestamp_url)
-        r = PdfFileReader(infile)
+        r = PdfFileReader(infile, decode_limits=decode_limits)
         signers.PdfTimeStamper(timestamper).update_archival_timestamp_chain(
             r, ValidationContext(**vc_kwargs)
         )
@@ -82,6 +85,7 @@ def lta_update(
     type=str,
     default=None,
 )
+@no_decode_limits_option
 @click.pass_context
 def ltv_fix(
     ctx,
@@ -95,6 +99,7 @@ def ltv_fix(
     eutl_force_redownload,
     eutl_territories,
     other_certs,
+    decode_limits,
 ):
     vc_kwargs = build_vc_kwargs(
         cli_config=ctx.obj.config,
@@ -109,26 +114,29 @@ def ltv_fix(
         allow_fetching=True,
         revocation_policy='hard-fail',
     )
-    r = PdfFileReader(infile)
+    with pyhanko_exception_manager():
+        r = PdfFileReader(infile, decode_limits=decode_limits)
 
-    try:
-        emb_sig = next(
-            s for s in r.embedded_regular_signatures if s.field_name == field
-        )
-    except StopIteration:
-        raise click.ClickException(
-            f"Could not find a PDF signature labelled {field}."
+        try:
+            emb_sig = next(
+                s
+                for s in r.embedded_regular_signatures
+                if s.field_name == field
+            )
+        except StopIteration:
+            raise click.ClickException(
+                f"Could not find a PDF signature labelled {field}."
+            )
+
+        output = validation.add_validation_info(
+            emb_sig, ValidationContext(**vc_kwargs), in_place=True
         )
 
-    output = validation.add_validation_info(
-        emb_sig, ValidationContext(**vc_kwargs), in_place=True
-    )
-
-    if timestamp_url:
-        timestamper = HTTPTimeStamper(timestamp_url)
-        signers.PdfTimeStamper(timestamper).timestamp_pdf(
-            IncrementalPdfFileWriter(output),
-            signers.DEFAULT_MD,
-            ValidationContext(**vc_kwargs),
-            in_place=True,
-        )
+        if timestamp_url:
+            timestamper = HTTPTimeStamper(timestamp_url)
+            signers.PdfTimeStamper(timestamper).timestamp_pdf(
+                IncrementalPdfFileWriter(output, decode_limits=decode_limits),
+                signers.DEFAULT_MD,
+                ValidationContext(**vc_kwargs),
+                in_place=True,
+            )
