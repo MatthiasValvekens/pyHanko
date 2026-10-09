@@ -46,9 +46,11 @@ from .policy_decl import (
     PKIXValidationParams,
     RevocationCheckingRule,
     intersect_policy_sets,
+    stricter_limit,
 )
 from .policy_graph import (
     PolicyGraph,
+    PolicyGraphSizeExceeded,
     apply_policy_mapping,
     enumerate_policy_mappings,
     update_policy_graph,
@@ -751,6 +753,10 @@ class _PathValidationState:
                 initial_excluded_subtrees.union_with(
                     trust_anchor_params.initial_excluded_subtrees
                 )
+            max_policy_graph_nodes = stricter_limit(
+                parameters.max_policy_graph_nodes,
+                trust_anchor_params.max_policy_graph_nodes,
+            )
         else:
             parameters = (
                 parameters or trust_anchor_params or PKIXValidationParams()
@@ -769,10 +775,11 @@ class _PathValidationState:
                 parameters.initial_excluded_subtrees
                 or default_excluded_subtrees()
             )
+            max_policy_graph_nodes = parameters.max_policy_graph_nodes
 
         state = _PathValidationState(
             # Step 1 a
-            valid_policy_graph=PolicyGraph(),
+            valid_policy_graph=PolicyGraph(max_nodes=max_policy_graph_nodes),
             # Steps 1 b-c
             permitted_subtrees=initial_permitted_subtrees,
             excluded_subtrees=initial_excluded_subtrees,
@@ -1101,21 +1108,29 @@ async def intl_validate_path(
         if index == path_length or not cert.self_issued:
             state.check_name_constraints(cert, proc_state=proc_state)
 
-        # Steps 2 d
-        state.process_policies(
-            index,
-            cert.certificate_policies_value,
-            #  (see step 2 d 2)
-            any_policy_uninhibited=(
-                state.inhibit_any_policy > 0
-                or (index < path_length and cert.self_issued)
-            ),
-            proc_state=proc_state,
-        )
+        try:
+            # Steps 2 d
+            state.process_policies(
+                index,
+                cert.certificate_policies_value,
+                #  (see step 2 d 2)
+                any_policy_uninhibited=(
+                    state.inhibit_any_policy > 0
+                    or (index < path_length and cert.self_issued)
+                ),
+                proc_state=proc_state,
+            )
 
-        if index < path_length:
-            # Step 3: prepare for certificate index+1
-            _prepare_next_step(index, cert, state, proc_state=proc_state)
+            if index < path_length:
+                # Step 3: prepare for certificate index+1
+                _prepare_next_step(index, cert, state, proc_state=proc_state)
+        except PolicyGraphSizeExceeded as e:
+            raise PathValidationError.from_state(
+                f"The path could not be validated because policy processing "
+                f"for {proc_state.describe_cert()} exceeds the size limit on "
+                f"the policy graph",
+                proc_state,
+            ) from e
 
         if cert_profile == EECertProfile.ATTRIBUTE_AUTHORITY:
             _check_aa_controls(cert, state, index, proc_state=proc_state)

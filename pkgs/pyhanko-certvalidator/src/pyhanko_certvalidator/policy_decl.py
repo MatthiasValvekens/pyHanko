@@ -406,6 +406,21 @@ class PKIXValidationParams:
     certificates.
     """
 
+    max_policy_graph_nodes: int | None = 1000
+    """
+    .. versionadded:: 0.33.0
+
+    Maximum number of nodes in the policy graph maintained during path
+    validation (see :rfc:`9618`), or ``None`` for no limit. A path whose
+    certificate policies would make the graph grow beyond this size fails to
+    validate.
+
+    The policies in a path are chosen by whoever issued the certificates in it,
+    and the number of edges in the graph can grow quadratically in the number
+    of nodes, so this bounds the work spent on policy processing.
+    The default is far above what any real PKI needs.
+    """
+
     def merge(self, other: 'PKIXValidationParams') -> 'PKIXValidationParams':
         """
         Combine the conditions of these PKIX validation params with another
@@ -442,7 +457,22 @@ class PKIXValidationParams:
             initial_any_policy_inhibit=initial_any_policy_inhibit,
             initial_explicit_policy=initial_explicit_policy,
             initial_policy_mapping_inhibit=initial_policy_mapping_inhibit,
+            max_policy_graph_nodes=stricter_limit(
+                self.max_policy_graph_nodes, other.max_policy_graph_nodes
+            ),
         )
+
+
+def stricter_limit(a: int | None, b: int | None) -> int | None:
+    """
+    Internal function to combine two optional upper bounds, where ``None``
+    means "no limit".
+    """
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return min(a, b)
 
 
 @dataclass(frozen=True)

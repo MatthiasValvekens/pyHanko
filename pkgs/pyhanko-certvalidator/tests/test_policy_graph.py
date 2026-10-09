@@ -11,6 +11,7 @@ from pyhanko_certvalidator.path import QualifiedPolicy
 from pyhanko_certvalidator.policy_graph import (
     ANY_POLICY,
     PolicyGraph,
+    PolicyGraphSizeExceeded,
     apply_policy_mapping,
     authority_constrained_policies,
     update_policy_graph,
@@ -313,6 +314,33 @@ class TestPolicyMapping:
 
         assert result is None
 
+    def test_inhibited_mapping_prunes_once(self, monkeypatch):
+        # pruning after every deleted mapping makes mapping-heavy
+        # certificates cost quadratic time
+        policies = [f'2.999.100.{ix}' for ix in range(50)]
+        graph = PolicyGraph()
+        process(graph, 1, *map(policy, policies))
+        prune_calls = []
+        original_prune = PolicyGraph.prune
+
+        def counting_prune(self, max_depth):
+            prune_calls.append(max_depth)
+            return original_prune(self, max_depth)
+
+        monkeypatch.setattr(PolicyGraph, 'prune', counting_prune)
+
+        result = apply_policy_mapping(
+            mappings(*((oid, WHITE) for oid in policies[1:])),
+            graph,
+            depth=1,
+            policy_mapping_uninhibited=False,
+        )
+
+        assert prune_calls == [0]
+        assert describe(result)[1] == {
+            policies[0]: ({policies[0]}, [ANY_POLICY])
+        }
+
 
 class TestGraphOperations:
     def test_nodes_outside_the_graph(self):
@@ -326,6 +354,18 @@ class TestGraphOperations:
         graph = PolicyGraph()
         with pytest.raises(ValueError, match='already occurs'):
             graph.add_node(0, ANY_POLICY, (), {ANY_POLICY}, ())
+
+    def test_size_limit_rejects_surplus_nodes(self):
+        graph = PolicyGraph(max_nodes=2)
+        with pytest.raises(PolicyGraphSizeExceeded, match='2 nodes'):
+            process(graph, 1, policy(GOLD), policy(SILVER))
+
+    def test_deleted_nodes_free_up_space(self):
+        graph = PolicyGraph(max_nodes=3)
+        process(graph, 1, policy(GOLD), policy(SILVER))
+        graph.delete_node(graph.node_at(1, SILVER))
+        process(graph, 2, policy(GOLD))
+        assert node_count(graph) == 3
 
     def test_delete_unknown_node_is_a_noop(self):
         graph = PolicyGraph()
@@ -341,7 +381,8 @@ class TestGraphOperations:
         graph.node_at(1, SILVER).expected_policy_set = {WHITE, YELLOW}
         process(graph, 2, policy(WHITE), policy(YELLOW))
 
-        graph.delete_node(graph.node_at(1, SILVER))
+        silver = graph.node_at(1, SILVER)
+        graph.delete_node(silver)
 
         # Yellow only hung off Silver, so it goes as well; White survives
         # through Gold
@@ -349,6 +390,26 @@ class TestGraphOperations:
             {ANY_POLICY: ({ANY_POLICY}, [])},
             {GOLD: ({WHITE}, [ANY_POLICY])},
             {WHITE: ({WHITE}, [GOLD])},
+        ]
+        assert graph.node_at(0, ANY_POLICY).children == [graph.node_at(1, GOLD)]
+        assert silver.parents == silver.children == []
+
+    def test_prune_is_not_limited_to_deepest_level(self):
+        graph = PolicyGraph()
+        process(graph, 1, policy(GOLD), policy(SILVER))
+        process(graph, 2, policy(GOLD), policy(SILVER))
+        process(graph, 3, policy(GOLD), policy(SILVER))
+
+        # takes Silver at depth 3 with it, and leaves Silver at depth 1
+        # childless, one level above max_depth
+        graph.delete_node(graph.node_at(2, SILVER))
+        graph.prune(2)
+
+        assert describe(graph) == [
+            {ANY_POLICY: ({ANY_POLICY}, [])},
+            {GOLD: ({GOLD}, [ANY_POLICY])},
+            {GOLD: ({GOLD}, [GOLD])},
+            {GOLD: ({GOLD}, [GOLD])},
         ]
 
     def test_ancestors_and_descendants_of_a_diamond(self):

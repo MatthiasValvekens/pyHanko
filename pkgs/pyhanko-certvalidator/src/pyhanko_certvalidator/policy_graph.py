@@ -25,6 +25,7 @@ __all__ = [
     'AuthorityConstrainedPolicy',
     'PolicyGraph',
     'PolicyGraphNode',
+    'PolicyGraphSizeExceeded',
     'apply_policy_mapping',
     'authority_constrained_policies',
     'enumerate_policy_mappings',
@@ -40,6 +41,13 @@ Name under which ``asn1crypto`` reports the ``anyPolicy`` OID.
 
 
 Qualifiers = Iterable[x509.PolicyQualifierInfo]
+
+
+class PolicyGraphSizeExceeded(ValueError):
+    """
+    Raised when adding a node would make a :class:`.PolicyGraph` exceed its
+    maximal size.
+    """
 
 
 class PolicyGraphNode:
@@ -71,15 +79,24 @@ class PolicyGraphNode:
         self.qualifier_set = qualifier_set
         self.expected_policy_set = expected_policy_set
         self.depth = depth
-        self.parents: list[PolicyGraphNode] = []
+        # dicts rather than lists so that edges can be removed in constant
+        # time; the values are unused
+        self._parents: dict[PolicyGraphNode, None] = {}
+        self._children: dict[PolicyGraphNode, None] = {}
+
+    @property
+    def parents(self) -> list['PolicyGraphNode']:
         """
         Nodes at depth ``depth - 1`` that this node was derived from.
         """
+        return list(self._parents)
 
-        self.children: list[PolicyGraphNode] = []
+    @property
+    def children(self) -> list['PolicyGraphNode']:
         """
         Nodes at depth ``depth + 1`` that were derived from this node.
         """
+        return list(self._children)
 
     def __repr__(self):  # pragma: nocover
         return (
@@ -94,7 +111,7 @@ class PolicyGraphNode:
         :return:
             A generator yielding policy graph nodes.
         """
-        return _reachable(self.parents, lambda node: node.parents)
+        return _reachable(self._parents, lambda node: node._parents)
 
     def descendants(self) -> Iterator['PolicyGraphNode']:
         """
@@ -103,7 +120,7 @@ class PolicyGraphNode:
         :return:
             A generator yielding policy graph nodes.
         """
-        return _reachable(self.children, lambda node: node.children)
+        return _reachable(self._children, lambda node: node._children)
 
 
 def _reachable(seeds, step) -> Iterator[PolicyGraphNode]:
@@ -126,9 +143,13 @@ class PolicyGraph:
     A newly instantiated graph consists of a single ``anyPolicy`` node at
     depth zero, i.e. the initial value of the ``valid_policy_graph`` state
     variable in the path validation algorithm.
+
+    :param max_nodes:
+        The maximal number of nodes that the graph may contain at any one time,
+        or ``None`` for no limit.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_nodes: int | None = None) -> None:
         root = PolicyGraphNode(
             valid_policy=ANY_POLICY,
             qualifier_set=(),
@@ -136,6 +157,11 @@ class PolicyGraph:
             depth=0,
         )
         self._levels: list[dict[str, PolicyGraphNode]] = [{ANY_POLICY: root}]
+        # Kept up to date so that pruning doesn't have to rescan the whole
+        # graph for every certificate in the path.
+        self._childless: dict[PolicyGraphNode, None] = {root: None}
+        self._node_count = 1
+        self.max_nodes = max_nodes
 
     @property
     def depth(self) -> int:
@@ -214,7 +240,13 @@ class PolicyGraph:
             The nodes at depth ``depth - 1`` to attach the new node to.
         :return:
             The newly created node.
+        :raises PolicyGraphSizeExceeded:
+            If the graph is already at its maximal size.
         """
+        if self.max_nodes is not None and self._node_count >= self.max_nodes:
+            raise PolicyGraphSizeExceeded(
+                f"Policy graph is limited to {self.max_nodes} nodes"
+            )
         while len(self._levels) <= depth:
             self._levels.append({})
         level = self._levels[depth]
@@ -229,9 +261,12 @@ class PolicyGraph:
             depth=depth,
         )
         level[valid_policy] = node
+        self._childless[node] = None
+        self._node_count += 1
         for parent in parents:
-            parent.children.append(node)
-            node.parents.append(parent)
+            parent._children[node] = None
+            node._parents[parent] = None
+            self._childless.pop(parent, None)
         return node
 
     def delete_node(self, node: PolicyGraphNode):
@@ -248,15 +283,19 @@ class PolicyGraph:
         if level.get(node.valid_policy) is not node:
             return
         del level[node.valid_policy]
-        for parent in node.parents:
-            parent.children.remove(node)
+        self._childless.pop(node, None)
+        self._node_count -= 1
+        for parent in node._parents:
+            del parent._children[node]
+            if not parent._children:
+                self._childless[parent] = None
         orphans = []
-        for child in node.children:
-            child.parents.remove(node)
-            if not child.parents:
+        for child in node._children:
+            del child._parents[node]
+            if not child._parents:
                 orphans.append(child)
-        node.parents = []
-        node.children = []
+        node._parents = {}
+        node._children = {}
         for orphan in orphans:
             self.delete_node(orphan)
 
@@ -271,17 +310,14 @@ class PolicyGraph:
             The pruned graph, or ``None`` if the graph was emptied out.
         """
         candidates = [
-            node
-            for depth in range(min(max_depth, self.depth) + 1)
-            for node in self.nodes_at_depth(depth)
-            if not node.children
+            node for node in self._childless if node.depth <= max_depth
         ]
         while candidates:
             node = candidates.pop()
             parents = node.parents
             self.delete_node(node)
             candidates.extend(
-                parent for parent in parents if not parent.children
+                parent for parent in parents if not parent._children
             )
         if not self._levels[0]:
             return None
@@ -395,10 +431,8 @@ def apply_policy_mapping(
     :rfc:`5280`, as replaced by section 5.4 of :rfc:`9618`.
     """
 
-    graph: PolicyGraph | None = valid_policy_graph
+    graph = valid_policy_graph
     for issuer_domain_policy, subject_domain_policies in policy_map.items():
-        if graph is None:
-            break
         node = graph.node_at(depth, issuer_domain_policy)
         # Step 3 b 1
         if policy_mapping_uninhibited:
@@ -416,11 +450,11 @@ def apply_policy_mapping(
                     cert_any_policy.parents,
                 )
         # Step 3 b 3
-        else:
-            if node is not None:
-                graph.delete_node(node)
-            graph = graph.prune(depth - 1)
-    return graph
+        elif node is not None:
+            graph.delete_node(node)
+    # The RFC prunes after every deletion in step 3 b 3, but the end result
+    # is the same if we prune only once.
+    return graph.prune(depth - 1)
 
 
 @dataclass(frozen=True)

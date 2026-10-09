@@ -340,3 +340,60 @@ async def test_excluded_subtree_does_not_overmatch(certs, name_type, base):
         initial_excluded_subtrees=_excluded_subtree(name_type, base)
     )
     await async_validate_path(context, path, parameters=params)
+
+
+@freeze_time('2022-05-01')
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'anchor_params,params,valid',
+    [
+        (None, PKIXValidationParams(max_policy_graph_nodes=3), True),
+        (None, PKIXValidationParams(max_policy_graph_nodes=2), False),
+        (
+            PKIXValidationParams(max_policy_graph_nodes=2),
+            PKIXValidationParams(max_policy_graph_nodes=None),
+            False,
+        ),
+        (
+            PKIXValidationParams(max_policy_graph_nodes=None),
+            PKIXValidationParams(max_policy_graph_nodes=2),
+            False,
+        ),
+        (
+            PKIXValidationParams(max_policy_graph_nodes=3),
+            PKIXValidationParams(max_policy_graph_nodes=4),
+            True,
+        ),
+    ],
+)
+async def test_policy_graph_size_limit(anchor_params, params, valid):
+    # the trust anchor's anyPolicy node, plus one node for each of the CA
+    # and the end-entity certificate
+    anchor = CertTrustAnchor(
+        load_nist_cert('TrustAnchorRootCertificate.crt'),
+        quals=TrustQualifiers(standard_parameters=anchor_params),
+    )
+    context = ValidationContext(
+        trust_roots=[anchor],
+        other_certs=[load_nist_cert('GoodCACert.crt')],
+        revocation_mode='soft-fail',
+    )
+    (path,) = await context.path_builder.async_build_paths(
+        load_nist_cert('ValidCertificatePathTest1EE.crt')
+    )
+    if valid:
+        await async_validate_path(context, path, parameters=params)
+    else:
+        with pytest.raises(PathValidationError, match='policy graph'):
+            await async_validate_path(context, path, parameters=params)
+
+
+@pytest.mark.parametrize(
+    'a,b,expected',
+    [(None, None, None), (None, 5, 5), (5, None, 5), (5, 3, 3), (3, 5, 3)],
+)
+def test_merge_takes_the_stricter_policy_graph_limit(a, b, expected):
+    merged = PKIXValidationParams(max_policy_graph_nodes=a).merge(
+        PKIXValidationParams(max_policy_graph_nodes=b)
+    )
+    assert merged.max_policy_graph_nodes == expected
