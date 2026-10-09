@@ -11,6 +11,9 @@ from ..common_utils import (
     ACCEPTABLE_CERT_PEM_ALIASES,
     ACCEPTABLE_PKCS7_DER_ALIASES,
     ACCEPTABLE_STRICT_CERT_CONTENT_TYPES,
+    FetchBudget,
+    FetchKind,
+    cap_aia_urls,
     complete_certificate_fetch_jobs,
     gather_aia_issuer_urls,
     unpack_cert_content,
@@ -27,8 +30,12 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
         user_agent=None,
         per_request_timeout=10,
         permit_pem=True,
+        *,
+        budget: FetchBudget | None = None,
     ):
-        super().__init__(session, user_agent, per_request_timeout)
+        super().__init__(
+            session, user_agent, per_request_timeout, budget=budget
+        )
         self.permit_pem = permit_pem
 
     async def fetch_certs(self, url, url_origin_type):
@@ -47,6 +54,7 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
         """
 
         async def task():
+            self._charge(FetchKind.CERT)
             try:
                 logger.info(f"Fetching certificates from {url}...")
                 return await _grab_certs(
@@ -69,7 +77,7 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
     ):
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='certificate')
-            for url in gather_aia_issuer_urls(cert)
+            for url in cap_aia_urls(self._budget, gather_aia_issuer_urls(cert))
         ]
 
         if isinstance(cert, x509.Certificate):
@@ -83,7 +91,9 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
     def fetch_crl_issuers(self, certificate_list):
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='CRL')
-            for url in certificate_list.issuer_cert_urls
+            for url in cap_aia_urls(
+                self._budget, certificate_list.issuer_cert_urls
+            )
         ]
         return complete_certificate_fetch_jobs(fetch_jobs)
 

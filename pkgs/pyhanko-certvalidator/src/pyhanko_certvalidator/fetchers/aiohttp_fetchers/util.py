@@ -6,7 +6,7 @@ import aiohttp
 import certifi
 
 from ..api import DEFAULT_USER_AGENT
-from ..common_utils import queue_fetch_task
+from ..common_utils import FetchBudget, FetchKind, queue_fetch_task
 
 __all__ = ['AIOHttpMixin', 'LazySession']
 
@@ -45,13 +45,20 @@ class AIOHttpMixin:
         session: aiohttp.ClientSession | LazySession,
         user_agent=None,
         per_request_timeout=10,
+        *,
+        budget: FetchBudget | None = None,
     ):
         self._session = session
+        self._budget = budget
         self.user_agent = user_agent or DEFAULT_USER_AGENT
         self.per_request_timeout = per_request_timeout
         self.__results: dict[Any, Any] = {}
         self.__result_events: dict[Any, asyncio.Event] = {}
         super().__init__()
+
+    def _charge(self, kind: FetchKind):
+        if self._budget is not None:
+            self._budget.charge(kind)
 
     def get_session(self) -> aiohttp.ClientSession:
         session = self._session

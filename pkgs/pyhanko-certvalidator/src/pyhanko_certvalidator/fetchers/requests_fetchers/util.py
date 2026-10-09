@@ -6,17 +6,29 @@ from typing import Any
 import requests
 
 from ..api import DEFAULT_USER_AGENT
-from ..common_utils import queue_fetch_task
+from ..common_utils import FetchBudget, FetchKind, queue_fetch_task
 
 __all__ = ['RequestsFetcherMixin']
 
 
 class RequestsFetcherMixin:
-    def __init__(self, user_agent=None, per_request_timeout=10):
+    def __init__(
+        self,
+        user_agent=None,
+        per_request_timeout=10,
+        *,
+        budget: FetchBudget | None = None,
+    ):
+        self._budget = budget
         self.user_agent = user_agent or DEFAULT_USER_AGENT
         self.per_request_timeout = per_request_timeout
         self.__results: dict[Any, Any] = {}
         self.__result_events: dict[Any, asyncio.Event] = {}
+
+    def _charge(self, kind: FetchKind):
+        # runs on the event loop thread, before dispatching to a worker thread
+        if self._budget is not None:
+            self._budget.charge(kind)
 
     def get_results(self):
         return {

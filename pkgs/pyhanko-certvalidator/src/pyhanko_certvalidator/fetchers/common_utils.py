@@ -4,9 +4,10 @@ and OCSP responses.
 """
 
 import asyncio
+import enum
 import logging
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import TypeVar
 
 from asn1crypto import algos, cms, core, ocsp, pem, x509
@@ -15,6 +16,7 @@ from asn1crypto.x509 import DistributionPoint
 from .. import errors
 from ..authority import Authority
 from ..util import get_ac_extension_value
+from .api import FetchLimits
 
 __all__ = [
     'ACCEPTABLE_CERT_DER_ALIASES',
@@ -70,6 +72,70 @@ ACCEPTABLE_PKCS7_DER_ALIASES = frozenset(
         'binary/octet-stream',
     ]
 )
+
+
+class FetchKind(enum.Enum):
+    CERT = errors.CertificateFetchError
+    CRL = errors.CRLFetchError
+    OCSP = errors.OCSPFetchError
+
+
+class FetchBudget:
+    """
+    Request counters enforcing a :class:`.FetchLimits` object.
+
+    Not thread-safe: :meth:`charge` must be called on the event loop thread,
+    before any work is dispatched to a worker thread.
+    """
+
+    def __init__(self, limits: FetchLimits):
+        self.limits = limits
+        self._requests = 0
+        self._cert_requests = 0
+        self._exhausted_logged = False
+
+    def charge(self, kind: FetchKind):
+        """
+        Account for one network request that is about to be made.
+
+        :raises:
+            The fetch error type matching ``kind`` if a limit was reached.
+        """
+        limits = self.limits
+        if limits.max_requests is not None and (
+            self._requests >= limits.max_requests
+        ):
+            self._refuse(kind, f"{limits.max_requests} requests")
+        if kind is FetchKind.CERT:
+            if limits.max_cert_requests is not None and (
+                self._cert_requests >= limits.max_cert_requests
+            ):
+                self._refuse(
+                    kind, f"{limits.max_cert_requests} certificate requests"
+                )
+            self._cert_requests += 1
+        self._requests += 1
+
+    def _refuse(self, kind: FetchKind, limit_description: str):
+        msg = f"Fetch limit of {limit_description} reached."
+        if self._exhausted_logged:
+            logger.debug(msg)
+        else:
+            self._exhausted_logged = True
+            logger.warning(f"{msg} Further fetches will be refused.")
+        raise kind.value(msg)
+
+
+def cap_aia_urls(budget: FetchBudget | None, urls: Iterable[str]) -> list[str]:
+    url_list = list(urls)
+    limit = budget.limits.max_aia_urls_per_object if budget else None
+    if limit is not None and len(url_list) > limit:
+        logger.warning(
+            f"Found {len(url_list)} caIssuers URLs, but only {limit} are "
+            f"allowed per certificate or CRL. Ignoring the rest."
+        )
+        return url_list[:limit]
+    return url_list
 
 
 def unpack_cert_content(

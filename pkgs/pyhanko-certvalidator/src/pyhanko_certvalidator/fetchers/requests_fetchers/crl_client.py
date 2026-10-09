@@ -8,6 +8,7 @@ from ... import errors
 from ...util import get_relevant_crl_dps, issuer_serial
 from ..api import CRLFetcher
 from ..common_utils import (
+    FetchKind,
     crl_job_results_as_completed,
     enumerate_delivery_point_urls,
 )
@@ -41,6 +42,7 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
 
     async def _fetch_single(self, url):
         async def task():
+            self._charge(FetchKind.CRL)
             logger.info(f"Requesting CRL from {url}...")
             try:
                 response = await self._get(

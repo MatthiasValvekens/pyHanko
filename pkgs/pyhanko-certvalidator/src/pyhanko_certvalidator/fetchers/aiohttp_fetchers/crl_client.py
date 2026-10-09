@@ -8,6 +8,8 @@ from ... import errors
 from ...util import get_relevant_crl_dps, issuer_serial
 from ..api import CRLFetcher
 from ..common_utils import (
+    FetchBudget,
+    FetchKind,
     crl_job_results_as_completed,
     enumerate_delivery_point_urls,
 )
@@ -22,8 +24,12 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         session: aiohttp.ClientSession | LazySession,
         user_agent=None,
         per_request_timeout=10,
+        *,
+        budget: FetchBudget | None = None,
     ):
-        super().__init__(session, user_agent, per_request_timeout)
+        super().__init__(
+            session, user_agent, per_request_timeout, budget=budget
+        )
         self._by_cert: dict[bytes, list[crl.CertificateList]] = {}
 
     async def fetch(
@@ -69,6 +75,7 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
 
     async def _single_fetch(self, url):
         async def task():
+            self._charge(FetchKind.CRL)
             return await _grab_crl(
                 url,
                 user_agent=self.user_agent,

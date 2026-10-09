@@ -9,6 +9,8 @@ from ...authority import Authority
 from ...util import get_ocsp_urls, issuer_serial
 from ..api import OCSPFetcher
 from ..common_utils import (
+    FetchBudget,
+    FetchKind,
     format_ocsp_request,
     ocsp_job_get_earliest,
     process_ocsp_response_data,
@@ -26,8 +28,12 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
         per_request_timeout=10,
         certid_hash_algo='sha1',
         request_nonces=True,
+        *,
+        budget: FetchBudget | None = None,
     ):
-        super().__init__(session, user_agent, per_request_timeout)
+        super().__init__(
+            session, user_agent, per_request_timeout, budget=budget
+        )
         if certid_hash_algo not in ('sha1', 'sha256'):
             raise ValueError(
                 f'certid_hash_algo must be one of "sha1", "sha256", not '
@@ -81,17 +87,20 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
             f"{';'.join(ocsp_urls)}..."
         )
         session = self.get_session()
-        fetch_jobs = (
-            _grab_ocsp(
+
+        async def fetch_single(ocsp_url):
+            self._charge(FetchKind.OCSP)
+            return await _grab_ocsp(
                 ocsp_request,
                 ocsp_url,
                 user_agent=self.user_agent,
                 session=session,
                 timeout=self.per_request_timeout,
             )
-            for ocsp_url in ocsp_urls
+
+        return await ocsp_job_get_earliest(
+            fetch_single(ocsp_url) for ocsp_url in ocsp_urls
         )
-        return await ocsp_job_get_earliest(fetch_jobs)
 
     def fetched_responses(self) -> Iterable[ocsp.OCSPResponse]:
         return self.get_results()

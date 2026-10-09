@@ -9,6 +9,8 @@ from ...authority import Authority
 from ...util import get_ocsp_urls, issuer_serial
 from ..api import OCSPFetcher
 from ..common_utils import (
+    FetchBudget,
+    FetchKind,
     format_ocsp_request,
     ocsp_job_get_earliest,
     process_ocsp_response_data,
@@ -25,8 +27,10 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
         per_request_timeout=10,
         certid_hash_algo='sha1',
         request_nonces=True,
+        *,
+        budget: FetchBudget | None = None,
     ):
-        super().__init__(user_agent, per_request_timeout)
+        super().__init__(user_agent, per_request_timeout, budget=budget)
         if certid_hash_algo not in ('sha1', 'sha256'):
             raise ValueError(
                 f'certid_hash_algo must be one of "sha1", "sha256", not '
@@ -46,6 +50,7 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
         )
 
     async def _fetch_single(self, ocsp_url, ocsp_request):
+        self._charge(FetchKind.OCSP)
         try:
             logger.info(f"Requesting OCSP response from {ocsp_url}...")
             response = await self._post(

@@ -15,6 +15,7 @@ __all__ = [
     'DEFAULT_USER_AGENT',
     'CRLFetcher',
     'CertificateFetcher',
+    'FetchLimits',
     'FetcherBackend',
     'Fetchers',
     'OCSPFetcher',
@@ -161,6 +162,50 @@ class CertificateFetcher(abc.ABC):
         Return all certificates retrieved by this certificate fetcher.
         """
         raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class FetchLimits:
+    """
+    .. versionadded:: 0.33.0
+
+    Bounds on the amount of fetching that the built-in fetcher backends
+    perform on behalf of a single :class:`.Fetchers` instance (which, in
+    practice, means a single validation context).
+
+    URLs to fetch are taken from the certificates and CRLs being processed, so
+    without bounds, a single hostile input can trigger an arbitrary amount of
+    network activity. The defaults are far above what any real PKI needs.
+    Set a field to ``None`` to disable that particular limit.
+
+    Requests that are served from a fetcher's cache are not counted.
+    When a limit is hit, the request is not made and the fetch fails with the
+    usual error for its type (e.g. :class:`.CertificateFetchError`).
+
+    .. note::
+        Only the built-in backends enforce these limits. Custom
+        :class:`.FetcherBackend` implementations are responsible for
+        their own limits.
+    """
+
+    max_requests: int | None = 1000
+    """
+    Maximum number of network requests of any type.
+    """
+
+    max_cert_requests: int | None = 200
+    """
+    Maximum number of requests for issuer certificates, whether the URL came
+    from a certificate or from a CRL. These requests also count towards
+    :attr:`max_requests`. Since every step of chasing down a certificate chain
+    costs at least one such request, this also bounds the chain length.
+    """
+
+    max_aia_urls_per_object: int | None = 10
+    """
+    Maximum number of ``caIssuers`` URLs to follow for any single certificate
+    or CRL. Surplus URLs are ignored.
+    """
 
 
 @dataclass(frozen=True)
