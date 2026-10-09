@@ -35,9 +35,12 @@ from pyhanko.sign.timestamps import DummyTimeStamper
 from pyhanko.sign.validation import SignatureCoverageLevel, ades
 from pyhanko.sign.validation.errors import TSTDigestNotAvailableError
 from pyhanko.sign.validation.policy_decl import (
+    CertificateFetchingRule,
     LocalKnowledge,
     PdfSignatureValidationSpec,
     QualificationRequirements,
+    RevinfoOnlineFetchingRule,
+    RevocationInfoGatheringSpec,
     SignatureValidationSpec,
     bootstrap_validation_data_handlers,
 )
@@ -1712,3 +1715,44 @@ async def test_content_ts_with_different_digest_not_supported(pki_services):
 def test_bootstrap_handlers_default_backend():
     handlers = bootstrap_validation_data_handlers(DEFAULT_SIG_VALIDATION_SPEC)
     assert isinstance(handlers.owned_fetcher_backend, AIOHttpFetcherBackend)
+
+
+_ONLINE_FETCHING_PERMITTED = {
+    (RevinfoOnlineFetchingRule.ALWAYS_FETCH, True),
+    (RevinfoOnlineFetchingRule.ALWAYS_FETCH, False),
+    (RevinfoOnlineFetchingRule.NO_HISTORICAL_FETCH, False),
+}
+
+
+@pytest.mark.parametrize('online_rule', list(RevinfoOnlineFetchingRule))
+@pytest.mark.parametrize('historical', [True, False])
+@pytest.mark.parametrize('cert_rule', list(CertificateFetchingRule))
+def test_certificate_fetching_rule_matrix(online_rule, historical, cert_rule):
+    expect_cert_fetcher = (
+        cert_rule == CertificateFetchingRule.FOLLOW_ONLINE_RULE
+        and (online_rule, historical) in _ONLINE_FETCHING_PERMITTED
+    )
+    spec = dataclasses.replace(
+        DEFAULT_SIG_VALIDATION_SPEC,
+        revinfo_gathering_policy=RevocationInfoGatheringSpec(
+            online_fetching_rule=online_rule,
+            certificate_fetching_rule=cert_rule,
+        ),
+    )
+    handlers = bootstrap_validation_data_handlers(
+        spec, is_historical=historical
+    )
+    assert (handlers.cert_registry.fetcher is not None) == expect_cert_fetcher
+
+
+def test_never_fetch_certs_keeps_revinfo_fetching():
+    spec = dataclasses.replace(
+        DEFAULT_SIG_VALIDATION_SPEC,
+        revinfo_gathering_policy=RevocationInfoGatheringSpec(
+            certificate_fetching_rule=CertificateFetchingRule.NEVER_FETCH,
+        ),
+    )
+    handlers = bootstrap_validation_data_handlers(spec, is_historical=False)
+    assert handlers.cert_registry.fetcher is None
+    assert isinstance(handlers.owned_fetcher_backend, AIOHttpFetcherBackend)
+    assert handlers.revinfo_manager.fetching_allowed

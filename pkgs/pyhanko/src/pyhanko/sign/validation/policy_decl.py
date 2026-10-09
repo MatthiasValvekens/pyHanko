@@ -37,6 +37,7 @@ from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 
 __all__ = [
     'CMSAlgorithmUsagePolicy',
+    'CertificateFetchingRule',
     'LocalKnowledge',
     'PdfSignatureValidationSpec',
     'QualificationRequirements',
@@ -67,6 +68,41 @@ class RevinfoOnlineFetchingRule(enum.Enum):
     """
 
 
+class CertificateFetchingRule(enum.Enum):
+    """
+    .. versionadded:: 0.38.0
+
+    Controls whether certificates may be fetched from URLs found in the
+    material being validated. This is orthogonal to
+    :class:`RevinfoOnlineFetchingRule`, which governs CRLs and OCSP responses.
+    """
+
+    FOLLOW_ONLINE_RULE = enum.auto()
+    """
+    Certificates may be fetched whenever the
+    :class:`RevinfoOnlineFetchingRule` permits online fetching.
+    """
+
+    NEVER_FETCH = enum.auto()
+    """
+    Never fetch certificates, even if online fetching is otherwise permitted.
+    This covers both AIA ``caIssuers`` chasing during path building and
+    certificate fetches for CRL issuers (URLs taken from CRLs).
+
+    CRLs and OCSP responses can still be fetched, subject to
+    :class:`RevinfoOnlineFetchingRule`.
+
+    .. warning::
+        This removes the fetches whose URLs are most directly under the
+        control of whoever produced the signed material, and nothing more.
+        It does not make online fetching as a whole safe.
+
+        The cost is that validation fails when intermediate certificates
+        are not supplied with the signature or otherwise known locally,
+        and likewise for indirect CRL issuers that are not available locally.
+    """
+
+
 @dataclass(frozen=True)
 class RevocationInfoGatheringSpec:
     online_fetching_rule: RevinfoOnlineFetchingRule = (
@@ -84,6 +120,16 @@ class RevocationInfoGatheringSpec:
     validation operation and released when it ends. Supply one explicitly to
     pool resources across operations. In this case, the lifecycle management
     responsibility is yours.
+    """
+
+    certificate_fetching_rule: CertificateFetchingRule = (
+        CertificateFetchingRule.FOLLOW_ONLINE_RULE
+    )
+    """
+    .. versionadded:: 0.38.0
+
+    Rule that determines whether certificates may be fetched online, in
+    addition to the restrictions imposed by :attr:`online_fetching_rule`.
     """
 
 
@@ -248,4 +294,9 @@ def bootstrap_validation_data_handlers(
         poe_manager=poe_manager_override,
         nonrevoked_assertions=knowledge.nonrevoked_assertions,
     )
+    if (
+        revinfo_policy.certificate_fetching_rule
+        == CertificateFetchingRule.NEVER_FETCH
+    ):
+        handlers.cert_registry.fetcher = None
     return handlers
