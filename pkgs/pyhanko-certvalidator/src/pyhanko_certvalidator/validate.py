@@ -723,17 +723,17 @@ class _PathValidationState:
             )
             initial_any_policy_inhibit = (
                 parameters.initial_any_policy_inhibit
-                and parameters.initial_any_policy_inhibit
+                or trust_anchor_params.initial_any_policy_inhibit
             )
 
             initial_explicit_policy = (
                 parameters.initial_explicit_policy
-                and parameters.initial_explicit_policy
+                or trust_anchor_params.initial_explicit_policy
             )
 
             initial_policy_mapping_inhibit = (
                 parameters.initial_policy_mapping_inhibit
-                and parameters.initial_policy_mapping_inhibit
+                or trust_anchor_params.initial_policy_mapping_inhibit
             )
             initial_permitted_subtrees = PermittedSubtrees(
                 parameters.initial_permitted_subtrees
