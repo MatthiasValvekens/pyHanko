@@ -1,5 +1,7 @@
+import asyncio
 from asyncio import to_thread
 from collections.abc import Awaitable
+from typing import Any
 
 import requests
 
@@ -13,8 +15,8 @@ class RequestsFetcherMixin:
     def __init__(self, user_agent=None, per_request_timeout=10):
         self.user_agent = user_agent or DEFAULT_USER_AGENT
         self.per_request_timeout = per_request_timeout
-        self.__results = {}
-        self.__result_events = {}
+        self.__results: dict[Any, Any] = {}
+        self.__result_events: dict[Any, asyncio.Event] = {}
 
     def get_results(self):
         return {
