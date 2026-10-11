@@ -81,7 +81,7 @@ jobs:
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-${{ strategy.job-index }}
           path: "pkgs/*/*-coverage.xml"
@@ -145,7 +145,7 @@ jobs:
         env:
           PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
       - name: Stash coverage report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-p11-pqc-${{ strategy.job-index }}
           path: "pkgs/*/*-coverage.xml"
@@ -195,7 +195,7 @@ jobs:
           LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
           LIVE_CSC_SCAL2_HOST_URL: http://localhost:8999
       - name: Stash coverage report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-live-${{ strategy.job-index }}
           path: "internal/integration-tests/*-coverage.xml"
@@ -225,7 +225,7 @@ jobs:
         env:
           PKCS11_PLATFORMS: yubihsm,yubikey-nano,safenet,nitrokey
       - name: Stash coverage reports
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-hsm
           path: "pkgs/*/*-coverage.xml"
@@ -263,7 +263,7 @@ jobs:
             --ignore tests/test_cli_signing_pkcs11.py \
             tests
       - name: Stash coverage report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-smoke-tests
           path: "pkgs/pyhanko/*-coverage.xml"
