@@ -7,6 +7,38 @@ pyHanko
 -------
 
 
+.. _release-0.38.0:
+
+0.38.0
+======
+
+*Release date:* 2026-10-17
+
+
+New features and enhancements
+-----------------------------
+
+Validation
+^^^^^^^^^^
+
+ * Add :class:`~pyhanko.sign.validation.policy_decl.CertificateFetchingRule`
+   to control AIA certificate fetching.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Resource-manage stream decoding: decoding now has a budget by default,
+   both at the level of an individual stream and at the document level.
+ * Support Brazilian PAdES variant
+
+
+Bugs fixed
+----------
+
+ * Only enter page tree nodes via their canonical path during differential analysis.
+ * Two well-formedness checks on /Prev to prevent loops and parsing errors.
+
+
 .. _release-0.37.0:
 
 0.37.0
@@ -57,9 +89,10 @@ Miscellaneous
  * Make ``aiohttp`` the default backend for fetching validation data
    and timestamp tokens
 
-     * ``HTTPTimeStamper`` absorbs ``AIOHttpTimeStamper``, which becomes a deprecated
-      subclass.
-     * Requests-based version renamed to ``RequestsHTTPTimeStamper``.
+   * ``HTTPTimeStamper`` absorbs ``AIOHttpTimeStamper``, which becomes a
+     deprecated subclass.
+   * Requests-based version renamed to ``RequestsHTTPTimeStamper``.
+
 
  * Make ``aiohttp`` resource management more hands-off.
 
@@ -2763,6 +2796,19 @@ Initial release.
 pyhanko-certvalidator
 ---------------------
 
+.. _certvalidator-release-0.33.0:
+
+0.33.0
+======
+
+*Release date:* 2026-10-17
+
+
+ * Control resource consumption in policy graph
+ * Bound the amount of fetching done by the built-in fetcher backends;
+   fetching has a budget now.
+
+
 .. _certvalidator-release-0.32.1:
 
 0.32.1
@@ -3527,6 +3573,17 @@ The impact on the high-level API should be small to nonexistent, but caution whe
 -----------
 pyhanko-cli
 -----------
+
+.. _cli-release-0.6.0:
+
+0.6.0
+=====
+
+*Release date:* 2026-10-17
+
+
+ * Add ``--no-decode-limits`` to CLI commands that read a PDF
+
 
 .. _cli-release-0.5.0:
 
