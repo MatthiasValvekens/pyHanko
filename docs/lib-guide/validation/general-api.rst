@@ -24,6 +24,47 @@ General API design
 .. |ValidationContext| replace:: :class:`~.pyhanko_certvalidator.ValidationContext`
 .. |AdESLTAValidationResult| replace:: :class:`~.pyhanko.sign.validation.ades.AdESLTAValidationResult`
 
+
+.. warning::
+
+    PDF is a complicated file format. Validating PDF signatures requires
+    parsing a great deal of that structure before getting to the actual
+    signature data. This means that validating a PDF signature
+    involves processing potentially untrusted content in a highly complex
+    file format, which comes with inherent risk. The most significant threats
+    involve denial-of-service based on uncontrolled or asymmetric resource
+    consumption. These are especially relevant for signature
+    validators taking input from a network API.
+
+    While this library strives not to fall into such traps and sets resource
+    consumption budgets by default, consider isolating your validation
+    workflows with constrained memory and CPU resources as a defence in depth strategy.
+    The decoding budgets are governed by
+    :class:`~.pyhanko.pdf_utils.decode_limits.DecodeLimits`.
+
+
+.. warning::
+
+    Similarly, certificate validation can involve making requests to endpoints
+    specified in those certificates. For revocation data collection
+    this process happens after the putative chain of trust has already been
+    verified, which means the risk is limited to past CA compromises (which
+    are rare), but automatic certificate issuer discovery involves making
+    ``GET`` requests based on URLs that may be attacker-controlled.
+
+    By default, fetching of live validation data is disabled in pyHanko,
+    unless enabled by the ``allow_fetching`` parameter to |ValidationContext|.
+    To fetch revocation info but disable issuer certificate discovery, set
+    :attr:`~.pyhanko.sign.validation.policy_decl.RevocationInfoGatheringSpec.certificate_fetching_rule`
+    to :attr:`~.pyhanko.sign.validation.policy_decl.CertificateFetchingRule.NEVER_FETCH`, or
+    directly define your |ValidationContext| without a certificate fetcher configured.
+    To intercept outgoing requests,
+    see :class:`~.pyhanko_certvalidator.fetchers.api.FetchLimits`
+    and pass an ``aiohttp`` session with a restrictive connector or resolver
+    to :class:`~.pyhanko_certvalidator.fetchers.aiohttp_fetchers.AIOHttpFetcherBackend`.
+
+
+
 PyHanko's validation functionality resides in the
 :mod:`~.pyhanko.sign.validation` module.
 Its most important components are
