@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "common-test-utils"
 version = "0.dev0"
 description = "Internal package with common testing utils & test data"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "certomancer[web-api-async]",
     "requests-mock>=1.8.0",

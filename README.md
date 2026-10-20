@@ -35,7 +35,7 @@ pip install pyHanko[pkcs11,image-support,opentype,qr] pyhanko-cli
 This `pip` invocation includes the optional dependencies required for PKCS#11, image handling,
 OpenType/TrueType support, QR code generation and the CLI.
 
-PyHanko requires Python 3.10 or later.
+PyHanko requires Python 3.11 or later.
 
 ### Contributing
 
