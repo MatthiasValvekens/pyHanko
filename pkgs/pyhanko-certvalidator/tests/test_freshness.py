@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pyhanko_certvalidator import ValidationContext
@@ -38,8 +38,8 @@ async def test_cooldown_period_ok():
         ocsps=[alice_ocsp],
         crls=[root_crl],
         revinfo_policy=policy,
-        moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
-        best_signature_time=datetime(2020, 9, 18, tzinfo=timezone.utc),
+        moment=datetime(2020, 10, 1, tzinfo=UTC),
+        best_signature_time=datetime(2020, 9, 18, tzinfo=UTC),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     await async_validate_path(vc, path)
@@ -66,8 +66,8 @@ async def test_cooldown_period_too_early():
         ocsps=[alice_ocsp],
         crls=[root_crl],
         revinfo_policy=policy,
-        moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
-        best_signature_time=datetime(2020, 9, 30, tzinfo=timezone.utc),
+        moment=datetime(2020, 10, 1, tzinfo=UTC),
+        best_signature_time=datetime(2020, 9, 30, tzinfo=UTC),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     with pytest.raises(PathValidationError, match='CRL.*recent enough'):
@@ -95,7 +95,7 @@ async def test_use_delta_ok():
         ocsps=[alice_ocsp],
         crls=[root_crl],
         revinfo_policy=policy,
-        moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
+        moment=datetime(2020, 10, 1, tzinfo=UTC),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     await async_validate_path(vc, path)
@@ -122,7 +122,7 @@ async def test_use_delta_stale():
         ocsps=[alice_ocsp],
         crls=[root_crl],
         revinfo_policy=policy,
-        moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
+        moment=datetime(2020, 10, 1, tzinfo=UTC),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     with pytest.raises(PathValidationError, match='CRL.*recent enough'):
@@ -153,7 +153,7 @@ async def test_use_most_recent():
         ocsps=[alice_ocsp_older, alice_ocsp_recent],
         crls=[root_crl],
         revinfo_policy=policy,
-        moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
+        moment=datetime(2020, 12, 10, tzinfo=UTC),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     with pytest.raises(RevokedError):
@@ -167,7 +167,7 @@ async def test_use_most_recent():
         ocsps=[alice_ocsp_older],
         crls=[root_crl],
         revinfo_policy=policy,
-        moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
+        moment=datetime(2020, 12, 10, tzinfo=UTC),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     await async_validate_path(vc, path)
@@ -197,7 +197,7 @@ async def test_discard_post_validation_time():
         ocsps=[alice_ocsp_older, alice_ocsp_recent],
         crls=[root_crl],
         revinfo_policy=policy,
-        moment=datetime(2020, 11, 29, tzinfo=timezone.utc),
+        moment=datetime(2020, 11, 29, tzinfo=UTC),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     await async_validate_path(vc, path)

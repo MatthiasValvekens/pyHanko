@@ -10,7 +10,7 @@ classes.
 import os
 from collections.abc import Callable, Generator, Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from io import BytesIO
 from typing import TypeVar
@@ -566,7 +566,7 @@ def isoparse(dt_str: str) -> datetime:
     dt = parse(dt_str)
     if dt.tzinfo is None:
         # assume UTC
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 

@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pytest
@@ -803,7 +803,7 @@ def test_add_revinfo_and_timestamp(pki_services):
         status = ades_status.api_status
         assert status.valid and status.trusted
 
-        assert ades_status.best_signature_time == datetime.now(tz=timezone.utc)
+        assert ades_status.best_signature_time == datetime.now(tz=UTC)
 
 
 @freeze_time('2020-11-01')

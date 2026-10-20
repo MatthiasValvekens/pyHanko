@@ -9,7 +9,7 @@ import logging
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import IO, Any
 
 import tzlocal
@@ -1182,7 +1182,7 @@ class PdfSigner:
             else None
         )
         if algorithm_policy is not None:
-            now = datetime.now(tz=timezone.utc)
+            now = datetime.now(tz=UTC)
             md_algo_obj = algos.DigestAlgorithm({'algorithm': md_algorithm})
             if not algorithm_policy.digest_algorithm_allowed(md_algo_obj, now):
                 raise SigningError(

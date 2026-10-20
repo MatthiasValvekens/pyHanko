@@ -2,7 +2,7 @@ import enum
 import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, TypeAlias
 
 from asn1crypto import core, x509
@@ -145,7 +145,7 @@ class POEManager:
             raise NotImplementedError
         digest = digest_for_poe(b_data)
 
-        dt = dt or self._current_dt_override or datetime.now(timezone.utc)
+        dt = dt or self._current_dt_override or datetime.now(UTC)
         vo_type = guess_validation_object_type(data)
         vo = None
         if vo_type:
@@ -177,7 +177,7 @@ class POEManager:
         :return:
             The oldest POE datetime available.
         """
-        dt = dt or self._current_dt_override or datetime.now(timezone.utc)
+        dt = dt or self._current_dt_override or datetime.now(UTC)
         return self.register_known_poe(
             KnownPOE(
                 poe_type=poe_type,

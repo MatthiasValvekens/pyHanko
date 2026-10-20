@@ -16,7 +16,7 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from copy import copy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import (
     Any,
     Generic,
@@ -2517,7 +2517,7 @@ async def simulate_future_ades_lta_validation(
     :return:
         An AdES LTA validation result.
     """
-    now = current_reference_time or datetime.now(tz=timezone.utc)
+    now = current_reference_time or datetime.now(tz=UTC)
     timing_info = ValidationTimingInfo(
         validation_time=future_validation_time,
         point_in_time_validation=True,

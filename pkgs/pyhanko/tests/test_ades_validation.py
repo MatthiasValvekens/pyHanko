@@ -392,7 +392,7 @@ async def test_embedded_cades_with_time_happy_path(pki_services):
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
-            2020, 11, 1, tzinfo=datetime.timezone.utc
+            2020, 11, 1, tzinfo=datetime.UTC
         )
 
 
@@ -488,7 +488,7 @@ async def test_embedded_cades_with_time_happy_path_with_tl(
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
-            2020, 11, 1, tzinfo=datetime.timezone.utc
+            2020, 11, 1, tzinfo=datetime.UTC
         )
         qual: QualificationResult = result.api_status.qualification_result
         assert qual.status.qualified
@@ -727,7 +727,7 @@ async def test_embedded_cades_pre_revoke_with_poe(pki_services):
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
-            2020, 11, 1, tzinfo=datetime.timezone.utc
+            2020, 11, 1, tzinfo=datetime.UTC
         )
 
 
@@ -756,7 +756,7 @@ async def test_pades_lta_happy_path_past_time(pki_services):
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
-            2020, 11, 20, tzinfo=datetime.timezone.utc
+            2020, 11, 20, tzinfo=datetime.UTC
         )
 
 
@@ -773,12 +773,12 @@ async def test_simulate_future_lta_happy_path(pki_services, with_lta):
         r.embedded_signatures[0],
         pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
         future_validation_time=datetime.datetime(
-            2030, 11, 20, tzinfo=datetime.timezone.utc
+            2030, 11, 20, tzinfo=datetime.UTC
         ),
     )
     assert result.ades_subindic == AdESPassed.OK
     assert result.best_signature_time == datetime.datetime(
-        2020, 11, 20, tzinfo=datetime.timezone.utc
+        2020, 11, 20, tzinfo=datetime.UTC
     )
 
 
@@ -824,12 +824,12 @@ async def test_simulate_future_lta_happy_path_eseal(
         r.embedded_signatures[0],
         pdf_validation_spec=spec,
         future_validation_time=datetime.datetime(
-            2030, 11, 20, tzinfo=datetime.timezone.utc
+            2030, 11, 20, tzinfo=datetime.UTC
         ),
     )
     assert result.ades_subindic == AdESPassed.OK
     assert result.best_signature_time == datetime.datetime(
-        2020, 11, 20, tzinfo=datetime.timezone.utc
+        2020, 11, 20, tzinfo=datetime.UTC
     )
 
 
@@ -898,7 +898,7 @@ async def test_pades_lta_fail_qualification_requirements(
         r.embedded_signatures[0],
         pdf_validation_spec=spec,
         future_validation_time=datetime.datetime(
-            2030, 11, 20, tzinfo=datetime.timezone.utc
+            2030, 11, 20, tzinfo=datetime.UTC
         ),
     )
     assert result.ades_subindic == AdESIndeterminate.SIG_CONSTRAINTS_FAILURE
@@ -917,12 +917,12 @@ async def test_simulate_future_lta_happy_path_with_ts_chain(pki_services):
             r.embedded_signatures[0],
             pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
             future_validation_time=datetime.datetime(
-                2050, 11, 20, tzinfo=datetime.timezone.utc
+                2050, 11, 20, tzinfo=datetime.UTC
             ),
         )
     assert result.ades_subindic == AdESPassed.OK
     assert result.best_signature_time == datetime.datetime(
-        2020, 11, 20, tzinfo=datetime.timezone.utc
+        2020, 11, 20, tzinfo=datetime.UTC
     )
 
 
@@ -937,7 +937,7 @@ async def test_simulate_future_lta_no_revinfo_fail(pki_services):
         r.embedded_signatures[0],
         pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
         future_validation_time=datetime.datetime(
-            2030, 11, 20, tzinfo=datetime.timezone.utc
+            2030, 11, 20, tzinfo=datetime.UTC
         ),
     )
     assert result.ades_subindic.status == AdESStatus.INDETERMINATE
@@ -961,7 +961,7 @@ async def test_simulate_future_lta_with_broken_ts_chain(pki_services):
             r.embedded_signatures[0],
             pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
             future_validation_time=datetime.datetime(
-                2050, 11, 20, tzinfo=datetime.timezone.utc
+                2050, 11, 20, tzinfo=datetime.UTC
             ),
         )
     assert result.ades_subindic == AdESIndeterminate.OUT_OF_BOUNDS_NO_POE
@@ -1032,7 +1032,7 @@ async def test_pades_lta_happy_path_past_time_with_chain(pki_services):
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
-            2020, 11, 20, tzinfo=datetime.timezone.utc
+            2020, 11, 20, tzinfo=datetime.UTC
         )
 
 
@@ -1041,7 +1041,7 @@ class NoSha512AfterSomeTime(AlgorithmUsagePolicy):
 
     def __init__(self, year):
         self.cutoff = datetime.datetime(
-            year, 12, 31, 23, 59, 59, tzinfo=datetime.timezone.utc
+            year, 12, 31, 23, 59, 59, tzinfo=datetime.UTC
         )
 
     def signature_algorithm_allowed(
@@ -1095,7 +1095,7 @@ class BanAllTheThings(AlgorithmUsagePolicy):
 class RSAConsideredHarmful(AlgorithmUsagePolicy):
     def __init__(self, year):
         self.cutoff = datetime.datetime(
-            year, 12, 31, 23, 59, 59, tzinfo=datetime.timezone.utc
+            year, 12, 31, 23, 59, 59, tzinfo=datetime.UTC
         )
 
     def signature_algorithm_allowed(
@@ -1450,7 +1450,7 @@ async def test_nontraditional_hybrid_lta_with_failed_timestamp(pki_services):
         assert not result.api_status.bottom_line
         assert result.api_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
         assert result.best_signature_time == datetime.datetime(
-            2022, 11, 20, tzinfo=datetime.timezone.utc
+            2022, 11, 20, tzinfo=datetime.UTC
         )
 
 
@@ -1526,9 +1526,7 @@ async def test_pades_multi_sig_timestamp_algo_hedge_ok(pki_services):
             local_knowledge,
             known_poes=list(
                 local_knowledge.assert_existence_known_at(
-                    datetime.datetime(
-                        2020, 11, 20, tzinfo=datetime.timezone.utc
-                    )
+                    datetime.datetime(2020, 11, 20, tzinfo=datetime.UTC)
                 )
             ),
         )
@@ -1546,7 +1544,7 @@ async def test_pades_multi_sig_timestamp_algo_hedge_ok(pki_services):
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
-            2020, 11, 20, tzinfo=datetime.timezone.utc
+            2020, 11, 20, tzinfo=datetime.UTC
         )
 
 
@@ -1615,7 +1613,7 @@ async def test_pades_multi_doc_timestamp_algo_hedge_ok(pki_services):
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
-            2020, 11, 20, tzinfo=datetime.timezone.utc
+            2020, 11, 20, tzinfo=datetime.UTC
         )
 
 

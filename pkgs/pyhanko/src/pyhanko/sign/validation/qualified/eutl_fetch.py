@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiohttp
@@ -85,7 +85,7 @@ class FileSystemTLCache(TLCache):
                 index_data = json.load(inf)
                 for key, entry in index_data.items():
                     exp_ts = datetime.fromtimestamp(
-                        entry['exp_epoch_seconds'], tz=timezone.utc
+                        entry['exp_epoch_seconds'], tz=UTC
                     )
                     self._cache[key] = (exp_ts, entry['fname'])
         logger.debug(
@@ -94,7 +94,7 @@ class FileSystemTLCache(TLCache):
 
     def __getitem__(self, key: str) -> str:
         exp_ts, fname = self._cache[key]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if now > exp_ts:
             raise KeyError
         cached_file_path = self._root / fname
@@ -110,7 +110,7 @@ class FileSystemTLCache(TLCache):
         return content
 
     def __setitem__(self, key: str, value: str) -> None:
-        exp_ts = datetime.now(timezone.utc) + self._expire_after
+        exp_ts = datetime.now(UTC) + self._expire_after
         fname = hashlib.sha256(key.encode('utf8')).hexdigest()
         index = self._root / 'index.json'
         if index.exists():

@@ -1,6 +1,6 @@
 import dataclasses
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
@@ -118,7 +118,7 @@ async def past_validate(
 
     try:
         # time slide
-        init_control_time = init_control_time or datetime.now(tz=timezone.utc)
+        init_control_time = init_control_time or datetime.now(tz=UTC)
         control_time = await time_slide(
             path,
             init_control_time=init_control_time,

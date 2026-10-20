@@ -1,6 +1,6 @@
 import base64
 import dataclasses
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -513,7 +513,7 @@ def test_parse_ca_with_extensions():
     parse_result = _raw_tlservice_parse(xml)
     result = eutl_parse._interpret_service_info_for_ca(parse_result)
     assert result.expired_certs_revocation_info == datetime(
-        2016, 6, 30, 21, 0, 0, tzinfo=timezone.utc
+        2016, 6, 30, 21, 0, 0, tzinfo=UTC
     )
     qualification = next(iter(result.qualifications))
     assert qualification.qualifiers == frozenset([tsp.Qualifier.WITH_SSCD])
@@ -649,9 +649,7 @@ def test_parse_service_validity_dates(date_string):
 
     parse_result = _raw_tlservice_parse(xml)
     result = eutl_parse._interpret_service_info_for_ca(parse_result)
-    assert result.base_info.valid_from == datetime(
-        2020, 11, 1, tzinfo=timezone.utc
-    )
+    assert result.base_info.valid_from == datetime(2020, 11, 1, tzinfo=UTC)
 
 
 def test_reject_service_without_status_starting_time():
@@ -850,7 +848,7 @@ def _dummy_service_definition(
         tsp.BaseServiceInformation(
             '',
             'test1',
-            valid_from=datetime(2020, 11, 1, tzinfo=timezone.utc),
+            valid_from=datetime(2020, 11, 1, tzinfo=UTC),
             valid_until=None,
             provider_certs=(INTERM_CERT, *extra_certs),
             additional_info_certificate_type=frozenset(),
@@ -916,7 +914,7 @@ def test_tsp_registry_multiple_sds():
             tsp.BaseServiceInformation(
                 '',
                 'test1',  # quals are too much work to mock
-                valid_from=datetime(2020, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2020, 11, 1, tzinfo=UTC),
                 valid_until=None,
                 provider_certs=(INTERM_CERT,),
                 other_additional_info=frozenset(),
@@ -932,7 +930,7 @@ def test_tsp_registry_multiple_sds():
             tsp.BaseServiceInformation(
                 '',
                 'test2',
-                valid_from=datetime(2020, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2020, 11, 1, tzinfo=UTC),
                 valid_until=None,
                 provider_certs=(INTERM_CERT,),
                 other_additional_info=frozenset(),
@@ -1154,7 +1152,7 @@ def test_tl_override_processing(
 DUMMY_BASE_INFO = tsp.BaseServiceInformation(
     service_type=CA_QC_URI,
     service_name='Dummy',
-    valid_from=datetime(2015, 11, 1, tzinfo=timezone.utc),
+    valid_from=datetime(2015, 11, 1, tzinfo=UTC),
     valid_until=None,
     provider_certs=(TESTING_CA_QUALIFIED.get_cert('root'),),
     additional_info_certificate_type=frozenset([tsp.QcCertType.QC_ESIGN]),
@@ -1560,9 +1558,9 @@ def test_parse_service_history_intervals():
         service_type=ServiceTypeIdentifier(CA_QC_URI),
         interpreter=_interpret_historical_service_info_for_ca,
     )
-    date1 = datetime(2017, 11, 1, tzinfo=timezone.utc)
-    date2 = datetime(2019, 11, 1, tzinfo=timezone.utc)
-    date3 = datetime(2020, 11, 1, tzinfo=timezone.utc)
+    date1 = datetime(2017, 11, 1, tzinfo=UTC)
+    date2 = datetime(2019, 11, 1, tzinfo=UTC)
+    date3 = datetime(2020, 11, 1, tzinfo=UTC)
     intervals = [
         (r.base_info.valid_from, r.base_info.valid_until) for r in result
     ]
@@ -1610,9 +1608,9 @@ def test_parse_service_history_intervals_skip_not_granted():
         service_type=ServiceTypeIdentifier(CA_QC_URI),
         interpreter=_interpret_historical_service_info_for_ca,
     )
-    date1 = datetime(2017, 11, 1, tzinfo=timezone.utc)
-    date2 = datetime(2019, 11, 1, tzinfo=timezone.utc)
-    date3 = datetime(2020, 11, 1, tzinfo=timezone.utc)
+    date1 = datetime(2017, 11, 1, tzinfo=UTC)
+    date2 = datetime(2019, 11, 1, tzinfo=UTC)
+    date3 = datetime(2020, 11, 1, tzinfo=UTC)
     intervals = [
         (r.base_info.valid_from, r.base_info.valid_until) for r in result
     ]
@@ -1660,7 +1658,7 @@ def test_parse_service_history_intervals_skip_invalid_entries():
         service_type=ServiceTypeIdentifier(CA_QC_URI),
         interpreter=_interpret_historical_service_info_for_ca,
     )
-    date2 = datetime(2020, 11, 1, tzinfo=timezone.utc)
+    date2 = datetime(2020, 11, 1, tzinfo=UTC)
     intervals = [
         (r.base_info.valid_from, r.base_info.valid_until) for r in result
     ]
@@ -1679,7 +1677,7 @@ def _validation_context_from_file(path: Path):
     )
 
     vc = policy.build_validation_context(
-        timing_info=ValidationTimingInfo.now(timezone.utc), handlers=None
+        timing_info=ValidationTimingInfo.now(UTC), handlers=None
     )
     assessor = assess.QualificationAssessor(tsp_registry=registry)
     return vc, assessor

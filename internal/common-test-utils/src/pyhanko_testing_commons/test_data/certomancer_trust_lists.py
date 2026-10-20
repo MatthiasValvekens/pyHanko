@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from aiohttp.test_utils import TestClient
@@ -125,7 +125,7 @@ def certomancer_pki_as_trusted_list(
     xml_root = ts_119612.TrustServiceStatusList(
         scheme_information=ts_119612.SchemeInformation(
             list_issue_date_time=XmlDateTime.from_datetime(
-                datetime.now(tz=timezone.utc)
+                datetime.now(tz=UTC)
             ),
         ),
         trust_service_provider_list=ts_119612.TrustServiceProviderList(
@@ -182,7 +182,7 @@ def certomancer_lotl(
                 other_tslpointer=tuple(pointers)
             ),
             list_issue_date_time=XmlDateTime.from_datetime(
-                datetime.now(tz=timezone.utc)
+                datetime.now(tz=UTC)
             ),
         ),
     )

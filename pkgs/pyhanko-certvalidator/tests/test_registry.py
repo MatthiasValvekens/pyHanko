@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from asn1crypto import core, x509
@@ -80,7 +80,7 @@ def test_build_paths_qualified_root_with_wrong_type():
 
 
 def _gen_issuer_candidate_cert(key_identifier, common_name, coords):
-    dt = datetime(2019, 9, 10, tzinfo=timezone.utc)
+    dt = datetime(2019, 9, 10, tzinfo=UTC)
     cert_in = load_cert_object('testing-ca-ed25519', 'interm.cert.pem')
     pubkey = cert_in.public_key
     extensions = [
@@ -132,7 +132,7 @@ def _gen_issuer_candidate_cert(key_identifier, common_name, coords):
 
 def _gen_subject_candidate_cert(aki, iss_common_name, iss_coords, ski=None):
     iss_name = x509.Name.build({'common_name': iss_common_name})
-    dt = datetime(2019, 9, 10, tzinfo=timezone.utc)
+    dt = datetime(2019, 9, 10, tzinfo=UTC)
     cert_in = load_cert_object('testing-ca-ed25519', 'signer.cert.pem')
     pubkey = cert_in.public_key
     extensions = [

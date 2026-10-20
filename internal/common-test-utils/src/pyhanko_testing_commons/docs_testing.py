@@ -27,7 +27,7 @@ import os
 import tempfile
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import (
@@ -87,7 +87,7 @@ EXAMPLE_DOMAIN = 'pyhanko.tests'
 
 #: Fixed point in time at which the doctests run. Chosen to fall within the
 #: validity window of the certomancer ``testing-ca`` material.
-FREEZE_DT = datetime(2020, 8, 1, tzinfo=timezone.utc).astimezone(
+FREEZE_DT = datetime(2020, 8, 1, tzinfo=UTC).astimezone(
     tz=tzlocal.get_localzone()
 )
 
@@ -96,7 +96,7 @@ FREEZE_DT = datetime(2020, 8, 1, tzinfo=timezone.utc).astimezone(
 #: certificates postdate :data:`FREEZE_DT` by years; this instant sits within
 #: their validity window instead. Refreshing the bundled lists may require
 #: moving it.
-REAL_TL_DT = datetime(2026, 3, 1, tzinfo=timezone.utc).astimezone(
+REAL_TL_DT = datetime(2026, 3, 1, tzinfo=UTC).astimezone(
     tz=tzlocal.get_localzone()
 )
 

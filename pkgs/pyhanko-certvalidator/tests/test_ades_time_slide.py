@@ -57,7 +57,7 @@ def load_cert_registry(revoked_intermediate_ca=False) -> CertificateRegistry:
 
 
 def now() -> datetime.datetime:
-    return datetime.datetime.now(tz=datetime.timezone.utc)
+    return datetime.datetime.now(tz=datetime.UTC)
 
 
 DEFAULT_REV_CHECK_POLICY = RevocationCheckingPolicy(
@@ -116,9 +116,7 @@ async def test_time_slide_revocation_ocsp():
         algo_usage_policy=None,
         time_tolerance=DEFAULT_TOLERANCE,
     )
-    assert control_time == datetime.datetime(
-        2020, 12, 1, tzinfo=datetime.timezone.utc
-    )
+    assert control_time == datetime.datetime(2020, 12, 1, tzinfo=datetime.UTC)
 
 
 @pytest.mark.asyncio
@@ -142,9 +140,7 @@ async def test_time_slide_revocation_crl():
         algo_usage_policy=None,
         time_tolerance=DEFAULT_TOLERANCE,
     )
-    assert control_time == datetime.datetime(
-        2020, 12, 1, tzinfo=datetime.timezone.utc
-    )
+    assert control_time == datetime.datetime(2020, 12, 1, tzinfo=datetime.UTC)
 
 
 VERY_LENIENT_FRESHNESS = CertRevTrustPolicy(
@@ -165,7 +161,7 @@ async def test_time_slide_revoked_intermediate():
     # We set a ridiculous freshness window to ensure it's covered.
     poe_manager = POEManager()
     interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
-    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
+    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.UTC)
     poe_manager.register(test_path.leaf, dt=poe_date, poe_type=POEType.PROVIDED)
     # ...make sure to include some POE prior to the revocation date of the
     # intermediate cert
@@ -187,9 +183,7 @@ async def test_time_slide_revoked_intermediate():
         algo_usage_policy=None,
         time_tolerance=DEFAULT_TOLERANCE,
     )
-    assert control_time == datetime.datetime(
-        2020, 12, 1, tzinfo=datetime.timezone.utc
-    )
+    assert control_time == datetime.datetime(2020, 12, 1, tzinfo=datetime.UTC)
 
 
 @pytest.mark.asyncio
@@ -202,7 +196,7 @@ async def test_time_slide_revoked_intermediate_enforce_cert_poe():
     # No POE for the leaf cert at the control time
     # at which the intermediate cert was revoked => fail
     interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
-    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
+    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.UTC)
     poe_manager.register(
         CRLContainer(interm_crl), dt=poe_date, poe_type=POEType.PROVIDED
     )
@@ -231,7 +225,7 @@ async def test_time_slide_revoked_intermediate_enforce_revinfo_poe():
     # the intermediate cert is listed as revoked on this CRL
     root_crl = load_crl(BASE_DIR, 'root-2020-12-10.crl')
     poe_manager = POEManager()
-    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
+    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.UTC)
     poe_manager.register(test_path.leaf, dt=poe_date, poe_type=POEType.PROVIDED)
     # This CRL issued by the intermediate CA predates its revocation date
     # so without POE, it should be treated as no longer valid
@@ -304,7 +298,7 @@ async def test_point_in_time_validation_revoked_intermediate():
     # this CRL would be valid long enough to serve as non-revocation
     # evidence for the 'alice' cert
     # We set a ridiculous freshness window to ensure it's covered.
-    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
+    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.UTC)
     poe_manager = POEManager()
     poe_manager.register(test_path.leaf, dt=poe_date, poe_type=POEType.PROVIDED)
     interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
@@ -332,7 +326,7 @@ async def test_point_in_time_validation_revoked_intermediate():
         ),
     )
     assert last_valid_time == datetime.datetime(
-        2020, 12, 1, tzinfo=datetime.timezone.utc
+        2020, 12, 1, tzinfo=datetime.UTC
     )
 
 

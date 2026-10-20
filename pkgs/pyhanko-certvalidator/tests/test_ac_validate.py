@@ -99,7 +99,7 @@ async def test_ac_validation_expired():
     vc = ValidationContext(
         trust_roots=[root],
         other_certs=[interm, role_aa],
-        moment=datetime.datetime(3000, 1, 1, tzinfo=datetime.timezone.utc),
+        moment=datetime.datetime(3000, 1, 1, tzinfo=datetime.UTC),
     )
     msg = 'intermediate certificate 1 expired'
     with pytest.raises(PathValidationError, match=msg):
@@ -470,7 +470,7 @@ async def test_ac_revoked_crl():
         other_certs=[interm, role_aa],
         crls=[root_crl, interm_crl, role_aa_crl],
         moment=datetime.datetime(
-            year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2021, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -502,7 +502,7 @@ async def test_ac_unrevoked_crl():
         other_certs=[interm, role_aa],
         crls=[root_crl, interm_crl, role_aa_crl],
         moment=datetime.datetime(
-            year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2019, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -537,7 +537,7 @@ async def test_ac_revoked_full_path_validation_crl():
         other_certs=[interm, role_aa],
         crls=[root_crl, interm_crl, role_aa_crl],
         moment=datetime.datetime(
-            year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2021, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -583,7 +583,7 @@ async def test_ac_revoked_complex_crls_full_path_validation():
             role_aa_other_reasons,
         ],
         moment=datetime.datetime(
-            year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2021, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -614,7 +614,7 @@ async def test_ac_unrevoked_full_path_validation_crl():
         other_certs=[interm, role_aa],
         crls=[root_crl, interm_crl, role_aa_crl],
         moment=datetime.datetime(
-            year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2019, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -642,7 +642,7 @@ async def test_ac_insufficient_revinfo_crl():
         other_certs=[interm, role_aa],
         crls=[root_crl, interm_crl],
         moment=datetime.datetime(
-            year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2019, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -685,7 +685,7 @@ async def test_ac_crls_out_of_scope():
             role_aa_nonsensically_scoped,
         ],
         moment=datetime.datetime(
-            year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2019, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -732,7 +732,7 @@ async def test_ac_unrevoked_complex_crls_full_path_validation():
             role_aa_other_reasons,
         ],
         moment=datetime.datetime(
-            year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2019, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -759,7 +759,7 @@ async def test_ac_revoked_ocsp():
         other_certs=[interm, role_aa],
         ocsps=[ocsp_resp],
         moment=datetime.datetime(
-            year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2021, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -789,7 +789,7 @@ async def test_ac_unrevoked_oscp():
         other_certs=[interm, role_aa],
         ocsps=[ocsp_resp],
         moment=datetime.datetime(
-            year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2019, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -824,7 +824,7 @@ async def test_ac_revoked_full_path_validation():
         ocsps=[ocsp_resp],
         crls=[root_crl, interm_crl],
         moment=datetime.datetime(
-            year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2021, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )
@@ -858,7 +858,7 @@ async def test_ac_unrevoked_full_path_validation_ocsp():
         ocsps=[ocsp_resp],
         crls=[root_crl, interm_crl],
         moment=datetime.datetime(
-            year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            year=2019, month=12, day=12, tzinfo=datetime.UTC
         ),
         revocation_mode='require',
     )

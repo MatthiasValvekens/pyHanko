@@ -1,6 +1,6 @@
 import itertools
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pytest
@@ -107,7 +107,7 @@ def test_writer_meta_view_does_not_persist_changes(writer_type):
                 {'title': 'Test test'},
                 {'author': 'John Doe'},
                 {'keywords': ['foo', 'bar', 'baz']},
-                {'created': datetime(2022, 9, 7, tzinfo=timezone.utc)},
+                {'created': datetime(2022, 9, 7, tzinfo=UTC)},
                 {'author': 'John Doe', 'subject': 'Blah blah blah'},
             ],
             ("pdf1.7", "pdf2.0"),

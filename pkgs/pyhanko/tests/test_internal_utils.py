@@ -1,7 +1,6 @@
 import datetime
 import itertools
 import os
-from datetime import timezone
 from fractions import Fraction
 from io import BytesIO
 from itertools import product
@@ -615,7 +614,7 @@ def test_box_constraint_recalc():
 def test_trailer_update():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     w._update_meta = lambda: None
-    dt = generic.pdf_date(datetime.datetime(2020, 10, 10, tzinfo=timezone.utc))
+    dt = generic.pdf_date(datetime.datetime(2020, 10, 10, tzinfo=datetime.UTC))
 
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
     w.trailer['/Info'] = w.add_object(info)
@@ -740,7 +739,7 @@ DATE_PAIRS = [
             hour=1,
             minute=5,
             second=59,
-            tzinfo=timezone.utc,
+            tzinfo=datetime.UTC,
         ),
     ),
     ('D:20080203010559+01\'00', TESTDATE_CET),
@@ -1569,7 +1568,7 @@ def test_parse_name_invalid_utf8():
             "D:20201226150511-05'00'",
         ),
         (
-            datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=timezone.utc),
+            datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=datetime.UTC),
             "D:20201226150511Z",
         ),
         (

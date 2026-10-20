@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from itertools import product
 from pathlib import Path
@@ -118,7 +118,7 @@ def test_cross_linked_pages_do_not_blow_up_paths():
     )
 
     w = IncrementalPdfFileWriter(out)
-    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=UTC))
     w.set_info(generic.DictionaryObject({pdf_name('/CreationDate'): dt}))
     w.write_in_place()
 
@@ -206,7 +206,7 @@ def test_no_changes_policy():
 
     w = IncrementalPdfFileWriter(out)
     # do an /Info update
-    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=UTC))
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
     w.set_info(info)
     w.write_in_place()
@@ -252,7 +252,7 @@ def test_double_sig_add_field(file_ix):
     # create a new signature field after signing
     w = IncrementalPdfFileWriter(out)
     # throw in an /Info update for good measure
-    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=UTC))
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
     w.set_info(info)
 
@@ -299,7 +299,7 @@ def test_double_sig_different_pages():
 
     w = IncrementalPdfFileWriter(out)
     # throw in an /Info update for good measure
-    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=UTC))
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
     w.set_info(info)
     w.write_in_place()

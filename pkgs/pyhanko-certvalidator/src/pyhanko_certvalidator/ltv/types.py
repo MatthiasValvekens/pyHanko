@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 
 __all__ = [
     'IssuedItemContainer',
@@ -33,7 +33,7 @@ class ValidationTimingInfo:
 
     @classmethod
     def now(cls, tz: tzinfo | None = None) -> 'ValidationTimingInfo':
-        now = datetime.now(tz=tz or timezone.utc)
+        now = datetime.now(tz=tz or UTC)
         return ValidationTimingInfo(
             validation_time=now,
             best_signature_time=now,

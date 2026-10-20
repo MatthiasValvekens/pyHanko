@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     # typing.Self is only available on Python 3.11+; fall back to the
     # typing_extensions backport for 3.10. Guarded by TYPE_CHECKING so that
     # neither is required at runtime (all annotations are lazy strings here).
-    from typing_extensions import Self
+    from typing import Self
 
 
 class PathError(Exception):
