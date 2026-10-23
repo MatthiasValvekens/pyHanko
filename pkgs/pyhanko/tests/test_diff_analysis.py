@@ -812,6 +812,33 @@ def test_form_field_postsign_modify():
     val_trusted(s, extd=True)
 
 
+def set_text_field_keep_undefined_ap(writer, val):
+    set_text_field(writer, val)
+    tf = writer.root['/AcroForm']['/Fields'][1].get_object()
+    # no revision defines this object
+    tf['/AP']['/D'] = generic.IndirectObject(91299, 0, None)
+
+
+@freeze_time('2020-11-01')
+def test_form_field_postsign_modify_undefined_ap_ref():
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+
+    # fill in, then sign, with the same undefined /D appearance both times
+    set_text_field_keep_undefined_ap(w, "Some text")
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field_keep_undefined_ap(w, "Some other text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out, strict=False)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_status = val_trusted(s, extd=True)
+    assert val_status.modification_level == ModificationLevel.FORM_FILLING
+
+
 def set_text_field_in_group(writer, ix, val):
     tf_parent = writer.root['/AcroForm']['/Fields'][1].get_object()
     tf = tf_parent['/Kids'][ix].get_object()
