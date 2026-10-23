@@ -1084,10 +1084,16 @@ class HistoricalResolver(PdfHandler):
             if ref in seen:
                 return
             xrefs = self.reader.xrefs
-            relevant = (
-                since_revision is None
-                or xrefs.get_introducing_revision(ref) >= since_revision
-            )
+            try:
+                relevant = (
+                    since_revision is None
+                    or xrefs.get_introducing_revision(ref) >= since_revision
+                )
+            except KeyError:
+                # No revision defines this object, so the reference is
+                # treated as a reference to null (ISO 32000-2:2020, 7.3.9
+                # and 7.3.10): nothing to collect, nothing to recurse into.
+                return
             if relevant:
                 seen.add(ref)
             elif since_revision is not None:
