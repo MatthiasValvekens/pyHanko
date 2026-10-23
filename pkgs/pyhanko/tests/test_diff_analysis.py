@@ -11,7 +11,7 @@ from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
-from pyhanko.pdf_utils.misc import PdfReadError
+from pyhanko.pdf_utils.misc import PdfReadError, PdfStrictReadError
 from pyhanko.pdf_utils.reader import (
     HistoricalResolver,
     PdfFileReader,
@@ -810,6 +810,33 @@ def test_form_field_postsign_modify():
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
     val_trusted(s, extd=True)
+
+
+def set_text_field_keep_undefined_ap(writer, val):
+    set_text_field(writer, val)
+    tf = writer.root['/AcroForm']['/Fields'][1].get_object()
+    # no revision defines this object
+    tf['/AP']['/D'] = generic.IndirectObject(91299, 0, None)
+
+
+@freeze_time('2020-11-01')
+def test_form_field_postsign_modify_undefined_ap_ref():
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+
+    # fill in, then sign, with the same undefined /D appearance both times
+    set_text_field_keep_undefined_ap(w, "Some text")
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field_keep_undefined_ap(w, "Some other text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out, strict=False)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_status = val_trusted(s, extd=True)
+    assert val_status.modification_level == ModificationLevel.FORM_FILLING
 
 
 def set_text_field_in_group(writer, ix, val):
@@ -2855,6 +2882,37 @@ def test_allow_identical_object_replacement_nonsensical_obj_nonstrict():
     s = r.embedded_signatures[0]
     val_status = validate_pdf_signature(s, notrust_v_context())
     assert val_status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+def _sign_twice_with_undefined_refs() -> BytesIO:
+    # Both the page and the form refer to an object that no revision
+    # defines, and the second signature updates both of them, so the
+    # orphan check meets an undefined reference whichever it reads first.
+    fname = PDF_DATA_DIR + '/minimal-with-nonexistent-refs-in-form.pdf'
+    w = IncrementalPdfFileWriter(BytesIO(read_all(fname)))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    meta = signers.PdfSignatureMetadata(field_name='Sig2')
+    signers.sign_pdf(w, meta, signer=FROM_CA, in_place=True)
+    return out
+
+
+@freeze_time('2020-11-01')
+def test_sign_twice_with_undefined_refs_nonstrict():
+    r = PdfFileReader(_sign_twice_with_undefined_refs(), strict=False)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_status = val_trusted(s, extd=True)
+    assert val_status.modification_level == ModificationLevel.FORM_FILLING
+
+
+@freeze_time('2020-11-01')
+def test_sign_twice_with_undefined_refs_strict():
+    r = PdfFileReader(_sign_twice_with_undefined_refs())
+    s = r.embedded_signatures[0]
+    with pytest.raises(PdfStrictReadError, match='not found'):
+        validate_pdf_signature(s, simple_v_context())
 
 
 @pytest.mark.parametrize(

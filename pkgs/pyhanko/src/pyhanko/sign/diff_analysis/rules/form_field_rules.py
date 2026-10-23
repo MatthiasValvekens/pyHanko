@@ -907,13 +907,18 @@ def _allow_in_place_appearance_update(
             new_ap_stm_ref = new_ap_val.get_value_as_reference(
                 key, optional=True
             )
-            # if the refs are distinct or the old ref hasn't changed
-            # don't bother
-            if (
-                new_ap_stm_ref != old_ap_stm_ref
-                or old_ap_stm_ref is None
-                or xrefs.get_last_change(old_ap_stm_ref) == old_rev
-            ):
+            # if the refs are distinct, don't bother
+            if new_ap_stm_ref != old_ap_stm_ref or old_ap_stm_ref is None:
+                continue
+            try:
+                last_change = xrefs.get_last_change(old_ap_stm_ref)
+            except KeyError:
+                # No revision defines this object, so the reference is
+                # treated as a reference to null (ISO 32000-2:2020, 7.3.9
+                # and 7.3.10): there is no stream to update in place.
+                continue
+            # if the old ref hasn't changed, don't bother
+            if last_change == old_rev:
                 continue
             if isinstance(old_ap_raw, generic.IndirectObject):
                 context = RelativeContext(

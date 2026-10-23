@@ -601,6 +601,24 @@ def test_historical_nonexistent_xref_access_nonstrict():
     assert isinstance(bad_ref.get_object(), generic.NullObject)
 
 
+@pytest.mark.parametrize('strict', [True, False])
+def test_collect_dependencies_skips_nonexistent_ref(strict):
+    out = BytesIO()
+    with open(NONEXISTENT_XREF_PATH, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        pg_dict = w.root['/Pages']['/Kids'][0]
+        new_obj = w.add_object(generic.pdf_string('Hello'))
+        pg_dict['/Foo'] = new_obj
+        w.update_container(pg_dict)
+        w.write(out)
+    r = PdfFileReader(out, strict=strict)
+    hist = r.get_historical_resolver(1)
+    pg_ref = r.root['/Pages']['/Kids'].raw_get(0).reference
+    # the page still holds /Bleh, which no revision defines
+    deps = hist.collect_dependencies(hist(pg_ref), since_revision=1)
+    assert deps == {new_obj.reference}
+
+
 def test_no_objstms_without_xref_stm():
     w = writer.PdfFileWriter(stream_xrefs=False)
     with pytest.raises(misc.PdfWriteError, match='Obj'):
