@@ -8,7 +8,11 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.xref import (
     ObjStreamRef,
+    XRefCache,
     XRefEntry,
+    XRefSection,
+    XRefSectionData,
+    XRefSectionMetaInfo,
     XRefSectionType,
     XRefType,
     parse_xref_stream,
@@ -957,3 +961,257 @@ def test_xref_space_padded_offsets_strict():
         pytest.raises(misc.PdfStrictReadError, match="Unknown marker"),
     ):
         PdfFileReader(inf)
+
+
+def _last_change_by_scan(xrefs, ref):
+    # the newest section that resolves ref, with what it resolves to there,
+    # or (None, None) if no section does
+    for ix in reversed(range(xrefs.total_revisions)):
+        try:
+            return ix, xrefs.get_xref_data(ix).try_resolve(ref)
+        except KeyError:
+            continue
+    return None, None
+
+
+def _assert_last_change_matches_scan(xrefs):
+    refs = set()
+    for ix in range(xrefs.total_revisions):
+        refs |= xrefs.explicit_refs_in_revision(ix)
+    # neighbouring generations, which need not resolve anywhere
+    refs |= {generic.Reference(ref.idnum, ref.generation + 1) for ref in refs}
+    scans = {ref: _last_change_by_scan(xrefs, ref) for ref in refs}
+    # reading objects does not build the index; xrefs[ref] scans until
+    # get_last_change() has built it
+    for ref, (_, location) in scans.items():
+        assert xrefs[ref] == location, ref
+    assert xrefs._last_changes is None
+    for ref, (expected, _) in scans.items():
+        if expected is None:
+            with pytest.raises(KeyError):
+                xrefs.get_last_change(ref)
+        else:
+            assert xrefs.get_last_change(ref) == expected, ref
+    # get_last_change() built the index once, and keeps it
+    index = xrefs._last_changes
+    assert index is not None
+    for ref, (_, location) in scans.items():
+        assert xrefs[ref] == location, ref
+    assert xrefs._last_changes is index
+
+
+def _assert_last_changes(xrefs, expected):
+    for (idnum, generation), revision in expected.items():
+        ref = generic.Reference(idnum, generation)
+        if revision is None:
+            with pytest.raises(KeyError):
+                xrefs.get_last_change(ref)
+        else:
+            assert xrefs.get_last_change(ref) == revision, ref
+
+
+@pytest.mark.parametrize(
+    'xrefs,strict,expected',
+    [
+        # freed in revision 1, reused with generation 1 in revision 2, then
+        # left alone by revision 3
+        (
+            [
+                [
+                    b'0 3',
+                    b'0000000000 65535 f',
+                    b'0000000100 00000 n',
+                    b'0000000200 00000 n',
+                ],
+                [b'0 2', b'0000000000 65535 f', b'0000000000 00001 f'],
+                [b'0 2', b'0000000000 65535 f', b'0000000300 00001 n'],
+                [b'0 1', b'0000000000 65535 f', b'2 1', b'0000000400 00000 n'],
+            ],
+            True,
+            {(1, 0): 1, (1, 1): 2, (1, 2): None, (2, 0): 3},
+        ),
+        # an unchanged entry declared again, and a dead object
+        (
+            [
+                [
+                    b'0 3',
+                    b'0000000000 65535 f',
+                    b'0000000100 00000 n',
+                    b'0000000000 00000 f',
+                ],
+                [b'0 2', b'0000000000 65535 f', b'0000000100 00000 n'],
+            ],
+            True,
+            {(1, 0): 1, (2, 0): None},
+        ),
+        # freed and reused in the same section: the in-use entry shadows the
+        # free one, so generation 0 last changed in revision 0
+        (
+            [
+                [
+                    b'0 3',
+                    b'0000000000 65535 f',
+                    b'0000000100 00000 n',
+                    b'0000000200 00000 n',
+                ],
+                [
+                    b'0 1',
+                    b'0000000000 65535 f',
+                    b'1 1',
+                    b'0000000000 00001 f',
+                    b'1 1',
+                    b'0000000300 00001 n',
+                ],
+            ],
+            False,
+            {(1, 0): 0, (1, 1): 1, (2, 0): 0, (3, 0): None},
+        ),
+    ],
+)
+def test_last_change_matches_scan(xrefs, strict, expected):
+    r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)), strict=strict)
+    _assert_last_change_matches_scan(r.xrefs)
+    _assert_last_changes(r.xrefs, expected)
+
+
+def _xref_section(entries, hybrid_entries=None):
+    def _meta(section_type):
+        return XRefSectionMetaInfo(
+            xref_section_type=section_type,
+            size=10,
+            declared_startxref=0,
+            start_location=0,
+            end_location=0,
+            stream_ref=None,
+        )
+
+    data = XRefSectionData()
+    data.process_entries(iter(entries), strict=False)
+    if hybrid_entries is None:
+        return XRefSection(_meta(XRefSectionType.STANDARD), data)
+    data.process_hybrid_entries(
+        iter(hybrid_entries), _meta(XRefSectionType.HYBRID_STREAM), strict=False
+    )
+    return XRefSection(_meta(XRefSectionType.HYBRID_MAIN), data)
+
+
+def test_last_change_hybrid_main_table_shadows_stream():
+    # The section's XRefStm lists objects 1, 3 and 4 in an object stream, but
+    # its main table takes precedence for each of them. The table reuses
+    # object 1 at generation 1, so generation 0 does not resolve in the hybrid
+    # section and last changed in revision 0. It rewrites object 3 and frees
+    # object 4 at generation 0, so both resolve to the table's entry there.
+    sections = [
+        _xref_section(
+            [
+                XRefEntry(xref_type=XRefType.STANDARD, location=100, idnum=1),
+                XRefEntry(xref_type=XRefType.STANDARD, location=150, idnum=3),
+                XRefEntry(xref_type=XRefType.STANDARD, location=160, idnum=4),
+            ],
+        ),
+        _xref_section(
+            [
+                XRefEntry(
+                    xref_type=XRefType.STANDARD,
+                    location=300,
+                    idnum=1,
+                    generation=1,
+                ),
+                XRefEntry(xref_type=XRefType.STANDARD, location=350, idnum=3),
+                XRefEntry(
+                    xref_type=XRefType.FREE,
+                    location=None,
+                    idnum=4,
+                    generation=1,
+                ),
+            ],
+            hybrid_entries=[
+                XRefEntry(
+                    xref_type=XRefType.IN_OBJ_STREAM,
+                    location=ObjStreamRef(2, 0),
+                    idnum=1,
+                ),
+                XRefEntry(xref_type=XRefType.STANDARD, location=200, idnum=2),
+                XRefEntry(
+                    xref_type=XRefType.IN_OBJ_STREAM,
+                    location=ObjStreamRef(2, 1),
+                    idnum=3,
+                ),
+                XRefEntry(
+                    xref_type=XRefType.IN_OBJ_STREAM,
+                    location=ObjStreamRef(2, 2),
+                    idnum=4,
+                ),
+            ],
+        ),
+    ]
+    xrefs = XRefCache(None, sections)
+    _assert_last_change_matches_scan(xrefs)
+    _assert_last_changes(
+        xrefs, {(1, 0): 0, (1, 1): 1, (2, 0): 1, (3, 0): 1, (4, 0): 1}
+    )
+    assert xrefs[generic.Reference(1, 0)] == 100
+    assert xrefs[generic.Reference(1, 1)] == 300
+    assert xrefs[generic.Reference(3, 0)] == 350
+    assert xrefs[generic.Reference(4, 0)] is None
+
+
+@pytest.mark.parametrize(
+    'fname',
+    [
+        'minimal-hybrid-xref.pdf',
+        'minimal-hybrid-xref-weirdgen.pdf',
+        'minimal-hybrid-xref-mswordstyle.pdf',
+    ],
+)
+def test_last_change_hybrid(fname):
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        r = PdfFileReader(inf, strict=True)
+        _assert_last_change_matches_scan(r.xrefs)
+
+
+def test_last_change_objstm_then_direct(monkeypatch):
+    w = writer.PdfFileWriter(stream_xrefs=True)
+    objstm = w.prepare_object_stream()
+    ref = w.add_object(
+        generic.DictionaryObject(
+            {generic.pdf_name('/A'): generic.NumberObject(1)}
+        ),
+        obj_stream=objstm,
+    )
+    w.root[generic.pdf_name('/Test')] = ref
+    # stays in the object stream
+    kept = w.add_object(
+        generic.DictionaryObject(
+            {generic.pdf_name('/B'): generic.NumberObject(1)}
+        ),
+        obj_stream=objstm,
+    )
+    w.root[generic.pdf_name('/Kept')] = kept
+    out = BytesIO()
+    w.write(out)
+
+    w = IncrementalPdfFileWriter(out)
+    obj = w.root['/Test']
+    obj[generic.pdf_name('/A')] = generic.NumberObject(2)
+    w.update_container(obj)
+    w.write_in_place()
+
+    r = PdfFileReader(out, strict=True)
+    idnum = ref.idnum
+    assert idnum in r.xrefs.get_xref_data(0).xrefs_in_objstm
+    assert idnum in r.xrefs.get_xref_data(1).standard_xrefs
+    _assert_last_change_matches_scan(r.xrefs)
+    assert r.xrefs.get_last_change(ref.reference) == 1
+    assert r.xrefs.get_last_change(kept.reference) == 0
+
+    # once the index exists, xrefs[ref] no longer scans the sections
+    def _scan(*_args):
+        raise AssertionError("xrefs[ref] scanned after the index was built")
+
+    direct = r.xrefs.get_xref_data(1).standard_xrefs[idnum][1]
+    in_objstm = r.xrefs.get_xref_data(0).xrefs_in_objstm[kept.idnum]
+    monkeypatch.setattr(r.xrefs, 'get_historical_ref', _scan)
+    assert r.xrefs[ref.reference] == direct
+    assert r.xrefs[kept.reference] == in_objstm
+    assert r.xrefs[generic.Reference(idnum, 1)] is None
