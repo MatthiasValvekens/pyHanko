@@ -137,6 +137,126 @@ def test_cross_linked_pages_do_not_blow_up_paths():
     assert status.docmdp_ok
 
 
+def _shared_resources(n: int) -> bytes:
+    # n pages share one resource dictionary that lists n form XObjects, and
+    # those all share a second resource dictionary listing n more form
+    # XObjects. This is how TCPDF lays out pages imported with FPDI: every
+    # object behind the inner dictionary can be reached through ~n**2 paths.
+    w = PdfFileWriter()
+
+    def _form(resources):
+        return w.add_object(
+            generic.StreamObject(
+                {
+                    pdf_name('/Type'): pdf_name('/XObject'),
+                    pdf_name('/Subtype'): pdf_name('/Form'),
+                    pdf_name('/BBox'): generic.ArrayObject(
+                        map(generic.NumberObject, (0, 0, 10, 10))
+                    ),
+                    pdf_name('/Resources'): resources,
+                },
+                stream_data=b'q Q',
+            )
+        )
+
+    def _xobject_resources(forms):
+        return w.add_object(
+            generic.DictionaryObject(
+                {
+                    pdf_name('/XObject'): generic.DictionaryObject(
+                        {pdf_name(f'/T{ix}'): f for ix, f in enumerate(forms)}
+                    )
+                }
+            )
+        )
+
+    inner = _xobject_resources(
+        [_form(generic.DictionaryObject()) for _ in range(n)]
+    )
+    outer = _xobject_resources([_form(inner) for _ in range(n)])
+    for ix in range(n):
+        contents = w.add_object(
+            generic.StreamObject(stream_data=f'/T{ix} Do'.encode('ascii'))
+        )
+        w.insert_page(
+            generic.DictionaryObject(
+                {
+                    pdf_name('/Type'): pdf_name('/Page'),
+                    pdf_name('/MediaBox'): generic.ArrayObject(
+                        map(generic.NumberObject, (0, 0, 300, 144))
+                    ),
+                    pdf_name('/Resources'): outer,
+                    pdf_name('/Contents'): contents,
+                }
+            )
+        )
+    out = BytesIO()
+    w.write(out)
+    return out.getvalue()
+
+
+@freeze_time('2020-11-01')
+def test_shared_resources_do_not_blow_up_paths():
+    out = BytesIO(_shared_resources(10))
+    for field_name in ('Sig1', 'Sig2'):
+        out = signers.sign_pdf(
+            IncrementalPdfFileWriter(out),
+            signers.PdfSignatureMetadata(field_name=field_name),
+            signer=FROM_CA,
+        )
+
+    r = PdfFileReader(out)
+    sig = r.embedded_signatures[0]
+    status = val_trusted(sig, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+
+    # The difference analysis only needs the usages of the objects that the
+    # second signature overrides. None of them lies behind the shared
+    # resources, so the ~2000 paths into the form XObjects (and the hundreds
+    # of millions on real documents) are never enumerated.
+    resolver = r.get_historical_resolver(sig.signed_revision)
+    cache = resolver._indirect_object_access_cache
+    assert cache is not None
+    assert sum(len(paths) for paths in cache.values()) < 100
+
+
+@pytest.mark.parametrize(
+    'pdf_bytes',
+    [
+        MINIMAL_TWO_FIELDS_TAGGED,
+        MINIMAL_ONE_FIELD_TAGGED,
+        SIMPLE_FORM,
+        TEXTFIELD_GROUP,
+        _cross_linked_pages(4),
+        _shared_resources(4),
+    ],
+)
+def test_targeted_usage_paths_match_full_mapping(pdf_bytes):
+    def _resolver():
+        r = PdfFileReader(BytesIO(pdf_bytes))
+        return r.get_historical_resolver(r.xrefs.total_revisions - 1)
+
+    full = _resolver()
+    full._load_reverse_xref_cache()
+    full._load_reverse_xref_cache()  # no-op once complete
+    expected = full._indirect_object_access_cache
+    assert expected
+
+    # one ref at a time, on a fresh resolver
+    for ref, paths in expected.items():
+        assert _resolver()._get_usages_of_ref(ref) == paths
+
+    # all refs on one resolver, so later lookups reuse earlier results
+    shared = _resolver()
+    for ref, paths in expected.items():
+        shared._load_reverse_xref_cache(targets=(ref,))
+        assert shared._get_usages_of_ref(ref) == paths
+
+    # a full mapping after targeted ones still covers everything
+    shared._load_reverse_xref_cache()
+    assert shared._indirect_object_access_cache == expected
+
+
 def _build_and_map_paths(n_pages: int, tweak):
     w = PdfFileWriter()
     pages = [w.insert_page(simple_page(w, f'Page {i}')) for i in range(n_pages)]
