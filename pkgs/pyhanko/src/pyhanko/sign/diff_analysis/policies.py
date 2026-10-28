@@ -221,10 +221,10 @@ class StandardDiffPolicy(DiffPolicy):
         explained = defaultdict(set)
 
         # prepare LUT for refs that are used multiple times in the old revision
-        # (this is a very expensive operation, since it reads all objects in
-        #  the signed revision)
+        # (this reads all objects in the signed revision, but only enumerates
+        #  the paths to the overridden refs)
         def _init_multi_lut():
-            old._load_reverse_xref_cache()
+            old._load_reverse_xref_cache(targets=new_xrefs)
             for new_ref in new_xrefs:
                 usages = old._get_usages_of_ref(new_ref)
                 if usages:

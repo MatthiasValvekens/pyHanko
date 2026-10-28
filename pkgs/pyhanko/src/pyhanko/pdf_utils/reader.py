@@ -14,7 +14,7 @@ import logging
 import os
 import re
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from io import BytesIO
 from typing import BinaryIO
 
@@ -909,6 +909,13 @@ class HistoricalResolver(PdfHandler):
         self._indirect_object_access_cache: (
             dict[generic.Reference, set[RawPdfPath]] | None
         ) = None
+        # References whose usages are known to be complete in the cache above.
+        # A full mapping (no targets) makes the cache complete for everything.
+        self._usage_paths_complete = False
+        self._usage_paths_computed: set[generic.Reference] = set()
+        self._ref_parents: (
+            dict[generic.Reference, set[generic.Reference]] | None
+        ) = None
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:
@@ -1110,15 +1117,94 @@ class HistoricalResolver(PdfHandler):
                 self._collect_indirect_references(v, seen, since_revision)
 
     def _get_usages_of_ref(self, ref: generic.Reference) -> set[RawPdfPath]:
+        if not self._usage_paths_complete and (
+            ref not in self._usage_paths_computed
+        ):
+            self._load_reverse_xref_cache(targets=(ref,))
         cache = self._indirect_object_access_cache or {}
         try:
             return cache[ref]
         except KeyError:
             return set()
 
-    def _load_reverse_xref_cache(self):
-        if self._indirect_object_access_cache is not None:
+    def _load_ref_parents(
+        self,
+    ) -> dict[generic.Reference, set[generic.Reference]]:
+        # Reverse reference graph of the objects reachable from the trailer,
+        # following the same edges as _compute_paths_to_refs below (in
+        # particular, /Parent is never followed).
+        if self._ref_parents is not None:
+            return self._ref_parents
+
+        def _children(obj, out):
+            if isinstance(obj, generic.IndirectObject):
+                out.append(obj.reference)
+            elif isinstance(obj, generic.DictionaryObject):
+                for k, v in obj.items():
+                    if k != '/Parent':
+                        _children(v, out)
+            elif isinstance(obj, generic.ArrayObject):
+                for v in obj:
+                    _children(v, out)
+
+        parents: dict[generic.Reference, set[generic.Reference]] = defaultdict(
+            set
+        )
+        to_visit: list[generic.Reference] = []
+        _children(self.trailer_view, to_visit)
+        visited: set[generic.Reference] = set()
+        while to_visit:
+            ref = to_visit.pop()
+            if ref in visited:
+                continue
+            visited.add(ref)
+            children: list[generic.Reference] = []
+            _children(self(ref), children)
+            for child in children:
+                parents[child].add(ref)
+                if child not in visited:
+                    to_visit.append(child)
+        self._ref_parents = parents
+        return parents
+
+    def _ancestors_of(
+        self, refs: Iterable[generic.Reference]
+    ) -> set[generic.Reference]:
+        parents = self._load_ref_parents()
+        result = set(refs)
+        queue = list(result)
+        while queue:
+            for parent in parents.get(queue.pop(), ()):
+                if parent not in result:
+                    result.add(parent)
+                    queue.append(parent)
+        return result
+
+    def _load_reverse_xref_cache(
+        self, targets: Iterable[generic.Reference] | None = None
+    ):
+        """
+        Record the paths through which indirect objects can be reached from
+        the trailer.
+
+        Without ``targets``, every object is mapped. With ``targets``, only
+        objects from which some target can be reached are entered. Every path
+        to an object passes only through objects that lead to it, so the
+        paths recorded for the targets (and for every other object entered)
+        are exactly those of a full mapping. Shared resources that do not
+        lead to a target, which can be reached through a number of paths
+        that grows polynomially with the number of pages, are skipped.
+        """
+        if self._usage_paths_complete:
             return
+        relevant: set[generic.Reference] | None
+        if targets is None:
+            relevant = None
+        else:
+            pending = set(targets) - self._usage_paths_computed
+            if not pending:
+                return
+            relevant = self._ancestors_of(pending)
 
         collected = defaultdict(set)
 
@@ -1148,6 +1234,9 @@ class HistoricalResolver(PdfHandler):
 
             if isinstance(obj, generic.IndirectObject):
                 obj_ref = obj.reference
+                if relevant is not None and obj_ref not in relevant:
+                    # no target can be reached from here
+                    return
                 if obj_ref in seen_in_path:
                     return
                 collected[obj_ref].add(cur_path)
@@ -1280,7 +1369,15 @@ class HistoricalResolver(PdfHandler):
             struct_tree_objs=struct_tree_nodes,
         )
 
-        self._indirect_object_access_cache = {
+        usages = {
             ref: {RawPdfPath(*reversed(list(p))) for p in paths}
             for ref, paths in collected.items()
         }
+        if relevant is None:
+            self._indirect_object_access_cache = usages
+            self._usage_paths_complete = True
+        else:
+            if self._indirect_object_access_cache is None:
+                self._indirect_object_access_cache = {}
+            self._indirect_object_access_cache.update(usages)
+            self._usage_paths_computed |= relevant
