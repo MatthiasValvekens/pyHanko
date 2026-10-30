@@ -1,3 +1,4 @@
+import binascii
 import datetime
 import itertools
 import os
@@ -1928,11 +1929,54 @@ def test_decode_hex_premature_end():
         generic.read_hex_string_from_stream(stream)
 
 
-def test_decode_hex_invalid_token():
-    stream = BytesIO(b'<deadbeefNonsense>')
+@pytest.mark.parametrize(
+    'data', [b'<deadbeefNonsense>', b'<dead%Bleh\nbeefNonsense>']
+)
+def test_decode_hex_invalid_token(data):
+    stream = BytesIO(data)
     stream.seek(0)
     with pytest.raises(misc.PdfReadError, match='Unexpected.*N'):
         generic.read_hex_string_from_stream(stream)
+
+
+@pytest.mark.parametrize(
+    'data,expected',
+    [
+        (b'<deadbeef>', b'\xde\xad\xbe\xef'),
+        (b'<DeAd BeEf>', b'\xde\xad\xbe\xef'),
+        (b'< \r\nde\tad\x0cbe\x00ef\n>', b'\xde\xad\xbe\xef'),
+        (b'<>', b''),
+        (b'<abc>', b'\xab\xc0'),
+        (b'<a b c>', b'\xab\xc0'),
+    ],
+)
+def test_decode_hex(data, expected):
+    stream = BytesIO(data + b' /Next')
+    result = generic.read_hex_string_from_stream(stream)
+    assert result == generic.pdf_string(expected)
+    assert stream.read() == b' /Next'
+
+
+def test_decode_hex_multiple_chunks():
+    data = bytes(range(256)) * 40
+    hex_data = binascii.hexlify(data)
+    # break into lines so whitespace straddles chunk boundaries
+    lines = [hex_data[i : i + 63] for i in range(0, len(hex_data), 63)]
+    stream = BytesIO(b'<' + b'\r\n'.join(lines) + b'> /Next')
+    assert generic.read_hex_string_from_stream(stream) == data
+    assert stream.read() == b' /Next'
+
+
+def test_decode_hex_premature_end_multiple_chunks():
+    stream = BytesIO(b'<' + b'ab' * 5000)
+    with pytest.raises(misc.PdfReadError, match='ended prematurely'):
+        generic.read_hex_string_from_stream(stream)
+
+
+def test_decode_hex_gt_in_comment():
+    stream = BytesIO(b'<de%a>b\nad> /Next')
+    assert generic.read_hex_string_from_stream(stream) == b'\xde\xad'
+    assert stream.read() == b' /Next'
 
 
 def test_text_string_no_bytes_available():
