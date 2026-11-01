@@ -273,6 +273,13 @@ def test_skip_ws_eof_ok_behaviour(data):
     assert not buf.read(1)  # we should be at EOF now
 
 
+@pytest.mark.parametrize('data', [b'', b'   ', b'  % comment\n'])
+def test_read_non_whitespace_eof(data):
+    buf = BytesIO(data)
+    with pytest.raises(misc.PdfStreamError, match="ended prematurely"):
+        misc.read_non_whitespace(buf)
+
+
 @pytest.mark.parametrize(
     'data,next_data',
     [
