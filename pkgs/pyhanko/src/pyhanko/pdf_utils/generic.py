@@ -22,6 +22,8 @@ from typing import Any, Optional, Union
 
 from .decode_limits import DEFAULT_DECODE_CONTEXT, DecodeContext, DecodePurpose
 from .misc import (
+    DEFAULT_CHUNK_SIZE,
+    PDF_WHITESPACE,
     IndirectObjectExpected,
     PdfError,
     PdfReadError,
@@ -807,7 +809,35 @@ def read_hex_string_from_stream(
         An input stream.
     """
     stream.read(1)
+    start = stream.tell()
 
+    # Fast path: hex strings can be large (e.g. signature /Contents),
+    # so avoid tokenising them one byte at a time.
+    chunks = []
+    while True:
+        chunk = stream.read(DEFAULT_CHUNK_SIZE)
+        if not chunk:
+            raise PdfStreamError("Stream ended prematurely")
+        end = chunk.find(b'>')
+        if end != -1:
+            chunks.append(chunk[:end])
+            break
+        chunks.append(chunk)
+    data = b''.join(chunks)
+    if b'%' not in data:
+        stream.seek(start + len(data) + 1)
+        data = data.translate(None, PDF_WHITESPACE)
+        invalid = data.translate(None, HEX_DIGITS)
+        if invalid:
+            raise PdfStreamError(
+                "Unexpected token in hex string: " + repr(invalid[:1])
+            )
+        if len(data) % 2:
+            data += b'0'
+        return pdf_string(binascii.unhexlify(data))
+
+    # Comments may contain '>', so let the tokeniser deal with them.
+    stream.seek(start)
     odd = False
 
     def read_tokens():
