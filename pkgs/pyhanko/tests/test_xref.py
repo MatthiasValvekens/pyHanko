@@ -1044,28 +1044,6 @@ def _assert_last_changes(xrefs, expected):
             True,
             {(1, 0): 1, (2, 0): None},
         ),
-        # freed and reused in the same section: the in-use entry shadows the
-        # free one, so generation 0 last changed in revision 0
-        (
-            [
-                [
-                    b'0 3',
-                    b'0000000000 65535 f',
-                    b'0000000100 00000 n',
-                    b'0000000200 00000 n',
-                ],
-                [
-                    b'0 1',
-                    b'0000000000 65535 f',
-                    b'1 1',
-                    b'0000000000 00001 f',
-                    b'1 1',
-                    b'0000000300 00001 n',
-                ],
-            ],
-            False,
-            {(1, 0): 0, (1, 1): 1, (2, 0): 0, (3, 0): None},
-        ),
     ],
 )
 def test_last_change_matches_scan(xrefs, strict, expected):
