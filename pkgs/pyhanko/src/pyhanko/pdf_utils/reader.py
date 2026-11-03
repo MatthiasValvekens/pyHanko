@@ -15,6 +15,7 @@ import os
 import re
 from collections import defaultdict
 from collections.abc import Generator
+from dataclasses import dataclass
 from io import BytesIO
 from typing import BinaryIO
 
@@ -850,6 +851,12 @@ class RawPdfPath:
         return f"PathInRevision('{self!s}')"
 
 
+@dataclass(frozen=True)
+class _TreeIndex:
+    page_tree_nodes: dict[generic.Reference, misc.ConsList]
+    struct_tree_nodes: frozenset[generic.Reference]
+
+
 class HistoricalResolver(PdfHandler):
     """
     :class:`~.rw_common.PdfHandler` implementation that provides a view
@@ -915,6 +922,7 @@ class HistoricalResolver(PdfHandler):
         self._indirect_object_access_cache: (
             dict[generic.Reference, set[RawPdfPath]] | None
         ) = None
+        self._tree_index: _TreeIndex | None = None
 
     def _rebind_trailer_value(self, obj, trailer_ref):
         # Trailer entries come straight from the reader, so indirect references
@@ -1143,6 +1151,88 @@ class HistoricalResolver(PdfHandler):
         except KeyError:
             return set()
 
+    @staticmethod
+    def _collect_page_tree_refs(pages_obj, path):
+        for ix, kid in enumerate(pages_obj['/Kids']):
+            kid_path = path.cons('/Kids').cons(ix)
+            # should always be true, but hey
+            if isinstance(kid, generic.IndirectObject):
+                yield kid.reference, kid_path
+            kid = kid.get_object()
+            if kid.get('/Type', None) == '/Pages':
+                yield from HistoricalResolver._collect_page_tree_refs(
+                    kid, kid_path
+                )
+
+    @staticmethod
+    def _collect_struct_tree_refs(struct_elem):
+        try:
+            children = struct_elem['/K']
+        except KeyError:
+            return
+
+        # if there's only one child, /K need not be an array
+        if not isinstance(children, generic.ArrayObject):
+            children = (children,)
+
+        for child in children:
+            child_ref = None
+            if isinstance(child, generic.IndirectObject):
+                child_ref = child.reference
+                child = child.get_object()
+
+            # The /K entry can also refer to content items.
+            # We don't care about those.
+            if not isinstance(child, generic.DictionaryObject):
+                continue
+            try:
+                if child['/Type'] != '/StructElem':
+                    continue
+            except KeyError:
+                # If the child doesn't have a /Type entry, /StructElem
+                # is the default (says so in the spec)
+                pass
+
+            if child_ref is not None:
+                yield child_ref
+
+            yield from HistoricalResolver._collect_struct_tree_refs(child)
+
+    def _load_tree_index(self) -> _TreeIndex:
+        # Depends only on the revision, so it is shared by all mapping passes.
+        if self._tree_index is not None:
+            return self._tree_index
+        pages_ref = self.root.raw_get('/Pages')
+        pages_path = misc.ConsList.sing('/Root').cons('/Pages')
+        page_tree_nodes = {}
+        if isinstance(pages_ref, generic.IndirectObject):
+            page_tree_nodes[pages_ref.reference] = pages_path
+        for ref, path in self._collect_page_tree_refs(
+            pages_ref.get_object(), pages_path
+        ):
+            if ref in page_tree_nodes:
+                raise misc.PdfReadError(
+                    "Circular reference in page tree in mapping stage"
+                )
+            page_tree_nodes[ref] = path
+        struct_tree_nodes = set()
+        try:
+            struct_tree_root_ref = self.root.raw_get('/StructTreeRoot')
+            struct_tree_root = struct_tree_root_ref.get_object()
+            for ref in self._collect_struct_tree_refs(struct_tree_root):
+                if ref in struct_tree_nodes:
+                    raise misc.PdfReadError(
+                        "Circular reference in structure tree in mapping stage"
+                    )
+                struct_tree_nodes.add(ref)
+        except KeyError:
+            pass
+        self._tree_index = tree_index = _TreeIndex(
+            page_tree_nodes=page_tree_nodes,
+            struct_tree_nodes=frozenset(struct_tree_nodes),
+        )
+        return tree_index
+
     def _load_reverse_xref_cache(self):
         if self._indirect_object_access_cache is not None:
             return
@@ -1230,81 +1320,14 @@ class HistoricalResolver(PdfHandler):
                         struct_tree_objs=struct_tree_objs,
                     )
 
-        def _collect_page_tree_refs(pages_obj, path):
-            for ix, kid in enumerate(pages_obj['/Kids']):
-                kid_path = path.cons('/Kids').cons(ix)
-                # should always be true, but hey
-                if isinstance(kid, generic.IndirectObject):
-                    yield kid.reference, kid_path
-                kid = kid.get_object()
-                if kid.get('/Type', None) == '/Pages':
-                    yield from _collect_page_tree_refs(kid, kid_path)
-
-        def _collect_struct_tree_refs(struct_elem):
-            try:
-                children = struct_elem['/K']
-            except KeyError:
-                return
-
-            # if there's only one child, /K need not be an array
-            if not isinstance(children, generic.ArrayObject):
-                children = (children,)
-
-            for child in children:
-                child_ref = None
-                if isinstance(child, generic.IndirectObject):
-                    child_ref = child.reference
-                    child = child.get_object()
-
-                # The /K entry can also refer to content items.
-                # We don't care about those.
-                if not isinstance(child, generic.DictionaryObject):
-                    continue
-                try:
-                    if child['/Type'] != '/StructElem':
-                        continue
-                except KeyError:
-                    # If the child doesn't have a /Type entry, /StructElem
-                    # is the default (says so in the spec)
-                    pass
-
-                if child_ref is not None:
-                    yield child_ref
-
-                yield from _collect_struct_tree_refs(child)
-
-        pages_ref = self.root.raw_get('/Pages')
-        pages_path = misc.ConsList.sing('/Root').cons('/Pages')
-        page_tree_nodes = {}
-        if isinstance(pages_ref, generic.IndirectObject):
-            page_tree_nodes[pages_ref.reference] = pages_path
-        for ref, path in _collect_page_tree_refs(
-            pages_ref.get_object(), pages_path
-        ):
-            if ref in page_tree_nodes:
-                raise misc.PdfReadError(
-                    "Circular reference in page tree in mapping stage"
-                )
-            page_tree_nodes[ref] = path
-        struct_tree_nodes = set()
-        try:
-            struct_tree_root_ref = self.root.raw_get('/StructTreeRoot')
-            struct_tree_root = struct_tree_root_ref.get_object()
-            for ref in _collect_struct_tree_refs(struct_tree_root):
-                if ref in struct_tree_nodes:
-                    raise misc.PdfReadError(
-                        "Circular reference in structure tree in mapping stage"
-                    )
-                struct_tree_nodes.add(ref)
-        except KeyError:
-            pass
+        tree_index = self._load_tree_index()
         _compute_paths_to_refs(
             self.trailer_view,
             misc.ConsList.empty(),
             misc.ConsList.empty(),
-            page_tree_objs=page_tree_nodes,
+            page_tree_objs=tree_index.page_tree_nodes,
             is_struct_tree=False,
-            struct_tree_objs=struct_tree_nodes,
+            struct_tree_objs=tree_index.struct_tree_nodes,
         )
 
         self._indirect_object_access_cache = {

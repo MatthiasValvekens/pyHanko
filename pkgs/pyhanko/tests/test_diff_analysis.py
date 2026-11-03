@@ -3,10 +3,12 @@ from datetime import UTC, datetime
 from io import BytesIO
 from itertools import product
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from freezegun.api import freeze_time
 from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils import reader as reader_module
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -135,6 +137,22 @@ def test_cross_linked_pages_do_not_blow_up_paths():
     status = val_trusted(r.embedded_signatures[0], extd=True)
     assert status.modification_level == ModificationLevel.LTA_UPDATES
     assert status.docmdp_ok
+
+
+def test_tree_index_is_built_once_per_resolver():
+    r = PdfFileReader(BytesIO(MINIMAL_TWO_FIELDS_TAGGED))
+    resolver = r.get_historical_resolver(r.xrefs.total_revisions - 1)
+    refs = [Reference(i, 0, r) for i in range(1, 8)]
+    with mock.patch.object(
+        reader_module, '_TreeIndex', wraps=reader_module._TreeIndex
+    ) as tree_index_factory:
+        for ref in refs:
+            resolver._get_usages_of_ref(ref)
+        resolver._load_reverse_xref_cache()
+    assert tree_index_factory.call_count == 1
+    index = resolver._load_tree_index()
+    assert index.page_tree_nodes
+    assert index.struct_tree_nodes
 
 
 def _build_and_map_paths(n_pages: int, tweak):
