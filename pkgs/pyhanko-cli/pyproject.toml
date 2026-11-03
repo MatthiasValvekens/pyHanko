@@ -92,7 +92,7 @@ asyncio_default_fixture_loop_scope="function"
 markers = [
     "nosmoke: exclude from smoke test runs",
     "hsm: run test on HSM platform",
-    "algo: indicate signing algorithm used in test",  # so far only used in PKCS#11 suite
+    "algo: indicate signing algorithm used in test",
     "required_mechanism: require a specific PKCS#11 mechanism"
 ]
 strict = true
