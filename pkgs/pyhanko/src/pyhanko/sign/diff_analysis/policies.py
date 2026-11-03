@@ -30,7 +30,7 @@ from .rules.form_field_rules import (
 )
 from .rules.metadata_rules import DocInfoRule, MetadataUpdateRule
 from .rules_api import QualifiedWhitelistRule, ReferenceUpdate
-from .usage_ledger import _PathLedger, _UsageLedger
+from .usage_ledger import _GraphLedger, _UsageLedger
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +224,7 @@ class StandardDiffPolicy(DiffPolicy):
         # Overridden refs that already existed in the old revision need to be
         # cleared together with the different ways they can be reached from
         # the document trailer.
-        ledger: _UsageLedger = _PathLedger(old)
+        ledger: _UsageLedger = _GraphLedger(old)
         ledger.track(new_xrefs)
 
         def ingest_ref(_level: ModificationLevel, _upd: ReferenceUpdate):

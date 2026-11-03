@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import UTC, datetime
 from io import BytesIO
 from itertools import product
@@ -13,7 +14,7 @@ from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
-from pyhanko.pdf_utils.misc import PdfReadError, PdfStrictReadError
+from pyhanko.pdf_utils.misc import PdfError, PdfReadError, PdfStrictReadError
 from pyhanko.pdf_utils.reader import (
     HistoricalResolver,
     PdfFileReader,
@@ -32,11 +33,18 @@ from pyhanko.sign.diff_analysis import (
     StandardDiffPolicy,
     SuspiciousModification,
     XrefStreamRule,
+    policies,
 )
 from pyhanko.sign.diff_analysis.rules_api import (
     Context,
     RelativeContext,
     _eq_deref,
+)
+from pyhanko.sign.diff_analysis.usage_graph import build_usage_graph
+from pyhanko.sign.diff_analysis.usage_ledger import (
+    _GraphLedger,
+    _PathLedger,
+    _UsageLedger,
 )
 from pyhanko.sign.validation import (
     SignatureCoverageLevel,
@@ -3309,3 +3317,459 @@ def test_historical_trailer_entries_resolve_in_historical_revision():
     # the latest revision is unaffected
     latest = r.trailer_view.raw_get('/Extra')['/Nested'].raw_get(0)
     assert latest.get_object() is r.get_object(second_certs)
+
+
+# Usage tracking of overridden objects
+
+
+def _signed_document(populate, n_pages: int = 2, **sig_kwargs) -> BytesIO:
+    w = PdfFileWriter()
+    pages = [w.insert_page(simple_page(w, f'Page {i}')) for i in range(n_pages)]
+    populate(w, pages)
+    fields.append_signature_field(
+        w, fields.SigFieldSpec('Sig1', box=(0, 0, 10, 10))
+    )
+    out = BytesIO()
+    w.write(out)
+    return signers.sign_pdf(
+        IncrementalPdfFileWriter(out),
+        signers.PdfSignatureMetadata(field_name='Sig1', **sig_kwargs),
+        signer=FROM_CA,
+    )
+
+
+def _review_update(policy: StandardDiffPolicy, data: BytesIO, update):
+    signed_revision = PdfFileReader(data).embedded_signatures[0].signed_revision
+    w = IncrementalPdfFileWriter(data)
+    update(w)
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    return policy.apply(
+        old=r.get_historical_resolver(signed_revision),
+        new=r.get_historical_resolver(r.xrefs.total_revisions - 1),
+    )
+
+
+class _ApprovalsRule(QualifiedWhitelistRule):
+    def __init__(self, make_updates):
+        self.make_updates = make_updates
+
+    def apply_qualified(self, old, new):
+        for update in self.make_updates(old):
+            yield ModificationLevel.LTA_UPDATES, update
+
+
+def _approvals_policy(make_updates) -> StandardDiffPolicy:
+    return StandardDiffPolicy(
+        global_rules=[
+            _ApprovalsRule(make_updates),
+            DocInfoRule().as_qualified(ModificationLevel.LTA_UPDATES),
+        ],
+        form_rule=None,
+    )
+
+
+def _bump_value(w, ref):
+    obj = Reference(ref.idnum, ref.generation, w).get_object()
+    obj['/Value'] = generic.NumberObject(2)
+    w.update_container(obj)
+
+
+def _shared_object_document():
+    # /Root/Foo and /Root/Bar both lead to the same container,
+    # which points to the object that is overridden later
+    refs = {}
+
+    def populate(w, pages):
+        refs['target'] = w.add_object(
+            generic.DictionaryObject(
+                {pdf_name('/Value'): generic.NumberObject(1)}
+            )
+        )
+        refs['container'] = w.add_object(
+            generic.DictionaryObject({pdf_name('/X'): refs['target']})
+        )
+        w.root['/Foo'] = refs['container']
+        w.root['/Bar'] = refs['container']
+
+    data = _signed_document(populate)
+    return data, refs['target'].reference, refs['container'].reference
+
+
+def _path_approval(old, ref, *paths):
+    return [
+        ReferenceUpdate(ref, Context.from_absolute(old, RawPdfPath(*path)))
+        for path in paths
+    ]
+
+
+@freeze_time('2020-11-01')
+def test_path_approval_needs_every_path():
+    data, target, _ = _shared_object_document()
+    foo_path = ('/Root', '/Foo', '/X')
+    bar_path = ('/Root', '/Bar', '/X')
+
+    def review(*paths):
+        policy = _approvals_policy(
+            lambda old: _path_approval(old, target, *paths)
+        )
+        return _review_update(
+            policy, BytesIO(data.getvalue()), lambda w: _bump_value(w, target)
+        )
+
+    with pytest.raises(SuspiciousModification, match='.Root.Foo.X'):
+        review(foo_path)
+    assert review(foo_path, bar_path).modification_level == (
+        ModificationLevel.LTA_UPDATES
+    )
+    # approving a path twice doesn't count double
+    with pytest.raises(SuspiciousModification):
+        review(foo_path, foo_path)
+
+
+@freeze_time('2020-11-01')
+def test_relative_approval_clears_whole_group():
+    data, target, container = _shared_object_document()
+
+    def make_updates(old):
+        context = RelativeContext(container, RawPdfPath('/X'))
+        return [ReferenceUpdate(target, context)]
+
+    result = _review_update(
+        _approvals_policy(make_updates), data, lambda w: _bump_value(w, target)
+    )
+    assert result.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@freeze_time('2020-11-01')
+def test_relative_approval_of_unrelated_context_is_ignored():
+    data, target, container = _shared_object_document()
+
+    def make_updates(old):
+        context = RelativeContext(container, RawPdfPath('/Y'))
+        return [ReferenceUpdate(target, context)]
+
+    with pytest.raises(SuspiciousModification, match='.Root.Foo.X'):
+        _review_update(
+            _approvals_policy(make_updates),
+            data,
+            lambda w: _bump_value(w, target),
+        )
+
+
+@pytest.mark.parametrize(
+    'bogus_path',
+    [
+        # does not exist
+        ('/Root', '/Nope', '/Kids', 0),
+        # leads to the page, but not via the page tree's canonical entry
+        ('/Root', '/Pages', '/Kids', 0, '/Parent', '/Kids', 1),
+    ],
+)
+@freeze_time('2020-11-01')
+def test_path_approval_invalid_path_ignored(bogus_path):
+    first_page = []
+
+    def populate(w, pages):
+        first_page.append(pages[1])
+        w.root['/Foo'] = pages[1]
+
+    data = _signed_document(populate)
+    page = first_page[0].reference
+    canonical_path = ('/Root', '/Pages', '/Kids', 1)
+    foo_path = ('/Root', '/Foo')
+
+    def review(*paths):
+        policy = _approvals_policy(
+            lambda old: _path_approval(old, page, *paths)
+        )
+        return _review_update(
+            policy,
+            BytesIO(data.getvalue()),
+            lambda w: _bump_value(w, page),
+        )
+
+    with pytest.raises(SuspiciousModification, match='.Root.Foo'):
+        review(canonical_path, bogus_path)
+    assert review(canonical_path, foo_path).modification_level == (
+        ModificationLevel.LTA_UPDATES
+    )
+
+
+@freeze_time('2020-11-01')
+def test_blanket_and_unrelated_approvals():
+    data, target, _ = _shared_object_document()
+
+    def make_updates(old):
+        # an approval for a ref that isn't tracked is passed through
+        return [ReferenceUpdate(target)]
+
+    result = _review_update(
+        _approvals_policy(make_updates), data, lambda w: _bump_value(w, target)
+    )
+    assert result.modification_level == ModificationLevel.LTA_UPDATES
+
+
+def _chain_document(k: int, variant: str) -> tuple[BytesIO, Reference]:
+    # a chain of dictionaries that each refer to the next one under two keys,
+    # so there are 2**k paths to the tail
+    w = PdfFileWriter()
+    w.insert_page(simple_page(w, 'Page'))
+    fields.append_signature_field(
+        w, fields.SigFieldSpec('Sig1', box=(0, 0, 10, 10))
+    )
+    if variant == 'acroform':
+        tail = w.root.raw_get('/AcroForm')
+        if not isinstance(tail, generic.IndirectObject):
+            tail = w.add_object(w.root['/AcroForm'])
+            w.root['/AcroForm'] = tail
+    else:
+        tail = w.add_object(
+            generic.DictionaryObject(
+                {pdf_name('/Leaf'): generic.NumberObject(0)}
+            )
+        )
+    current = tail
+    for _ in range(k):
+        current = w.add_object(
+            generic.DictionaryObject(
+                {pdf_name('/A'): current, pdf_name('/B'): current}
+            )
+        )
+    w.root['/Chain'] = current
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+
+    out = signers.sign_pdf(
+        IncrementalPdfFileWriter(out),
+        signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA,
+    )
+    if variant == 'override':
+        # rewrite the tail without changing it
+        w = IncrementalPdfFileWriter(out)
+        w.mark_update(tail)
+        out = BytesIO()
+        w.write(out)
+    else:
+        out = signers.sign_pdf(
+            IncrementalPdfFileWriter(out),
+            signers.PdfSignatureMetadata(field_name='Sig2'),
+            signer=FROM_CA,
+        )
+    return out, tail.reference
+
+
+def _first_signature_diff_result(data: BytesIO):
+    sig = PdfFileReader(data).embedded_signatures[0]
+    sig.compute_integrity_info(DEFAULT_DIFF_POLICY)
+    return sig.diff_result
+
+
+@freeze_time('2020-11-01')
+def test_unexplained_message_bounded():
+    n_objects, n_containers = 50, 8
+    refs = []
+
+    def populate(w, pages):
+        for _ in range(n_objects):
+            refs.append(
+                w.add_object(
+                    generic.DictionaryObject(
+                        {pdf_name('/Value'): generic.NumberObject(1)}
+                    )
+                )
+            )
+        for ix in range(n_containers):
+            w.root[f'/Container{ix}'] = generic.ArrayObject(refs)
+
+    data = _signed_document(populate)
+
+    def update(w):
+        for ref in refs:
+            _bump_value(w, ref)
+
+    with pytest.raises(SuspiciousModification) as exc_info:
+        _review_update(NO_CHANGES_DIFF_POLICY, data, update)
+    message = str(exc_info.value)
+    usage_lines = [
+        line for line in message.splitlines() if ' is also used in ' in line
+    ]
+    assert len(usage_lines) == 20
+    assert all('... and 3 more' in line for line in usage_lines)
+    assert all(line.count('Container') == 5 for line in usage_lines)
+    # the 50 objects, and then some (the document info dictionary)
+    assert re.search(r'\.\.\. and (3\d) more objects', message)
+    assert len(message) < 20_000
+
+
+@freeze_time('2020-11-01')
+def test_in_place_ap_update_rejected_when_stream_shared_with_page_content():
+    def run(share_stream: bool):
+        w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+        set_text_field(w, 'Some text')
+        stream_ref = (
+            w.root['/AcroForm']['/Fields'][1].get_object()['/AP'].raw_get('/N')
+        )
+        if share_stream:
+            page = w.root['/Pages']['/Kids'][0].get_object()
+            page['/Resources']['/XObject'] = generic.DictionaryObject(
+                {pdf_name('/Shared'): stream_ref}
+            )
+            w.update_container(page)
+        out = BytesIO()
+        w.write(out)
+        out = signers.sign_pdf(
+            IncrementalPdfFileWriter(out),
+            signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA,
+        )
+
+        # now rewrite the stream in-place
+        w = IncrementalPdfFileWriter(out)
+        stream_ref = Reference(stream_ref.idnum, 0, w)
+        stream = stream_ref.get_object()
+        stream._data = b'q 1 0 0 rg BT /Ti 12 Tf (Other) Tj ET Q'
+        stream._encoded_data = None
+        w.mark_update(stream_ref)
+        tf = w.root['/AcroForm']['/Fields'][1].get_object()
+        tf['/V'] = generic.pdf_string('Other')
+        w.update_container(tf)
+        out = BytesIO()
+        w.write(out)
+        sig = PdfFileReader(out).embedded_signatures[0]
+        sig.compute_integrity_info(DEFAULT_DIFF_POLICY)
+        return sig.diff_result
+
+    assert run(share_stream=False).modification_level == (
+        ModificationLevel.FORM_FILLING
+    )
+    assert isinstance(run(share_stream=True), SuspiciousModification)
+
+
+@freeze_time('2020-11-01')
+def test_shared_nested_resources_signed_twice():
+    out = BytesIO(SHARED_NESTED_RESOURCES)
+    for field_name in ('Sig1', 'Sig2'):
+        out = signers.sign_pdf(
+            IncrementalPdfFileWriter(out),
+            signers.PdfSignatureMetadata(field_name=field_name),
+            signer=FROM_CA,
+        )
+    r = PdfFileReader(out)
+    sig = r.embedded_signatures[0]
+    status = val_trusted(sig, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+    graph = build_usage_graph(r.get_historical_resolver(sig.signed_revision))
+    assert graph.node_count <= 400
+
+
+@freeze_time('2020-11-01')
+def test_shared_nested_resources_override_behind_shared_resources():
+    out = signers.sign_pdf(
+        IncrementalPdfFileWriter(BytesIO(SHARED_NESTED_RESOURCES)),
+        signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA,
+    )
+    w = IncrementalPdfFileWriter(out)
+    # the forms behind the inner resource dictionary can be reached through
+    # a quadratic number of paths
+    w.mark_update(Reference(3, 0, w))
+    out = BytesIO()
+    w.write(out)
+    result = _first_signature_diff_result(out)
+    assert result.modification_level == ModificationLevel.LTA_UPDATES
+
+
+class _LedgerMismatch(Exception):
+    pass
+
+
+class _EquivalenceLedger(_UsageLedger):
+    """Forward everything to both ledger implementations and compare."""
+
+    def __init__(self, old):
+        self.path_ledger = _PathLedger(old)
+        self.graph_ledger = _GraphLedger(old)
+
+    def track(self, refs):
+        refs = list(refs)
+        self.path_ledger.track(refs)
+        self.graph_ledger.track(refs)
+
+    def ingest(self, level, upd):
+        expected = self.path_ledger.ingest(level, upd)
+        actual = self.graph_ledger.ingest(level, upd)
+        if expected != actual:
+            raise _LedgerMismatch(
+                f"{upd}: path ledger says {expected}, graph ledger {actual}"
+            )
+        return actual
+
+    def remaining_report(self):
+        expected = self.path_ledger.remaining_report()
+        actual = self.graph_ledger.remaining_report()
+        if bool(expected) != bool(actual):
+            raise _LedgerMismatch(f"{expected!r} vs {actual!r}")
+        return actual
+
+
+def _review_with_both_ledgers(reader, base_revision):
+    with mock.patch.object(policies, '_GraphLedger', _EquivalenceLedger):
+        return DEFAULT_DIFF_POLICY.review_file(reader, base_revision)
+
+
+@freeze_time('2020-11-01')
+def _generated_documents():
+    for variant, k in product(('dead', 'override', 'acroform'), (3, 10)):
+        yield f'chain-{variant}-{k}', _chain_document(k, variant)[0]
+
+    out = BytesIO(SHARED_NESTED_RESOURCES)
+    for field_name in ('Sig1', 'Sig2'):
+        out = signers.sign_pdf(
+            IncrementalPdfFileWriter(out),
+            signers.PdfSignatureMetadata(field_name=field_name),
+            signer=FROM_CA,
+        )
+    yield 'shared-nested-resources-signed-twice', out
+
+    data, target, _ = _shared_object_document()
+    w = IncrementalPdfFileWriter(data)
+    _bump_value(w, target)
+    out = BytesIO()
+    w.write(out)
+    yield 'shared-object-overridden', out
+
+
+GENERATED_DOCUMENTS = dict(_generated_documents())
+
+
+def _compare_ledgers_on_all_revisions(data: bytes):
+    reader = PdfFileReader(BytesIO(data), strict=False)
+    for base_revision in range(reader.xrefs.total_revisions - 1):
+        try:
+            _review_with_both_ledgers(reader, base_revision)
+        except (PdfError, AssertionError, KeyError, TypeError, RecursionError):
+            # not every fixture can be processed by the path enumeration
+            continue
+
+
+@pytest.mark.parametrize(
+    'fname',
+    sorted(Path(PDF_DATA_DIR).glob('**/*.pdf')),
+    ids=lambda p: p.name,
+)
+def test_ledger_equivalence_on_fixtures(fname):
+    try:
+        data = fname.read_bytes()
+        PdfFileReader(BytesIO(data), strict=False)
+    except PdfError:
+        pytest.skip('unreadable')
+    _compare_ledgers_on_all_revisions(data)
+
+
+@pytest.mark.parametrize('name', sorted(GENERATED_DOCUMENTS))
+def test_ledger_equivalence_on_generated_documents(name):
+    _compare_ledgers_on_all_revisions(GENERATED_DOCUMENTS[name].getvalue())
