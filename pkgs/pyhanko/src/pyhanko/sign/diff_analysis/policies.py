@@ -29,12 +29,8 @@ from .rules.form_field_rules import (
     SigFieldModificationRule,
 )
 from .rules.metadata_rules import DocInfoRule, MetadataUpdateRule
-from .rules_api import (
-    ApprovalType,
-    Context,
-    QualifiedWhitelistRule,
-    ReferenceUpdate,
-)
+from .rules_api import QualifiedWhitelistRule, ReferenceUpdate
+from .usage_ledger import _PathLedger, _UsageLedger
 
 logger = logging.getLogger(__name__)
 
@@ -220,60 +216,21 @@ class StandardDiffPolicy(DiffPolicy):
 
         explained = defaultdict(set)
 
-        # prepare LUT for refs that are used multiple times in the old revision
-        # (this reads all objects in the signed revision, but only enumerates
-        #  the paths to the overridden refs)
-        def _init_multi_lut():
-            old._load_reverse_xref_cache(targets=new_xrefs)
-            for new_ref in new_xrefs:
-                usages = old._get_usages_of_ref(new_ref)
-                if usages:
-                    contexts = {Context.from_absolute(old, p) for p in usages}
-                    yield new_ref, (ModificationLevel.NONE, contexts)
-
         # orphaned objects are cleared at LTA update level
         if self.ignore_orphaned_objects:
             for _ref in _find_orphans(new):
                 explained[ModificationLevel.LTA_UPDATES].add(_ref)
 
-        # This table records all the overridden refs that already existed
-        # in the old revision, together with the different ways they can be
-        # reached from the document trailer.
-        # Unlike fresh refs, these need to be cleared together with the paths
-        # through which they are accessed.
-        old_usages_to_clear = dict(_init_multi_lut())
+        # Overridden refs that already existed in the old revision need to be
+        # cleared together with the different ways they can be reached from
+        # the document trailer.
+        ledger: _UsageLedger = _PathLedger(old)
+        ledger.track(new_xrefs)
 
         def ingest_ref(_level: ModificationLevel, _upd: ReferenceUpdate):
-            ref = _upd.updated_ref
-            try:
-                current_max_level, usages = old_usages_to_clear[ref]
-                upd_type = _upd.approval_type
-                if upd_type == ApprovalType.BLANKET_APPROVE:
-                    # approve all usages at once
-                    usages = set()
-                elif upd_type == ApprovalType.APPROVE_RELATIVE_CONTEXT:
-                    # approve all usages that match the relative context,
-                    # keep the rest
-                    usages = {
-                        ctx
-                        for ctx in usages
-                        if ctx.relative_view != _upd.context_checked
-                    }
-                else:
-                    # Last case: path-level approval
-                    # remove the path that has just been cleared from
-                    # the checklist
-                    usages.discard(_upd.context_checked)
-                # bump the modification level for this reference if necessary
-                _level = max(current_max_level, _level)
-                old_usages_to_clear[ref] = _level, usages
-                if usages:
-                    # not all paths/usages have been cleared, so we can't
-                    # approve the reference yet
-                    return
-            except KeyError:
-                pass
-            explained[_level].add(ref)
+            explained_level = ledger.ingest(_level, _upd)
+            if explained_level is not None:
+                explained[explained_level].add(_upd.updated_ref)
 
         for rule in self.global_rules:
             for level, upd in rule.apply_qualified(old, new):
@@ -344,13 +301,7 @@ class StandardDiffPolicy(DiffPolicy):
             logger.debug(
                 "Unexplained xrefs in revision %d:\n%s", new.revision, msg
             )
-            unexplained_overrides = [
-                f" - {ref!r} is also used in "
-                f"{', '.join(str(p) for p in paths_remaining)} in the prior "
-                f"revision."
-                for ref, (_, paths_remaining) in old_usages_to_clear.items()
-                if paths_remaining
-            ]
+            unexplained_overrides = ledger.remaining_report()
             err_msg = (
                 f"There are unexplained xrefs in revision {new.revision}: "
                 f"{', '.join(repr(x) for x in unexplained_annot)}."
@@ -359,7 +310,7 @@ class StandardDiffPolicy(DiffPolicy):
                 unchecked_paths_msg = (
                     f"Some objects from revision {old.revision} were replaced "
                     f"in revision {new.revision} without precise "
-                    "justification:\n" + '\n'.join(unexplained_overrides)
+                    "justification:\n" + unexplained_overrides
                 )
                 err_msg = f"{err_msg}\n{unchecked_paths_msg}"
                 logger.debug(unchecked_paths_msg)
