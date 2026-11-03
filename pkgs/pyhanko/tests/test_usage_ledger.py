@@ -28,8 +28,8 @@ def _twice_used_object(w, pages):
 
 def test_untracked_refs_are_explained_on_first_approval():
     resolver = _build(_twice_used_object)
-    ledger = _tracked_ledger(resolver)
     stranger = generic.Reference(99, 0)
+    ledger = _tracked_ledger(resolver, stranger)
     assert ledger.ingest(LEVEL, ReferenceUpdate(stranger)) == LEVEL
     assert ledger.remaining_report() == ''
 
@@ -140,3 +140,16 @@ def test_report_lists_trailer_usages():
     resolver = _build(populate)
     report = _tracked_ledger(resolver, resolver.root_ref).remaining_report()
     assert '.Root (1 path)' in report
+
+
+def test_relative_approval_of_unrelated_context_does_not_clear_usages():
+    resolver = _build(_twice_used_object)
+    ref = _ref_at(resolver, '/Root', '/Foo')
+    ledger = _tracked_ledger(resolver, ref)
+    unrelated = RelativeContext(resolver.root_ref, RawPdfPath('/Nope'))
+    assert ledger.ingest(LEVEL, ReferenceUpdate(ref, unrelated)) is None
+    assert (
+        ledger.ingest(LEVEL, _path_update(resolver, ref, '/Root', '/Nope'))
+        is None
+    )
+    assert ledger.remaining_report() != ''

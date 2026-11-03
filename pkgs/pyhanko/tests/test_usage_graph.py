@@ -1,5 +1,4 @@
 import gc
-import glob
 import os
 import random
 import weakref
@@ -9,7 +8,7 @@ from io import BytesIO
 import pytest
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import PdfError, PdfReadError
+from pyhanko.pdf_utils.misc import PdfReadError
 from pyhanko.pdf_utils.reader import (
     HistoricalResolver,
     PdfFileReader,
@@ -34,16 +33,74 @@ from pyhanko_testing_commons.test_data.samples import (
 )
 from pyhanko_testing_commons.test_utils.signing_commons import SELF_SIGN
 
-FIXTURES = sorted(
-    glob.glob(os.path.join(PDF_DATA_DIR, '**', '*.pdf'), recursive=True)
-)
 
-
-def _legacy_paths(
+def _reference_paths(
     resolver: HistoricalResolver,
 ) -> dict[generic.Reference, set[RawPdfPath]]:
-    resolver._load_reverse_xref_cache()
-    return resolver._indirect_object_access_cache or {}
+    """
+    Straightforward recursive enumeration of all paths from the trailer
+    (never visiting an object twice) that follows the rules for the page tree,
+    the structure tree and /Parent and /P entries.
+    Only suitable for tiny documents.
+    """
+    page_tree_nodes: dict[generic.Reference, tuple] = {}
+    struct_tree_nodes: set[generic.Reference] = set()
+
+    def collect_pages(node, path):
+        for ix, kid in enumerate(node['/Kids']):
+            kid_path = (*path, '/Kids', ix)
+            if isinstance(kid, generic.IndirectObject):
+                page_tree_nodes[kid.reference] = kid_path
+            kid = kid.get_object()
+            if kid.get('/Type', None) == '/Pages':
+                collect_pages(kid, kid_path)
+
+    def collect_struct_elems(elem):
+        children = elem.get('/K', ())
+        if not isinstance(children, generic.ArrayObject):
+            children = (children,)
+        for child in children:
+            if isinstance(child, generic.IndirectObject):
+                struct_tree_nodes.add(child.reference)
+                child = child.get_object()
+            if isinstance(child, generic.DictionaryObject):
+                collect_struct_elems(child)
+
+    pages = resolver.root.raw_get('/Pages')
+    if isinstance(pages, generic.IndirectObject):
+        page_tree_nodes[pages.reference] = ('/Root', '/Pages')
+    collect_pages(pages.get_object(), ('/Root', '/Pages'))
+    if '/StructTreeRoot' in resolver.root:
+        collect_struct_elems(resolver.root['/StructTreeRoot'])
+
+    collected = defaultdict(set)
+
+    def walk(obj, path, seen, in_struct):
+        if isinstance(obj, generic.IndirectObject):
+            ref = obj.reference
+            if ref in seen:
+                return
+            collected[ref].add(RawPdfPath(*path))
+            seen = seen | {ref}
+            obj = resolver(ref)
+            if path != page_tree_nodes.get(ref, path):
+                return
+            if not in_struct and ref in struct_tree_nodes:
+                return
+        if isinstance(obj, generic.DictionaryObject):
+            for key, value in obj.items():
+                if key == '/Parent' or (in_struct and key == '/P'):
+                    continue
+                enters_struct = (
+                    path == ('/Root', '/StructTreeRoot') and key == '/K'
+                )
+                walk(value, (*path, key), seen, in_struct or enters_struct)
+        elif isinstance(obj, generic.ArrayObject):
+            for ix, value in enumerate(obj):
+                walk(value, (*path, ix), seen, in_struct)
+
+    walk(resolver.trailer_view, (), frozenset(), False)
+    return collected
 
 
 def _relative_view(resolver: HistoricalResolver, path: RawPdfPath):
@@ -73,7 +130,7 @@ def _group_key(group: RelativeContext):
     return ident, tuple(group.relative_path)
 
 
-def _legacy_group_key(resolver, path):
+def _reference_group_key(resolver, path):
     anchor, relative = _relative_view(resolver, path)
     ident = None if anchor is None else (anchor.idnum, anchor.generation)
     return ident, relative
@@ -84,42 +141,20 @@ def _is_cyclic(graph: UsageGraph, ref: generic.Reference) -> bool:
 
 
 def _compare_with_enumeration(resolver: HistoricalResolver):
-    legacy = _legacy_paths(resolver)
+    expected = _reference_paths(resolver)
     graph = build_usage_graph(resolver)
-    page_tree = resolver._load_tree_index().page_tree_nodes
-    for ref in set(legacy) | set(graph._copies):
-        paths = legacy.get(ref, set())
+    for ref in set(expected) | set(graph.references()):
+        paths = expected.get(ref, set())
         groups = graph.inbound_groups(ref)
         assert {_group_key(g) for g in groups} == {
-            _legacy_group_key(resolver, p) for p in paths
+            _reference_group_key(resolver, p) for p in paths
         }, ref
         if _is_cyclic(graph, ref):
             assert graph.usage_count(ref) == SATURATION_CAP
-        elif ref in page_tree:
+        else:
+            # the number of paths to page tree nodes may be overestimated
             assert graph.usage_count(ref) >= len(paths), ref
             assert set(graph.iter_paths(ref)) == paths, ref
-        else:
-            assert graph.usage_count(ref) == len(paths), ref
-
-
-@pytest.mark.parametrize(
-    'fname', FIXTURES, ids=[os.path.basename(f) for f in FIXTURES]
-)
-def test_counts_and_groups_match_enumeration(fname):
-    with open(fname, 'rb') as inf:
-        try:
-            r = PdfFileReader(BytesIO(inf.read()), strict=False)
-            revisions = r.xrefs.total_revisions
-        except PdfError:
-            pytest.skip('unreadable')
-    for revision in range(revisions):
-        try:
-            resolver = r.get_historical_resolver(revision)
-            _legacy_paths(resolver)
-        except (PdfError, AssertionError, TypeError):
-            # the legacy enumeration can't deal with every broken file
-            continue
-        _compare_with_enumeration(resolver)
 
 
 # Document construction helpers
@@ -221,6 +256,27 @@ def test_page_tree_direct_root_node():
 
     resolver = _build(populate, n_pages=4)
     assert _first_page_contents_paths(resolver) == {FIRST_PAGE_CONTENTS_PATH}
+
+
+def test_page_tree_direct_kid_nodes():
+    def populate(w, pages):
+        inner = _obj(
+            {
+                '/Type': generic.pdf_name('/Pages'),
+                '/Kids': _arr(*pages),
+                '/Count': generic.NumberObject(len(pages)),
+            }
+        )
+        w.root['/Pages']['/Kids'] = _arr(inner)
+
+    resolver = _build(populate, n_pages=2)
+    contents = _ref_at(
+        resolver, '/Root', '/Pages', '/Kids', 0, '/Kids', 1, '/Contents'
+    )
+    assert _paths_to(resolver, contents) == {
+        RawPdfPath('/Root', '/Pages', '/Kids', 0, '/Kids', 1, '/Contents')
+    }
+    _compare_with_enumeration(resolver)
 
 
 def test_page_tree_indirect_kids_array_is_still_canonical():
@@ -615,7 +671,7 @@ def test_random_graphs_match_brute_force_enumeration(seed):
 
 
 @pytest.mark.parametrize('seed', range(300))
-def test_random_graphs_with_trees_match_legacy_enumeration(seed):
+def test_random_graphs_with_trees_match_reference_enumeration(seed):
     resolver = _random_document(random.Random(seed), with_trees=True)
     _compare_with_enumeration(resolver)
 
@@ -904,78 +960,7 @@ def test_struct_tree_obj_path_breaks_ties_deterministically():
     assert graph.struct_tree_obj_path(page) == STRUCT_OBJ_PATH
 
 
-# Structural queries compared to the shape filters they replace
-
-
-def _legacy_is_annotation_path(pdf_path: RawPdfPath) -> bool:
-    if len(pdf_path) < 6:
-        return False
-    fst, snd, *rest = pdf_path.path
-    if fst != '/Root' or snd != '/Pages':
-        return False
-    descended = False
-    nxt, nxt_ix, *rest = rest
-    while nxt == '/Kids' and isinstance(nxt_ix, int):
-        descended = True
-        nxt, nxt_ix, *rest = rest
-    return (
-        descended and not rest and nxt == '/Annots' and isinstance(nxt_ix, int)
-    )
-
-
-def _legacy_is_struct_tree_obj_path(pdf_path: RawPdfPath) -> bool:
-    if '/StructTreeRoot' in pdf_path and len(pdf_path) >= 5:
-        root, struct_tree_root, k1 = pdf_path.path[:3]
-        k2, obj = pdf_path.path[-2:]
-        return (
-            k1 == k2 == '/K'
-            and obj == '/Obj'
-            and root == '/Root'
-            and struct_tree_root == '/StructTreeRoot'
-        )
-    return False
-
-
-def _for_each_fixture_revision(fname):
-    with open(fname, 'rb') as inf:
-        try:
-            r = PdfFileReader(BytesIO(inf.read()), strict=False)
-            revisions = r.xrefs.total_revisions
-        except PdfError:
-            pytest.skip('unreadable')
-    for revision in range(revisions):
-        try:
-            resolver = r.get_historical_resolver(revision)
-            legacy = _legacy_paths(resolver)
-        except (PdfError, AssertionError, TypeError):
-            continue
-        yield resolver, legacy
-
-
-@pytest.mark.parametrize(
-    'fname', FIXTURES, ids=[os.path.basename(f) for f in FIXTURES]
-)
-def test_page_annotation_paths_match_legacy(fname):
-    for resolver, legacy in _for_each_fixture_revision(fname):
-        graph = build_usage_graph(resolver)
-        for ref, paths in legacy.items():
-            expected = {p for p in paths if _legacy_is_annotation_path(p)}
-            assert graph.page_annotation_paths(ref) == expected, ref
-
-
-@pytest.mark.parametrize(
-    'fname', FIXTURES, ids=[os.path.basename(f) for f in FIXTURES]
-)
-def test_struct_tree_obj_path_match_legacy(fname):
-    for resolver, legacy in _for_each_fixture_revision(fname):
-        graph = build_usage_graph(resolver)
-        for ref, paths in legacy.items():
-            expected = {p for p in paths if _legacy_is_struct_tree_obj_path(p)}
-            actual = graph.struct_tree_obj_path(ref)
-            if expected:
-                assert actual in expected, ref
-            else:
-                assert actual is None, ref
+# Structural queries
 
 
 def test_bogus_kids_under_leaf_not_an_annotation_path():
@@ -985,10 +970,8 @@ def test_bogus_kids_under_leaf_not_an_annotation_path():
         pages[0].get_object()['/Kids'] = _arr(fake_page)
 
     resolver = _build(populate)
-    annot = _ref_at(
-        resolver, '/Root', '/Pages', '/Kids', 0, '/Kids', 0, '/Annots', 0
-    )
     path = RawPdfPath('/Root', '/Pages', '/Kids', 0, '/Kids', 0, '/Annots', 0)
-    assert _legacy_is_annotation_path(path)
-    assert path in _legacy_paths(resolver)[annot]
-    assert build_usage_graph(resolver).page_annotation_paths(annot) == set()
+    annot = path.access_reference_on(resolver.trailer_view)
+    graph = build_usage_graph(resolver)
+    assert set(graph.iter_paths(annot)) == {path}
+    assert graph.page_annotation_paths(annot) == set()

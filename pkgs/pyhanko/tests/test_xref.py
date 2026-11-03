@@ -18,6 +18,7 @@ from pyhanko.pdf_utils.xref import (
     parse_xref_stream,
     read_object_header,
 )
+from pyhanko.sign.diff_analysis.usage_graph import build_usage_graph
 from pyhanko_testing_commons.test_data.samples import (
     MINIMAL,
     MINIMAL_AES256,
@@ -493,14 +494,12 @@ def test_free_unexpected_jump():
 def test_tagged_path_count():
     r = PdfFileReader(BytesIO(MINIMAL_TWO_FIELDS_TAGGED))
     r = r.get_historical_resolver(0)
-    r._load_reverse_xref_cache()
     # The path simplifier should eliminate all (pseudo-)duplicates refs except
     # these three:
     #  - one from the AcroForm hierarchy
     #  - one from the pages tree (through /Annots)
     #  - one from the structure tree
-    paths_to = r._indirect_object_access_cache[generic.Reference(7, 0, r)]
-    assert len(paths_to) == 3
+    assert build_usage_graph(r).usage_count(generic.Reference(7, 0, r)) == 3
 
 
 def test_trailer_refs():

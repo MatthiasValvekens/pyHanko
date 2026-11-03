@@ -539,6 +539,13 @@ class UsageGraph:
         """
         return len(self._keys)
 
+    def references(self) -> Iterator[generic.Reference]:
+        """
+        :return:
+            The objects that can be reached from the trailer.
+        """
+        return iter(self._copies)
+
     def _bind(self, ref: generic.Reference) -> generic.Reference:
         return generic.Reference(ref.idnum, ref.generation, self._old())
 

@@ -1,15 +1,14 @@
+import functools
 import os
 import re
 from datetime import UTC, datetime
 from io import BytesIO
 from itertools import product
 from pathlib import Path
-from unittest import mock
 
 import pytest
 from freezegun.api import freeze_time
 from pyhanko.pdf_utils import generic, misc
-from pyhanko.pdf_utils import reader as reader_module
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -33,7 +32,6 @@ from pyhanko.sign.diff_analysis import (
     StandardDiffPolicy,
     SuspiciousModification,
     XrefStreamRule,
-    policies,
 )
 from pyhanko.sign.diff_analysis.rules_api import (
     Context,
@@ -41,11 +39,6 @@ from pyhanko.sign.diff_analysis.rules_api import (
     _eq_deref,
 )
 from pyhanko.sign.diff_analysis.usage_graph import build_usage_graph
-from pyhanko.sign.diff_analysis.usage_ledger import (
-    _GraphLedger,
-    _PathLedger,
-    _UsageLedger,
-)
 from pyhanko.sign.validation import (
     SignatureCoverageLevel,
     validate_pdf_signature,
@@ -81,6 +74,7 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     val_untrusted,
 )
 
+from .diff_analysis_golden import GOLDEN_OUTCOMES, GOLDEN_USAGE_TOTALS
 from .test_pades import PADES
 
 
@@ -138,67 +132,85 @@ def test_cross_linked_pages_do_not_blow_up_paths():
     # hundreds of thousands of paths here (and never finished on real
     # documents with more pages).
     resolver = r.get_historical_resolver(r.xrefs.total_revisions - 1)
-    resolver._load_reverse_xref_cache()
-    cache = resolver._indirect_object_access_cache
-    assert cache is not None
-    assert sum(len(paths) for paths in cache.values()) < 1000
+    graph = build_usage_graph(resolver)
+    pages = r.root['/Pages']['/Kids']
+    assert (
+        max(
+            graph.usage_count(page.get_object().raw_get('/Contents').reference)
+            for page in pages
+        )
+        < 1000
+    )
 
     status = val_trusted(r.embedded_signatures[0], extd=True)
     assert status.modification_level == ModificationLevel.LTA_UPDATES
     assert status.docmdp_ok
 
 
-def test_tree_index_is_built_once_per_resolver():
-    r = PdfFileReader(BytesIO(MINIMAL_TWO_FIELDS_TAGGED))
-    resolver = r.get_historical_resolver(r.xrefs.total_revisions - 1)
-    refs = [Reference(i, 0, r) for i in range(1, 8)]
-    with mock.patch.object(
-        reader_module, '_TreeIndex', wraps=reader_module._TreeIndex
-    ) as tree_index_factory:
-        for ref in refs:
-            resolver._get_usages_of_ref(ref)
-        resolver._load_reverse_xref_cache()
-    assert tree_index_factory.call_count == 1
-    index = resolver._load_tree_index()
-    assert index.page_tree_nodes
-    assert index.struct_tree_nodes
+def _shared_resources(n: int) -> bytes:
+    # n pages share one resource dictionary that lists n form XObjects, and
+    # those all share a second resource dictionary listing n more form
+    # XObjects. This is how TCPDF lays out pages imported with FPDI: every
+    # object behind the inner dictionary can be reached through ~n**2 paths.
+    w = PdfFileWriter()
+
+    def _form(resources):
+        return w.add_object(
+            generic.StreamObject(
+                {
+                    pdf_name('/Type'): pdf_name('/XObject'),
+                    pdf_name('/Subtype'): pdf_name('/Form'),
+                    pdf_name('/BBox'): generic.ArrayObject(
+                        map(generic.NumberObject, (0, 0, 10, 10))
+                    ),
+                    pdf_name('/Resources'): resources,
+                },
+                stream_data=b'q Q',
+            )
+        )
+
+    def _xobject_resources(forms):
+        return w.add_object(
+            generic.DictionaryObject(
+                {
+                    pdf_name('/XObject'): generic.DictionaryObject(
+                        {pdf_name(f'/T{ix}'): f for ix, f in enumerate(forms)}
+                    )
+                }
+            )
+        )
+
+    inner = _xobject_resources(
+        [_form(generic.DictionaryObject()) for _ in range(n)]
+    )
+    outer = _xobject_resources([_form(inner) for _ in range(n)])
+    for ix in range(n):
+        contents = w.add_object(
+            generic.StreamObject(stream_data=f'/T{ix} Do'.encode('ascii'))
+        )
+        w.insert_page(
+            generic.DictionaryObject(
+                {
+                    pdf_name('/Type'): pdf_name('/Page'),
+                    pdf_name('/MediaBox'): generic.ArrayObject(
+                        map(generic.NumberObject, (0, 0, 300, 144))
+                    ),
+                    pdf_name('/Resources'): outer,
+                    pdf_name('/Contents'): contents,
+                }
+            )
+        )
+    out = BytesIO()
+    w.write(out)
+    return out.getvalue()
 
 
-@pytest.mark.parametrize(
-    'pdf_bytes',
-    [
-        MINIMAL_TWO_FIELDS_TAGGED,
-        MINIMAL_ONE_FIELD_TAGGED,
-        SIMPLE_FORM,
-        TEXTFIELD_GROUP,
-        _cross_linked_pages(4),
-        SHARED_NESTED_RESOURCES,
-    ],
-)
-def test_targeted_usage_paths_match_full_mapping(pdf_bytes):
-    def _resolver():
-        r = PdfFileReader(BytesIO(pdf_bytes))
-        return r.get_historical_resolver(r.xrefs.total_revisions - 1)
-
-    full = _resolver()
-    full._load_reverse_xref_cache()
-    full._load_reverse_xref_cache()  # no-op once complete
-    expected = full._indirect_object_access_cache
-    assert expected
-
-    # one ref at a time, on a fresh resolver
-    for ref, paths in expected.items():
-        assert _resolver()._get_usages_of_ref(ref) == paths
-
-    # all refs on one resolver, so later lookups reuse earlier results
-    shared = _resolver()
-    for ref, paths in expected.items():
-        shared._load_reverse_xref_cache(targets=(ref,))
-        assert shared._get_usages_of_ref(ref) == paths
-
-    # a full mapping after targeted ones still covers everything
-    shared._load_reverse_xref_cache()
-    assert shared._indirect_object_access_cache == expected
+@pytest.mark.parametrize('n', [5, 20])
+def test_shared_resources_graph_size_is_linear(n):
+    r = PdfFileReader(BytesIO(_shared_resources(n)))
+    graph = build_usage_graph(r.get_historical_resolver(0))
+    assert max(graph.usage_count(ref) for ref in graph.references()) == n * n
+    assert graph.node_count < 6 * n + 20
 
 
 def _build_and_map_paths(n_pages: int, tweak):
@@ -209,11 +221,10 @@ def _build_and_map_paths(n_pages: int, tweak):
     w.write(out)
     r = PdfFileReader(out)
     resolver = r.get_historical_resolver(r.xrefs.total_revisions - 1)
-    resolver._load_reverse_xref_cache()
-    cache = resolver._indirect_object_access_cache
-    assert cache is not None
+    graph = build_usage_graph(resolver)
     first_page_contents = r.root['/Pages']['/Kids'][0].raw_get('/Contents')
-    return cache, cache[first_page_contents.reference]
+    total_usages = sum(graph.usage_count(ref) for ref in graph.references())
+    return total_usages, set(graph.iter_paths(first_page_contents.reference))
 
 
 def test_page_tree_not_reentered_via_foreign_kids():
@@ -228,11 +239,11 @@ def test_page_tree_not_reentered_via_foreign_kids():
                 }
             )
 
-    cache, contents_paths = _build_and_map_paths(7, tweak)
+    total_usages, contents_paths = _build_and_map_paths(7, tweak)
     assert contents_paths == {
         RawPdfPath('/Root', '/Pages', '/Kids', 0, '/Contents')
     }
-    assert sum(len(paths) for paths in cache.values()) < 1000
+    assert total_usages < 1000
 
 
 def test_page_tree_root_not_reentered_from_outside():
@@ -3706,44 +3717,6 @@ def test_shared_nested_resources_override_behind_shared_resources():
     assert result.modification_level == ModificationLevel.LTA_UPDATES
 
 
-class _LedgerMismatch(Exception):
-    pass
-
-
-class _EquivalenceLedger(_UsageLedger):
-    """Forward everything to both ledger implementations and compare."""
-
-    def __init__(self, old):
-        self.path_ledger = _PathLedger(old)
-        self.graph_ledger = _GraphLedger(old)
-
-    def track(self, refs):
-        refs = list(refs)
-        self.path_ledger.track(refs)
-        self.graph_ledger.track(refs)
-
-    def ingest(self, level, upd):
-        expected = self.path_ledger.ingest(level, upd)
-        actual = self.graph_ledger.ingest(level, upd)
-        if expected != actual:
-            raise _LedgerMismatch(
-                f"{upd}: path ledger says {expected}, graph ledger {actual}"
-            )
-        return actual
-
-    def remaining_report(self):
-        expected = self.path_ledger.remaining_report()
-        actual = self.graph_ledger.remaining_report()
-        if bool(expected) != bool(actual):
-            raise _LedgerMismatch(f"{expected!r} vs {actual!r}")
-        return actual
-
-
-def _review_with_both_ledgers(reader, base_revision):
-    with mock.patch.object(policies, '_GraphLedger', _EquivalenceLedger):
-        return DEFAULT_DIFF_POLICY.review_file(reader, base_revision)
-
-
 @freeze_time('2020-11-01')
 def _generated_documents():
     for variant, k in product(('dead', 'override', 'acroform'), (3, 10)):
@@ -3769,30 +3742,59 @@ def _generated_documents():
 GENERATED_DOCUMENTS = dict(_generated_documents())
 
 
-def _compare_ledgers_on_all_revisions(data: bytes):
-    reader = PdfFileReader(BytesIO(data), strict=False)
-    for base_revision in range(reader.xrefs.total_revisions - 1):
-        try:
-            _review_with_both_ledgers(reader, base_revision)
-        except (PdfError, AssertionError, KeyError, TypeError, RecursionError):
-            # not every fixture can be processed by the path enumeration
-            continue
+GOLDEN_ERRORS = (PdfError, AssertionError, KeyError, TypeError, RecursionError)
 
 
-@pytest.mark.parametrize(
-    'fname',
-    sorted(Path(PDF_DATA_DIR).glob('**/*.pdf')),
-    ids=lambda p: p.name,
-)
-def test_ledger_equivalence_on_fixtures(fname):
+@functools.cache
+def _golden_corpus() -> dict[str, bytes]:
+    corpus = {
+        str(path.relative_to(PDF_DATA_DIR)): path.read_bytes()
+        for path in sorted(Path(PDF_DATA_DIR).glob('**/*.pdf'))
+    }
+    for name, data in sorted(GENERATED_DOCUMENTS.items()):
+        corpus[f'generated:{name}'] = data.getvalue()
+    return corpus
+
+
+def _open_golden_document(data: bytes):
     try:
-        data = fname.read_bytes()
-        PdfFileReader(BytesIO(data), strict=False)
+        return PdfFileReader(BytesIO(data), strict=False)
     except PdfError:
         pytest.skip('unreadable')
-    _compare_ledgers_on_all_revisions(data)
 
 
-@pytest.mark.parametrize('name', sorted(GENERATED_DOCUMENTS))
-def test_ledger_equivalence_on_generated_documents(name):
-    _compare_ledgers_on_all_revisions(GENERATED_DOCUMENTS[name].getvalue())
+def _outcome_of_review(reader, base_revision: int) -> str:
+    try:
+        result = DEFAULT_DIFF_POLICY.review_file(reader, base_revision)
+    except GOLDEN_ERRORS as e:
+        return type(e).__name__
+    if isinstance(result, SuspiciousModification):
+        return type(result).__name__
+    return result.modification_level.name
+
+
+@pytest.mark.parametrize('name', sorted(GOLDEN_OUTCOMES))
+def test_diff_outcomes_golden(name):
+    data = _golden_corpus()[name]
+    reader = _open_golden_document(data)
+    outcomes = {
+        base: _outcome_of_review(reader, base)
+        for base in range(reader.xrefs.total_revisions - 1)
+    }
+    assert outcomes == GOLDEN_OUTCOMES[name]
+
+
+@pytest.mark.parametrize('name', sorted(GOLDEN_USAGE_TOTALS))
+def test_usage_totals_golden(name):
+    reader = _open_golden_document(_golden_corpus()[name])
+    totals = []
+    for revision in range(reader.xrefs.total_revisions):
+        try:
+            graph = build_usage_graph(reader.get_historical_resolver(revision))
+        except GOLDEN_ERRORS as e:
+            totals.append(type(e).__name__)
+        else:
+            totals.append(
+                sum(graph.usage_count(ref) for ref in graph.references())
+            )
+    assert totals == GOLDEN_USAGE_TOTALS[name]
