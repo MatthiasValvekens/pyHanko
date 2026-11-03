@@ -902,3 +902,93 @@ def test_struct_tree_obj_path_breaks_ties_deterministically():
     graph = build_usage_graph(resolver)
     page = _ref_at(resolver, '/Root', '/Pages', '/Kids', 0)
     assert graph.struct_tree_obj_path(page) == STRUCT_OBJ_PATH
+
+
+# Structural queries compared to the shape filters they replace
+
+
+def _legacy_is_annotation_path(pdf_path: RawPdfPath) -> bool:
+    if len(pdf_path) < 6:
+        return False
+    fst, snd, *rest = pdf_path.path
+    if fst != '/Root' or snd != '/Pages':
+        return False
+    descended = False
+    nxt, nxt_ix, *rest = rest
+    while nxt == '/Kids' and isinstance(nxt_ix, int):
+        descended = True
+        nxt, nxt_ix, *rest = rest
+    return (
+        descended and not rest and nxt == '/Annots' and isinstance(nxt_ix, int)
+    )
+
+
+def _legacy_is_struct_tree_obj_path(pdf_path: RawPdfPath) -> bool:
+    if '/StructTreeRoot' in pdf_path and len(pdf_path) >= 5:
+        root, struct_tree_root, k1 = pdf_path.path[:3]
+        k2, obj = pdf_path.path[-2:]
+        return (
+            k1 == k2 == '/K'
+            and obj == '/Obj'
+            and root == '/Root'
+            and struct_tree_root == '/StructTreeRoot'
+        )
+    return False
+
+
+def _for_each_fixture_revision(fname):
+    with open(fname, 'rb') as inf:
+        try:
+            r = PdfFileReader(BytesIO(inf.read()), strict=False)
+            revisions = r.xrefs.total_revisions
+        except PdfError:
+            pytest.skip('unreadable')
+    for revision in range(revisions):
+        try:
+            resolver = r.get_historical_resolver(revision)
+            legacy = _legacy_paths(resolver)
+        except (PdfError, AssertionError, TypeError):
+            continue
+        yield resolver, legacy
+
+
+@pytest.mark.parametrize(
+    'fname', FIXTURES, ids=[os.path.basename(f) for f in FIXTURES]
+)
+def test_page_annotation_paths_match_legacy(fname):
+    for resolver, legacy in _for_each_fixture_revision(fname):
+        graph = build_usage_graph(resolver)
+        for ref, paths in legacy.items():
+            expected = {p for p in paths if _legacy_is_annotation_path(p)}
+            assert graph.page_annotation_paths(ref) == expected, ref
+
+
+@pytest.mark.parametrize(
+    'fname', FIXTURES, ids=[os.path.basename(f) for f in FIXTURES]
+)
+def test_struct_tree_obj_path_match_legacy(fname):
+    for resolver, legacy in _for_each_fixture_revision(fname):
+        graph = build_usage_graph(resolver)
+        for ref, paths in legacy.items():
+            expected = {p for p in paths if _legacy_is_struct_tree_obj_path(p)}
+            actual = graph.struct_tree_obj_path(ref)
+            if expected:
+                assert actual in expected, ref
+            else:
+                assert actual is None, ref
+
+
+def test_bogus_kids_under_leaf_not_an_annotation_path():
+    def populate(w, pages):
+        annot = w.add_object(_obj({'/Subtype': generic.pdf_name('/Link')}))
+        fake_page = w.add_object(_obj({'/Annots': _arr(annot)}))
+        pages[0].get_object()['/Kids'] = _arr(fake_page)
+
+    resolver = _build(populate)
+    annot = _ref_at(
+        resolver, '/Root', '/Pages', '/Kids', 0, '/Kids', 0, '/Annots', 0
+    )
+    path = RawPdfPath('/Root', '/Pages', '/Kids', 0, '/Kids', 0, '/Annots', 0)
+    assert _legacy_is_annotation_path(path)
+    assert path in _legacy_paths(resolver)[annot]
+    assert build_usage_graph(resolver).page_annotation_paths(annot) == set()

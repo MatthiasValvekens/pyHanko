@@ -25,6 +25,12 @@ from ..form_rules_api import (
 )
 from ..policy_api import ModificationLevel, SuspiciousModification
 from ..rules_api import Context, ReferenceUpdate, RelativeContext, WhitelistRule
+from ..usage_graph import (
+    MAX_REPORTED_GROUPS_PER_REF,
+    abbreviate_path,
+    build_usage_graph,
+    group_sort_key,
+)
 
 __all__ = [
     'BaseFieldModificationRule',
@@ -842,16 +848,21 @@ def _allow_appearance_update(
             old_ap_raw = old_field.raw_get('/AP')
             if isinstance(old_ap_raw, generic.IndirectObject):
                 # reference count
-                contexts = {
-                    Context.from_absolute(old, path).relative_view
-                    for path in old._get_usages_of_ref(old_ap_raw.reference)
-                }
+                graph = build_usage_graph(old)
+                contexts = graph.inbound_groups(old_ap_raw.reference)
                 if len(contexts) > 1:
+                    shown = ', '.join(
+                        abbreviate_path(graph.witness(context))
+                        for context in sorted(contexts, key=group_sort_key)[
+                            :MAX_REPORTED_GROUPS_PER_REF
+                        ]
+                    )
                     raise SuspiciousModification(
                         "Attempted to update an appearance "
                         "stream in an annotation appearance dictionary, "
                         "but that appearance dictionary is used in "
-                        f"multiple contexts: {contexts}."
+                        f"multiple contexts: {shown}"
+                        f"{', ...' if len(contexts) > MAX_REPORTED_GROUPS_PER_REF else ''}."
                     )
             checked_ap_references = True
 

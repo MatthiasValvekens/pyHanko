@@ -19,7 +19,14 @@ from .rules_api import (
     ReferenceUpdate,
     RelativeContext,
 )
-from .usage_graph import SATURATION_CAP, GroupInfo, build_usage_graph
+from .usage_graph import (
+    MAX_REPORTED_GROUPS_PER_REF,
+    SATURATION_CAP,
+    GroupInfo,
+    abbreviate_path,
+    build_usage_graph,
+    group_sort_key,
+)
 
 
 class _UsageLedger(Protocol):
@@ -111,32 +118,6 @@ class _PathLedger(_UsageLedger):
 
 
 MAX_REPORTED_REFS = 20
-MAX_REPORTED_GROUPS_PER_REF = 5
-MAX_REPORTED_PATH_STEPS = 24
-MAX_REPORTED_DESCRIPTION_LENGTH = 400
-
-
-def _abbreviate_path(path: RawPdfPath) -> str:
-    if len(path) <= MAX_REPORTED_PATH_STEPS:
-        text = str(path)
-    else:
-        half = MAX_REPORTED_PATH_STEPS // 2
-        head = RawPdfPath(*path.path[:half])
-        tail = RawPdfPath(*path.path[-half:])
-        text = f"{head}...{tail}"
-    if len(text) > MAX_REPORTED_DESCRIPTION_LENGTH:
-        text = text[:MAX_REPORTED_DESCRIPTION_LENGTH] + '...'
-    return text
-
-
-def _group_sort_key(group: RelativeContext):
-    anchor = group.anchor
-    if isinstance(anchor, generic.TrailerReference):
-        anchor_key = (0, 0, 0)
-    else:
-        assert isinstance(anchor, generic.Reference)
-        anchor_key = (1, anchor.idnum, anchor.generation)
-    return anchor_key, group.relative_path._tag()
 
 
 @dataclass
@@ -217,7 +198,7 @@ class _GraphLedger(_UsageLedger):
 
     def _describe(self, group: RelativeContext, usages: _RefUsages) -> str:
         info = usages.groups[group]
-        witness = _abbreviate_path(self._graph.witness(group))
+        witness = abbreviate_path(self._graph.witness(group))
         if info.count >= SATURATION_CAP:
             amount = "at least 2^32 paths"
         else:
@@ -241,7 +222,7 @@ class _GraphLedger(_UsageLedger):
             usages = self._tracked[ref]
             pending = sorted(
                 (g for g in usages.groups if not usages.is_satisfied(g)),
-                key=_group_sort_key,
+                key=group_sort_key,
             )
             shown = [
                 self._describe(group, usages)

@@ -15,6 +15,7 @@ from .commons import compare_dicts, compare_key_refs, qualify_transforming
 from .constants import ACROFORM_EXEMPT_STRICT_COMPARISON
 from .policy_api import ModificationLevel, SuspiciousModification
 from .rules_api import Context, ReferenceUpdate
+from .usage_graph import build_usage_graph
 
 logger = logging.getLogger(__name__)
 
@@ -160,25 +161,12 @@ class FieldComparisonSpec:
         if '/StructTreeRoot' not in old.root:
             return None
 
-        # check if the path ends in Form.K.Obj and
-        # starts with Root.StructTreeRoot.K
-        for pdf_path in old._get_usages_of_ref(old_field_ref):
-            # Root.StructTreeRoot.K is three, and K.Obj at the end is
-            # another 2
-            if '/StructTreeRoot' in pdf_path and len(pdf_path) >= 5:
-                root, struct_tree_root, k1 = pdf_path.path[:3]
-                k2, obj = pdf_path.path[-2:]
-                if (
-                    k1 == k2 == '/K'
-                    and obj == '/Obj'
-                    and root == '/Root'
-                    and struct_tree_root == '/StructTreeRoot'
-                ):
-                    return Context.from_absolute(old, pdf_path)
-        return None
+        path = build_usage_graph(old).struct_tree_obj_path(old_field_ref)
+        if path is None:
+            return None
+        return Context.from_absolute(old, path)
 
-    # FIXME this is wrong now
-    def _old_annotation_paths(self):
+    def _old_annotation_paths(self) -> set[RawPdfPath]:
         # collect path(s) through which this field is used as an annotation
         # the clean way to accomplish this would be to follow /P
         # and go from there, but /P is optional, so we have to get a little
@@ -187,38 +175,9 @@ class FieldComparisonSpec:
         if old_field_ref is None:
             return set()  # pragma: nocover
 
-        old = self.old_field_ref.get_pdf_handler()
+        old = old_field_ref.get_pdf_handler()
         assert isinstance(old, HistoricalResolver)
-
-        all_paths = old._get_usages_of_ref(old_field_ref)
-
-        def _path_ok(pdf_path: RawPdfPath):
-            # check if the path looks like a path to an annotation on a page
-
-            # .Root.Pages.Kids[0].Annots[0] is the shortest you can get,
-            # so 6 nodes is the minimum
-            if len(pdf_path) < 6:
-                return False
-            fst, snd, *rest = pdf_path.path
-            if fst != '/Root' or snd != '/Pages':
-                return False
-
-            # there should be one or more elements of the form /Kids[i] now
-            descended = False
-            nxt, nxt_ix, *rest = rest
-            while nxt == '/Kids' and isinstance(nxt_ix, int):
-                descended = True
-                nxt, nxt_ix, *rest = rest
-
-            # rest should be nothing and nxt should be /Annots
-            return (
-                descended
-                and not rest
-                and nxt == '/Annots'
-                and isinstance(nxt_ix, int)
-            )
-
-        return {p for p in all_paths if _path_ok(p)}
+        return build_usage_graph(old).page_annotation_paths(old_field_ref)
 
 
 @dataclass(frozen=True)

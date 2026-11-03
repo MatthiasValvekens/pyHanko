@@ -164,31 +164,6 @@ def test_tree_index_is_built_once_per_resolver():
     assert index.struct_tree_nodes
 
 
-@freeze_time('2020-11-01')
-def test_shared_resources_do_not_blow_up_paths():
-    out = BytesIO(SHARED_NESTED_RESOURCES)
-    for field_name in ('Sig1', 'Sig2'):
-        out = signers.sign_pdf(
-            IncrementalPdfFileWriter(out),
-            signers.PdfSignatureMetadata(field_name=field_name),
-            signer=FROM_CA,
-        )
-
-    r = PdfFileReader(out)
-    sig = r.embedded_signatures[0]
-    status = val_trusted(sig, extd=True)
-    assert status.modification_level == ModificationLevel.FORM_FILLING
-
-    # The difference analysis only needs the usages of the objects that the
-    # second signature overrides. None of them lies behind the shared
-    # resources, so the hundreds of thousands of paths into the form XObjects
-    # are never enumerated.
-    resolver = r.get_historical_resolver(sig.signed_revision)
-    cache = resolver._indirect_object_access_cache
-    assert cache is not None
-    assert sum(len(paths) for paths in cache.values()) < 1000
-
-
 @pytest.mark.parametrize(
     'pdf_bytes',
     [
@@ -3569,6 +3544,31 @@ def _first_signature_diff_result(data: BytesIO):
 
 
 @freeze_time('2020-11-01')
+def test_chain_dead_end_then_signature():
+    out, _ = _chain_document(200, 'dead')
+    result = _first_signature_diff_result(out)
+    assert result.modification_level == ModificationLevel.FORM_FILLING
+
+
+@freeze_time('2020-11-01')
+def test_chain_identical_tail_rewrite():
+    out, _ = _chain_document(200, 'override')
+    result = _first_signature_diff_result(out)
+    assert result.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@freeze_time('2020-11-01')
+def test_chain_into_acroform_honest_second_signature():
+    out, _ = _chain_document(200, 'acroform')
+    result = _first_signature_diff_result(out)
+    assert isinstance(result, SuspiciousModification)
+    message = str(result)
+    assert '.Root.Chain' in message
+    assert len(message) < 20_000
+    assert '2^32' in message
+
+
+@freeze_time('2020-11-01')
 def test_unexplained_message_bounded():
     n_objects, n_containers = 50, 8
     refs = []
@@ -3605,48 +3605,71 @@ def test_unexplained_message_bounded():
     assert len(message) < 20_000
 
 
+def _in_place_ap_update_result(share=None, indirect_ap=False):
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+    set_text_field(w, 'Some text')
+    text_field = w.root['/AcroForm']['/Fields'][1].get_object()
+    ap_ref = None
+    if indirect_ap:
+        ap_ref = text_field['/AP'] = w.add_object(text_field['/AP'])
+    stream_ref = text_field['/AP'].raw_get('/N')
+    if share is not None:
+        share(w, stream_ref, ap_ref)
+    out = BytesIO()
+    w.write(out)
+    out = signers.sign_pdf(
+        IncrementalPdfFileWriter(out),
+        signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA,
+    )
+
+    # now rewrite the stream in-place
+    w = IncrementalPdfFileWriter(out)
+    stream_ref = Reference(stream_ref.idnum, 0, w)
+    stream = stream_ref.get_object()
+    stream._data = b'q 1 0 0 rg BT /Ti 12 Tf (Other) Tj ET Q'
+    stream._encoded_data = None
+    w.mark_update(stream_ref)
+    tf = w.root['/AcroForm']['/Fields'][1].get_object()
+    tf['/V'] = generic.pdf_string('Other')
+    w.update_container(tf)
+    out = BytesIO()
+    w.write(out)
+    sig = PdfFileReader(out).embedded_signatures[0]
+    sig.compute_integrity_info(DEFAULT_DIFF_POLICY)
+    return sig.diff_result
+
+
 @freeze_time('2020-11-01')
 def test_in_place_ap_update_rejected_when_stream_shared_with_page_content():
-    def run(share_stream: bool):
-        w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
-        set_text_field(w, 'Some text')
-        stream_ref = (
-            w.root['/AcroForm']['/Fields'][1].get_object()['/AP'].raw_get('/N')
+    def share_with_page(w, stream_ref, ap_ref):
+        page = w.root['/Pages']['/Kids'][0].get_object()
+        page['/Resources']['/XObject'] = generic.DictionaryObject(
+            {pdf_name('/Shared'): stream_ref}
         )
-        if share_stream:
-            page = w.root['/Pages']['/Kids'][0].get_object()
-            page['/Resources']['/XObject'] = generic.DictionaryObject(
-                {pdf_name('/Shared'): stream_ref}
-            )
-            w.update_container(page)
-        out = BytesIO()
-        w.write(out)
-        out = signers.sign_pdf(
-            IncrementalPdfFileWriter(out),
-            signers.PdfSignatureMetadata(field_name='Sig1'),
-            signer=FROM_CA,
-        )
+        w.update_container(page)
 
-        # now rewrite the stream in-place
-        w = IncrementalPdfFileWriter(out)
-        stream_ref = Reference(stream_ref.idnum, 0, w)
-        stream = stream_ref.get_object()
-        stream._data = b'q 1 0 0 rg BT /Ti 12 Tf (Other) Tj ET Q'
-        stream._encoded_data = None
-        w.mark_update(stream_ref)
-        tf = w.root['/AcroForm']['/Fields'][1].get_object()
-        tf['/V'] = generic.pdf_string('Other')
-        w.update_container(tf)
-        out = BytesIO()
-        w.write(out)
-        sig = PdfFileReader(out).embedded_signatures[0]
-        sig.compute_integrity_info(DEFAULT_DIFF_POLICY)
-        return sig.diff_result
+    result = _in_place_ap_update_result()
+    assert result.modification_level == ModificationLevel.FORM_FILLING
+    result = _in_place_ap_update_result(share_with_page)
+    assert isinstance(result, SuspiciousModification)
 
-    assert run(share_stream=False).modification_level == (
-        ModificationLevel.FORM_FILLING
-    )
-    assert isinstance(run(share_stream=True), SuspiciousModification)
+
+@freeze_time('2020-11-01')
+def test_in_place_ap_update_rejected_when_ap_dictionary_is_shared():
+    def share_ap(w, stream_ref, ap_ref):
+        for ix in range(7):
+            w.root[f'/Shared{ix}'] = ap_ref
+        w.update_root()
+
+    result = _in_place_ap_update_result(indirect_ap=True)
+    assert result.modification_level == ModificationLevel.FORM_FILLING
+    result = _in_place_ap_update_result(share_ap, indirect_ap=True)
+    assert isinstance(result, SuspiciousModification)
+    message = str(result)
+    assert 'used in multiple contexts' in message
+    assert message.count('.Root.Shared') == 5
+    assert 'contexts: ' in message and ', ....' in message
 
 
 @freeze_time('2020-11-01')

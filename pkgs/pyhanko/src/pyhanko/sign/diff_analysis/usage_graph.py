@@ -39,10 +39,13 @@ from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 from .rules_api import RelativeContext
 
 __all__ = [
+    'MAX_REPORTED_GROUPS_PER_REF',
     'SATURATION_CAP',
     'GroupInfo',
     'UsageGraph',
+    'abbreviate_path',
     'build_usage_graph',
+    'group_sort_key',
 ]
 
 SATURATION_CAP = 2**32
@@ -807,6 +810,41 @@ class UsageGraph:
         prefix = ('/Root', '/StructTreeRoot', '/K')
         valid = [c for c in candidates if len(c) >= 5 and c.path[:3] == prefix]
         return min(valid, key=lambda c: (len(c), c._tag()), default=None)
+
+
+# Limits for the usage information that ends up in messages
+MAX_REPORTED_GROUPS_PER_REF = 5
+MAX_REPORTED_PATH_STEPS = 24
+MAX_REPORTED_DESCRIPTION_LENGTH = 400
+
+
+def abbreviate_path(path: RawPdfPath) -> str:
+    """
+    Render a path for display in messages, shortening it if it is very long.
+    """
+    if len(path) <= MAX_REPORTED_PATH_STEPS:
+        text = str(path)
+    else:
+        half = MAX_REPORTED_PATH_STEPS // 2
+        head = RawPdfPath(*path.path[:half])
+        tail = RawPdfPath(*path.path[-half:])
+        text = f"{head}...{tail}"
+    if len(text) > MAX_REPORTED_DESCRIPTION_LENGTH:
+        text = text[:MAX_REPORTED_DESCRIPTION_LENGTH] + '...'
+    return text
+
+
+def group_sort_key(group: RelativeContext):
+    """
+    Sort key that orders groups deterministically.
+    """
+    anchor = group.anchor
+    if isinstance(anchor, generic.TrailerReference):
+        anchor_key = (0, 0, 0)
+    else:
+        assert isinstance(anchor, generic.Reference)
+        anchor_key = (1, anchor.idnum, anchor.generation)
+    return anchor_key, group.relative_path._tag()
 
 
 _GRAPH_CACHE: 'weakref.WeakKeyDictionary[HistoricalResolver, UsageGraph]' = (
