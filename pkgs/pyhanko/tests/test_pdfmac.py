@@ -253,7 +253,7 @@ def pdfmac_with_handler(
     def dec(test_fun):
         @pytest.mark.parametrize(
             'location,encryption_type',
-            itertools.product(locations, iter(EncryptionType)),
+            list(itertools.product(locations, EncryptionType)),
         )
         @pdfmac_known_bad_case(error_message)
         @shallow_wraps(test_fun)
