@@ -52,6 +52,12 @@ putting together custom diff rules.
       Example: :class:`.CatalogModificationRule` ignores ``/AcroForm``,
       which is validated by another rule entirely.
 
+* To explain a change to an object that already existed in the older revision,
+  a rule must account for all of the ways in which that object is used there
+  (see :class:`.ApprovalType`). Prefer a :class:`.RelativeContext`, which
+  clears a usage regardless of the path that leads to its container,
+  over listing absolute paths, and use a blanket approval only for objects
+  that the rule is entirely responsible for.
 * Rules should be entirely stateless.
   "Clearing" a reference by yielding it does not imply that the revision
   cannot be vetoed by that same rule further down the road (this is why

@@ -3550,8 +3550,8 @@ def _chain_document(k: int, variant: str) -> tuple[BytesIO, Reference]:
 
 def _first_signature_diff_result(data: BytesIO):
     sig = PdfFileReader(data).embedded_signatures[0]
-    sig.compute_integrity_info(DEFAULT_DIFF_POLICY)
-    return sig.diff_result
+    sig.coverage = sig.evaluate_signature_coverage()
+    return sig.evaluate_modifications(DEFAULT_DIFF_POLICY)
 
 
 @freeze_time('2020-11-01')
@@ -3646,9 +3646,7 @@ def _in_place_ap_update_result(share=None, indirect_ap=False):
     w.update_container(tf)
     out = BytesIO()
     w.write(out)
-    sig = PdfFileReader(out).embedded_signatures[0]
-    sig.compute_integrity_info(DEFAULT_DIFF_POLICY)
-    return sig.diff_result
+    return _first_signature_diff_result(out)
 
 
 @freeze_time('2020-11-01')

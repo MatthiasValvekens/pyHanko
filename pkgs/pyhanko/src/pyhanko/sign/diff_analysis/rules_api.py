@@ -156,9 +156,44 @@ class AbsoluteContext(Context):
 
 
 class ApprovalType(misc.OrderedEnum):
+    """
+    The different ways in which a rule can clear a reference that was
+    overridden in a newer revision.
+
+    A *usage* of an object in the older revision is a way in which that object
+    can be reached from the document trailer. All usages of an overridden
+    object must be cleared before the object counts as explained. The way
+    in which usages are tracked internally is not part of the API, and
+    may change.
+    """
+
     BLANKET_APPROVE = 0
+    """
+    Clear all usages of the object at once. This is the approval type
+    for updates without a context.
+    """
+
     APPROVE_RELATIVE_CONTEXT = 1
+    """
+    Clear the usages of the object that share the final reference
+    described by a :class:`.RelativeContext`. Approving a relative context
+    that is not a usage of the object has no effect.
+    """
+
     APPROVE_PATH = 2
+    """
+    Clear a single usage of the object, identified by an
+    :class:`.AbsoluteContext`.
+    The object is only cleared once all of its usages that share the
+    final reference with that path have been approved in this way (or through
+    a relative context). Paths that are not usages of the object
+    are ignored.
+
+    .. note::
+        Usages that cannot be told apart by listing them, for instance
+        because the object is reachable through a reference cycle, can only be
+        cleared through a relative context or a blanket approval.
+    """
 
 
 @dataclass(frozen=True)
