@@ -6,6 +6,29 @@ Release history
 pyHanko
 -------
 
+.. _release-0.38.1:
+
+0.38.1
+======
+
+*Release date:* 2026-11-03
+
+
+Dependency changes
+------------------
+
+ * Relax upper bound for ``uharfbuzz`` to ``<0.58.0``.
+
+
+Bugs fixed
+----------
+
+ * Addressed another scenario where xref parsing entered infinite loops on
+   crafted input.
+ * Ensure legacy xref table parsing correctly rejects cases where the same
+   object occurs multiple times in the same section. This adversely affected
+   difference analysis.
+
 
 .. _release-0.38.0:
 
