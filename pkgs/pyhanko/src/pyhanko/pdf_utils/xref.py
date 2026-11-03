@@ -166,6 +166,10 @@ def parse_xref_table(stream, strict: bool) -> Iterator[XRefEntry]:
             while line[0] in b"\x0d\x0a":
                 stream.seek(-20 + 1, os.SEEK_CUR)
                 line = stream.read(20)
+                if len(line) != 20:
+                    raise misc.PdfReadError(
+                        "Unexpected end of file in xref table"
+                    )
 
             # On the other hand, some malformed PDF files
             # use a single character EOL without a preceding

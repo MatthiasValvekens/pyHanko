@@ -294,6 +294,13 @@ def test_xref_wrong_preamble():
         PdfFileReader(BytesIO(fmtd))
 
 
+@pytest.mark.parametrize('strict', [True, False])
+def test_xref_table_truncated_after_eol(strict):
+    data = b'%PDF-1.7\nxref\n0 2\n0000000000 65535 f \n\nstartxref\n9\n%%EOF'
+    with pytest.raises(misc.PdfReadError, match='Unexpected end of file'):
+        PdfFileReader(BytesIO(data), strict=strict)
+
+
 def test_object_free():
     xrefs = [
         [
