@@ -184,7 +184,7 @@ def test_sign_external_certs(bulk_fetch, p11_config):
 
 
 @pytest.mark.parametrize('bulk_fetch', [True, False])
-@pytest.mark.hsm(exclude='yubikey-nano')
+@pytest.mark.hsm(exclude='yubikey-nano,yubikey-nano-rs,yubikey-pqc-rs')
 def test_sign_multiple_cert_sources(bulk_fetch, p11_config):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
