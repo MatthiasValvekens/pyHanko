@@ -1,3 +1,4 @@
+import binascii
 import logging
 import os
 from collections import namedtuple
@@ -112,6 +113,19 @@ def extract_contents(sig_object: generic.DictionaryObject) -> bytes:
     ):
         raise misc.PdfReadError('/Contents must be string-like')
     return cms_content.original_bytes
+
+
+def _hole_is_hex_contents(stream, start: int, length: int, contents: bytes):
+    stream.seek(start)
+    hole = stream.read(length)
+    hex_digits = hole[1:-1]
+    return (
+        len(hole) == length
+        and hole[0] == ord('<')
+        and hole[-1] == ord('>')
+        and not hex_digits.translate(None, generic.HEX_DIGITS)
+        and binascii.unhexlify(hex_digits) == contents
+    )
 
 
 # TODO clarify in docs that "external timestamp" is always None when dealing
@@ -454,31 +468,30 @@ class EmbeddedPdfSignature:
 
         _, len1, start2, len2 = self.byte_range
 
+        # The gap in the byte range must be "fully explained" by the signature
+        # content: it has to hold exactly the hex-encoded /Contents value.
+        # Without this, the size arithmetic below says nothing about which
+        # bytes in the file are actually unsigned.
+        # (the * 2 is because of the ASCII hex encoding, and the + 2
+        # is the wrapping <>)
+        embedded_sig_content = len(self.pkcs7_content) * 2 + 2
+        if start2 != len1 + embedded_sig_content or not _hole_is_hex_contents(
+            stream, len1, embedded_sig_content, self.pkcs7_content
+        ):
+            return SignatureCoverageLevel.UNCLEAR
+
         # first check: check if the signature covers the entire file.
         #  (from a cryptographic point of view)
         # In this case, there are no changes at all, so we're good.
-
-        # compute file size
         stream.seek(0, os.SEEK_END)
-        # the * 2 is because of the ASCII hex encoding, and the + 2
-        # is the wrapping <>
-        embedded_sig_content = len(self.pkcs7_content) * 2 + 2
         signed_zone_len = len1 + len2 + embedded_sig_content
-        file_covered = stream.tell() == signed_zone_len
-        if file_covered:
+        if stream.tell() == signed_zone_len:
             return SignatureCoverageLevel.ENTIRE_FILE
 
         # Now we're in the mixed case: the byte range is a standard one
         #  starting at the beginning of the document, but it doesn't go all
         #  the way to the end of the file. This can be for legitimate reasons,
         #  not all of which we can evaluate right now.
-
-        # First, check if the signature is a contiguous one.
-        # In other words, we need to check if the interruption in the byte
-        # range is "fully explained" by the signature content.
-        contiguous = start2 == len1 + embedded_sig_content
-        if not contiguous:
-            return SignatureCoverageLevel.UNCLEAR
 
         # next, we verify that the revision this signature belongs to
         #  is completely covered. This requires a few separate checks.
