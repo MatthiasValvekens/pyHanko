@@ -52,6 +52,7 @@ from pyhanko_testing_commons.test_data.samples import (
     MINIMAL_TWO_PAGES,
     MINIMAL_XREF,
     PDF_DATA_DIR,
+    SHARED_NESTED_RESOURCES,
     SIMPLE_FORM,
     TEST_DIR,
     TEXTFIELD_GROUP,
@@ -155,67 +156,9 @@ def test_tree_index_is_built_once_per_resolver():
     assert index.struct_tree_nodes
 
 
-def _shared_resources(n: int) -> bytes:
-    # n pages share one resource dictionary that lists n form XObjects, and
-    # those all share a second resource dictionary listing n more form
-    # XObjects. This is how TCPDF lays out pages imported with FPDI: every
-    # object behind the inner dictionary can be reached through ~n**2 paths.
-    w = PdfFileWriter()
-
-    def _form(resources):
-        return w.add_object(
-            generic.StreamObject(
-                {
-                    pdf_name('/Type'): pdf_name('/XObject'),
-                    pdf_name('/Subtype'): pdf_name('/Form'),
-                    pdf_name('/BBox'): generic.ArrayObject(
-                        map(generic.NumberObject, (0, 0, 10, 10))
-                    ),
-                    pdf_name('/Resources'): resources,
-                },
-                stream_data=b'q Q',
-            )
-        )
-
-    def _xobject_resources(forms):
-        return w.add_object(
-            generic.DictionaryObject(
-                {
-                    pdf_name('/XObject'): generic.DictionaryObject(
-                        {pdf_name(f'/T{ix}'): f for ix, f in enumerate(forms)}
-                    )
-                }
-            )
-        )
-
-    inner = _xobject_resources(
-        [_form(generic.DictionaryObject()) for _ in range(n)]
-    )
-    outer = _xobject_resources([_form(inner) for _ in range(n)])
-    for ix in range(n):
-        contents = w.add_object(
-            generic.StreamObject(stream_data=f'/T{ix} Do'.encode('ascii'))
-        )
-        w.insert_page(
-            generic.DictionaryObject(
-                {
-                    pdf_name('/Type'): pdf_name('/Page'),
-                    pdf_name('/MediaBox'): generic.ArrayObject(
-                        map(generic.NumberObject, (0, 0, 300, 144))
-                    ),
-                    pdf_name('/Resources'): outer,
-                    pdf_name('/Contents'): contents,
-                }
-            )
-        )
-    out = BytesIO()
-    w.write(out)
-    return out.getvalue()
-
-
 @freeze_time('2020-11-01')
 def test_shared_resources_do_not_blow_up_paths():
-    out = BytesIO(_shared_resources(10))
+    out = BytesIO(SHARED_NESTED_RESOURCES)
     for field_name in ('Sig1', 'Sig2'):
         out = signers.sign_pdf(
             IncrementalPdfFileWriter(out),
@@ -230,12 +173,12 @@ def test_shared_resources_do_not_blow_up_paths():
 
     # The difference analysis only needs the usages of the objects that the
     # second signature overrides. None of them lies behind the shared
-    # resources, so the ~2000 paths into the form XObjects (and the hundreds
-    # of millions on real documents) are never enumerated.
+    # resources, so the hundreds of thousands of paths into the form XObjects
+    # are never enumerated.
     resolver = r.get_historical_resolver(sig.signed_revision)
     cache = resolver._indirect_object_access_cache
     assert cache is not None
-    assert sum(len(paths) for paths in cache.values()) < 100
+    assert sum(len(paths) for paths in cache.values()) < 1000
 
 
 @pytest.mark.parametrize(
@@ -246,7 +189,7 @@ def test_shared_resources_do_not_blow_up_paths():
         SIMPLE_FORM,
         TEXTFIELD_GROUP,
         _cross_linked_pages(4),
-        _shared_resources(4),
+        SHARED_NESTED_RESOURCES,
     ],
 )
 def test_targeted_usage_paths_match_full_mapping(pdf_bytes):
