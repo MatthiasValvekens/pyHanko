@@ -302,26 +302,31 @@ async def queue_fetch_task(
     # on 'await'.
     # We use events instead of locks because we don't care about fairness,
     # and events are easier to reason about.
-    try:
-        result = results[tag]
-        logger.debug(
-            f"Result for fetch job with tag {tag!r} was available in cache."
-        )
-        return _return_or_raise(result)
-    except KeyError:
-        pass
-    try:
-        wait_event: asyncio.Event = running_jobs[tag]
+    while True:
+        try:
+            result = results[tag]
+            logger.debug(
+                f"Result for fetch job with tag {tag!r} was available in cache."
+            )
+            return _return_or_raise(result)
+        except KeyError:
+            pass
+        wait_event = running_jobs.get(tag)
+        if wait_event is None:
+            break
         logger.debug(f"Waiting for fetch job with tag {tag!r} to return...")
-        # there's a fetch job running, wait for it to finish and then
-        # return the result
         await wait_event.wait()
-        logger.debug(f"Received completion signal for job with tag {tag!r}.")
-        return _return_or_raise(results[tag])
-    except KeyError:
-        logger.debug(f"Starting new fetch job with tag {tag!r}...")
-        # no fetch job running, run the task and store the result
-        running_jobs[tag] = wait_event = asyncio.Event()
+        # If the job we waited for was cancelled (e.g. because it lost a race
+        # in another caller), it won't have stored a result, so we go around
+        # again and take over.
+        logger.debug(
+            f"Received completion signal or "
+            f"cancellation for job with tag {tag!r}."
+        )
+
+    logger.debug(f"Starting new fetch job with tag {tag!r}...")
+    running_jobs[tag] = wait_event = asyncio.Event()
+    try:
         try:
             result = await async_fun()
         except Exception as e:  # noqa: BLE001
@@ -331,10 +336,12 @@ async def queue_fetch_task(
             result = e
         results[tag] = result
         logger.debug(f"New fetch job with tag {tag!r} returned.")
-        # deregister event, notify waiters
+    finally:
+        # Waiters must always be released, also when we're cancelled, or they
+        # would hang forever.
         del running_jobs[tag]
         wait_event.set()
-        return _return_or_raise(result)
+    return _return_or_raise(result)
 
 
 def _return_or_raise(result):

@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import pytest
@@ -7,6 +8,7 @@ from pyhanko_certvalidator.fetchers.common_utils import (
     ACCEPTABLE_PKCS7_DER_ALIASES,
     enumerate_delivery_point_urls,
     gather_aia_issuer_urls,
+    queue_fetch_task,
     unpack_cert_content,
 )
 
@@ -258,3 +260,25 @@ def test_unpack_content_empty_pkcs7(pkcs7_data):
     )
 
     assert len(list(certs_returned)) == 0
+
+
+@pytest.mark.asyncio
+async def test_waiter_takes_over_cancelled_fetch_job():
+    results, running = {}, {}
+    started = asyncio.Event()
+
+    async def never():
+        started.set()
+        await asyncio.Event().wait()
+
+    async def ok():
+        return 'ok'
+
+    owner = asyncio.create_task(queue_fetch_task(results, running, 't', never))
+    await started.wait()
+    waiter = asyncio.create_task(queue_fetch_task(results, running, 't', ok))
+    await asyncio.sleep(0)
+    owner.cancel()
+    assert await asyncio.wait_for(waiter, 1) == 'ok'
+    assert running == {}
+    assert results == {'t': 'ok'}
