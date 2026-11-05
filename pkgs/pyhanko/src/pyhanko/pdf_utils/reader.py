@@ -904,11 +904,38 @@ class HistoricalResolver(PdfHandler):
         # may already have decoded, so charging those to the reader's budget
         # would make validating multi-revision documents fail spuriously.
         self._decode_context = reader.decode_context.fresh()
-        self._trailer = self.reader.trailer.flatten(self.revision)
-        self._trailer.container_ref = generic.TrailerReference(self)
+        trailer_ref = generic.TrailerReference(self)
+        self._trailer = generic.DictionaryObject(
+            {
+                k: self._rebind_trailer_value(v, trailer_ref)
+                for k, v in self.reader.trailer.flatten(self.revision).items()
+            }
+        )
+        self._trailer.container_ref = trailer_ref
         self._indirect_object_access_cache: (
             dict[generic.Reference, set[RawPdfPath]] | None
         ) = None
+
+    def _rebind_trailer_value(self, obj, trailer_ref):
+        # Trailer entries come straight from the reader, so indirect references
+        # inside them would resolve in the latest revision.
+        if isinstance(obj, generic.IndirectObject):
+            return generic.IndirectObject(obj.idnum, obj.generation, self)
+        elif isinstance(obj, generic.DictionaryObject):
+            result = generic.DictionaryObject(
+                {
+                    k: self._rebind_trailer_value(v, trailer_ref)
+                    for k, v in obj.items()
+                }
+            )
+        elif isinstance(obj, generic.ArrayObject):
+            result = generic.ArrayObject(
+                self._rebind_trailer_value(v, trailer_ref) for v in obj
+            )
+        else:
+            return obj
+        result.container_ref = trailer_ref
+        return result
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:

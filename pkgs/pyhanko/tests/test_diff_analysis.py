@@ -2383,7 +2383,7 @@ def test_diff_analysis_circular_page_tree():
         validate_pdf_signature(s, simple_v_context())
 
     # manually call _walk_page_tree_annots to test the defence-in-depth function
-    old = r.get_historical_resolver(1)
+    old = r.get_historical_resolver(r.total_revisions - 2)
     new = r.get_historical_resolver(2)
     from pyhanko.sign.diff_analysis.rules.form_field_rules import (
         _walk_page_tree_annots,
@@ -3163,3 +3163,68 @@ def test_recycled_phantom_sig_add_visible_field_approval():
     assert not status.docmdp_ok
 
     assert 'references an existing object' in str(status.diff_result)
+
+
+def test_relative_view_uses_historical_revision():
+    testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
+    with open(testfile, 'rb') as f:
+        r = PdfFileReader(f)
+        old = r.get_historical_resolver(3)
+        context = Context.from_absolute(
+            old, RawPdfPath('/Root', '/DSS', '/CRLs', 0)
+        )
+        assert context.relative_view.anchor == Reference(23, 0, old)
+
+
+def _dss_revisions_with_replaced_certs():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    first_certs = w.add_object(generic.ArrayObject([generic.NullObject()]))
+    w.root['/DSS'] = w.add_object(
+        generic.DictionaryObject({'/Certs': first_certs})
+    )
+    w.trailer['/Extra'] = generic.DictionaryObject(
+        {'/Nested': generic.ArrayObject([first_certs])}
+    )
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+
+    w = IncrementalPdfFileWriter(out)
+    second_certs = w.add_object(generic.ArrayObject([generic.NullObject()]))
+    w.root['/DSS'] = w.add_object(
+        generic.DictionaryObject({'/Certs': second_certs})
+    )
+    w.update_root()
+    w.trailer['/Extra'] = generic.DictionaryObject(
+        {'/Nested': generic.ArrayObject([second_certs])}
+    )
+    out2 = BytesIO()
+    w.write(out2)
+    return out2, first_certs.reference, second_certs.reference
+
+
+def test_relative_view_historical_revision_after_container_replaced():
+    out, first_certs, second_certs = _dss_revisions_with_replaced_certs()
+    r = PdfFileReader(out)
+    old = r.get_historical_resolver(r.total_revisions - 2)
+    context = Context.from_absolute(
+        old, RawPdfPath('/Root', '/DSS', '/Certs', 0)
+    )
+    assert context.relative_view.anchor == first_certs
+    assert context.relative_view.anchor.get_pdf_handler() is old
+    assert first_certs != second_certs
+
+
+def test_historical_trailer_entries_resolve_in_historical_revision():
+    out, first_certs, second_certs = _dss_revisions_with_replaced_certs()
+    r = PdfFileReader(out)
+    old = r.get_historical_resolver(r.total_revisions - 2)
+    trailer = old.trailer_view
+    assert trailer.raw_get('/Root').get_pdf_handler() is old
+    assert trailer['/Root'] is old(old.root_ref)
+    nested = trailer.raw_get('/Extra')['/Nested'].raw_get(0)
+    assert nested.get_pdf_handler() is old
+    assert nested.get_object() is old(first_certs)
+    # the latest revision is unaffected
+    latest = r.trailer_view.raw_get('/Extra')['/Nested'].raw_get(0)
+    assert latest.get_object() is r.get_object(second_certs)
