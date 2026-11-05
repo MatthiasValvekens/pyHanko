@@ -77,6 +77,10 @@ class AIOHttpMixin:
             if not isinstance(v, Exception):
                 yield k, v
 
+    def _cached_success(self, tag):
+        result = self.__results.get(tag)
+        return None if isinstance(result, Exception) else result
+
     async def _post_fetch_task(self, tag, async_fun):
         return await queue_fetch_task(
             self.__results, self.__result_events, tag, async_fun

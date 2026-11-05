@@ -40,6 +40,10 @@ class RequestsFetcherMixin:
             if not isinstance(v, Exception):
                 yield k, v
 
+    def _cached_success(self, tag):
+        result = self.__results.get(tag)
+        return None if isinstance(result, Exception) else result
+
     async def _perform_fetch(self, tag, fetch_fun):
         return await queue_fetch_task(
             self.__results, self.__result_events, tag, fetch_fun

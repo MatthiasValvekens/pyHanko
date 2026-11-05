@@ -5,12 +5,13 @@ import requests
 from asn1crypto import cms, crl, pem, x509
 
 from ... import errors
-from ...util import get_relevant_crl_dps, issuer_serial
+from ...util import issuer_serial
 from ..api import CRLFetcher
 from ..common_utils import (
     FetchKind,
+    crl_fetch_url_groups,
     crl_job_results_as_completed,
-    enumerate_delivery_point_urls,
+    first_successful_fetch,
 )
 from .util import RequestsFetcherMixin
 
@@ -60,15 +61,22 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
         return await self._perform_fetch(url, task)
 
     async def _fetch(self, cert: x509.Certificate, *, use_deltas):
-        sources = get_relevant_crl_dps(cert, use_deltas=use_deltas)
+        url_groups = crl_fetch_url_groups(cert, use_deltas=use_deltas)
 
-        def _fetch_jobs():
-            for distribution_point in sources:
-                for url in enumerate_delivery_point_urls(distribution_point):
-                    yield self._fetch_single(url)
-
-        async for result in crl_job_results_as_completed(_fetch_jobs()):
+        jobs = (self._fetch_from_any(urls) for urls in url_groups)
+        async for result in crl_job_results_as_completed(jobs):
             yield result
+
+    async def _fetch_from_any(self, urls):
+        # Don't hit the network for the other alternatives if we already
+        # have a CRL from one of them.
+        for url in urls:
+            cached = self._cached_success(url)
+            if cached is not None:
+                return cached
+        return await first_successful_fetch(
+            (self._fetch_single(url) for url in urls), FetchKind.CRL
+        )
 
     def fetched_crls(self) -> Iterable[crl.CertificateList]:
         return {crl_ for crl_ in self.get_results()}
