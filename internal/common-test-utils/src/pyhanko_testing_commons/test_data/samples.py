@@ -34,6 +34,12 @@ MINIMAL_ONE_FIELD_TAGGED = read_all(
 MINIMAL_TWO_FIELDS_TAGGED = read_all(
     PDF_DATA_DIR + '/minimal-two-fields-tagged.pdf'
 )
+# 80 pages sharing one indirect /Resources dict with 80 form XObjects, which in
+# turn share a second indirect /Resources dict with 80 more form XObjects.
+# Contains an unsigned signature field 'Sig1'.
+SHARED_NESTED_RESOURCES = read_all(
+    PDF_DATA_DIR + '/shared-nested-resources.pdf'
+)
 MINIMAL_HYBRID = read_all(PDF_DATA_DIR + '/minimal-hybrid-xref.pdf')
 MINIMAL_SLIGHTLY_BROKEN = read_all(PDF_DATA_DIR + '/minimal-startxref-obo2.pdf')
 
