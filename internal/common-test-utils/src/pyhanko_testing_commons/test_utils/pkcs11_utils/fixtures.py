@@ -86,8 +86,7 @@ def platform(request):
     return request.param
 
 
-@pytest.fixture(scope='session')
-def p11_global_test_config(platform):
+def _parse_configs_for_platform(platform):
     if config_file := os.environ.get('PKCS11_CONFIG', None):
         configs = {}
         with open(config_file, 'r') as inf:
@@ -153,6 +152,18 @@ def p11_global_test_config(platform):
         }
         configs['default'] = configs['rsa']
         return configs
+
+
+@pytest.fixture(scope='session')
+def p11_global_test_config(platform):
+    configs = _parse_configs_for_platform(platform)
+    yield configs
+
+    import pkcs11
+
+    # ensure modules are unloaded appropriately prior to switching
+    for module in {cfg.module for cfg in configs.values()}:
+        pkcs11.unload(module)
 
 
 @pytest.fixture(scope='function')
