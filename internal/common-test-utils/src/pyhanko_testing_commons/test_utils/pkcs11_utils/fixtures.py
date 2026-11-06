@@ -88,6 +88,23 @@ def platform(request):
 
 @pytest.fixture(scope='session')
 def p11_global_test_config(platform):
+    configs = _load_platform_configs(platform)
+    yield configs
+    _unload_modules(configs.values())
+
+
+def _unload_modules(configs):
+    import pkcs11
+
+    # python-pkcs11 keeps modules loaded and initialised for the lifetime of
+    # the process. Some modules (e.g. Yubico's Rust-based ykcs11) hold
+    # exclusive access to every device they can see until they're finalised,
+    # which makes those devices unavailable to modules used by other platforms.
+    for module in {cfg.module for cfg in configs}:
+        pkcs11.unload(module)
+
+
+def _load_platform_configs(platform):
     if config_file := os.environ.get('PKCS11_CONFIG', None):
         configs = {}
         with open(config_file, 'r') as inf:
