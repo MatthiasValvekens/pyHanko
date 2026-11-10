@@ -99,7 +99,9 @@ class FileSystemTLCache(TLCache):
             raise KeyError
         cached_file_path = self._root / fname
         try:
-            with cached_file_path.open('r', encoding='utf-8') as inf:
+            with cached_file_path.open(
+                'r', encoding='utf-8', newline=''
+            ) as inf:
                 content = inf.read()
         except OSError as e:
             logger.warning(
@@ -124,7 +126,9 @@ class FileSystemTLCache(TLCache):
         }
         with index.open('w', encoding='utf-8') as outf:
             json.dump(index_data, outf)
-        with (self._root / fname).open('w', encoding='utf-8') as outf:
+        with (self._root / fname).open(
+            'w', encoding='utf-8', newline=''
+        ) as outf:
             outf.write(value)
         self._cache[key] = (exp_ts, fname)
 
