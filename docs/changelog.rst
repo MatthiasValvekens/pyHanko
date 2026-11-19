@@ -6,6 +6,24 @@ Release history
 pyHanko
 -------
 
+.. _release-0.38.2:
+
+0.38.2
+======
+
+*Release date:* 2026-11-19
+
+
+Bugs fixed
+----------
+
+ * Enforce hex encoding on signature ``/Contents``.
+ * Only map usage paths that lead to overridden references.
+ * Compute page/structure tree index once per historical resolver.
+ * Resolve historical resolver trailer entries in their own revision.
+ * Disable newline normalisation in ``FileSystemTLCache``.
+
+
 .. _release-0.38.1:
 
 0.38.1
