@@ -593,7 +593,7 @@ class PdfTimeStamper:
         *,
         in_place=False,
         output=None,
-        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),  # noqa: B008
+        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
         tight_size_estimates: bool = False,
     ):
@@ -681,7 +681,7 @@ class PdfTimeStamper:
         *,
         in_place=False,
         output=None,
-        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),  # noqa: B008
+        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
         tight_size_estimates: bool = False,
         embed_roots: bool = True,
