@@ -234,3 +234,10 @@ class DSAParametersUnavailable(InvalidSignature):
 
 class AlgorithmNotSupported(InvalidSignature):
     pass
+
+
+class KeyTypeMismatch(InvalidSignature):
+    """
+    The type of the public key does not match the signature algorithm
+    that was declared for the signature.
+    """

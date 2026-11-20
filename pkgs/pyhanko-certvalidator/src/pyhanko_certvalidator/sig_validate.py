@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import (
 from pyhanko_certvalidator.errors import (
     AlgorithmNotSupported,
     DSAParametersUnavailable,
+    KeyTypeMismatch,
     PSSParameterMismatch,
 )
 from pyhanko_certvalidator.util import (
@@ -110,6 +111,13 @@ class DefaultSignatureValidator(SignatureValidator):
         )
 
 
+def _key_type_mismatch(pub_key: object, sig_algo: str) -> KeyTypeMismatch:
+    return KeyTypeMismatch(
+        f"Signature mechanism {sig_algo} cannot be used with a public "
+        f"key of type {type(pub_key).__name__}."
+    )
+
+
 def _validate_raw(
     signature: bytes,
     signed_data: bytes,
@@ -138,7 +146,11 @@ def _validate_raw(
     # pyca/cryptography can't load PSS-exclusive keys without some help:
     if public_key_info.algorithm == 'rsassa_pss':
         public_key_info = public_key_info.copy()
-        assert isinstance(parameters, algos.RSASSAPSSParams)
+        if not isinstance(parameters, algos.RSASSAPSSParams):
+            raise KeyTypeMismatch(
+                f"Signature mechanism {sig_algo} cannot be used with an "
+                f"RSASSA-PSS public key."
+            )
         pss_key_params = public_key_info['algorithm']['parameters'].native
         if pss_key_params is not None and pss_key_params != parameters.native:
             raise PSSParameterMismatch(
@@ -154,43 +166,52 @@ def _validate_raw(
     except ValueError:
         hash_algo = context.contextual_md_algorithm
     if sig_algo == 'rsassa_pkcs1v15':
-        assert isinstance(pub_key, rsa.RSAPublicKey)
+        if not isinstance(pub_key, rsa.RSAPublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         verify_md = get_pyca_cryptography_hash_for_signing(
             hash_algo, prehashed=context.prehashed
         )
         pub_key.verify(signature, signed_data, padding.PKCS1v15(), verify_md)
     elif sig_algo == 'rsassa_pss':
-        assert isinstance(pub_key, rsa.RSAPublicKey)
+        if not isinstance(pub_key, rsa.RSAPublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         pss_padding, verify_md = process_pss_params(
             signature_algorithm['parameters'], prehashed=context.prehashed
         )
         pub_key.verify(signature, signed_data, pss_padding, verify_md)
     elif sig_algo == 'dsa':
-        assert isinstance(pub_key, dsa.DSAPublicKey)
+        if not isinstance(pub_key, dsa.DSAPublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         verify_md = get_pyca_cryptography_hash_for_signing(
             hash_algo, prehashed=context.prehashed
         )
         pub_key.verify(signature, signed_data, verify_md)
     elif sig_algo == 'ecdsa':
-        assert isinstance(pub_key, ec.EllipticCurvePublicKey)
+        if not isinstance(pub_key, ec.EllipticCurvePublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         verify_md = get_pyca_cryptography_hash_for_signing(
             hash_algo, prehashed=context.prehashed
         )
         pub_key.verify(signature, signed_data, ec.ECDSA(verify_md))
     elif sig_algo == 'ed25519':
-        assert isinstance(pub_key, ed25519.Ed25519PublicKey)
+        if not isinstance(pub_key, ed25519.Ed25519PublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         pub_key.verify(signature, signed_data)
     elif sig_algo == 'ed448':
-        assert isinstance(pub_key, ed448.Ed448PublicKey)
+        if not isinstance(pub_key, ed448.Ed448PublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         pub_key.verify(signature, signed_data)
     elif sig_algo == 'mldsa44':
-        assert isinstance(pub_key, mldsa.MLDSA44PublicKey)
+        if not isinstance(pub_key, mldsa.MLDSA44PublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         pub_key.verify(signature, signed_data)
     elif sig_algo == 'mldsa65':
-        assert isinstance(pub_key, mldsa.MLDSA65PublicKey)
+        if not isinstance(pub_key, mldsa.MLDSA65PublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         pub_key.verify(signature, signed_data)
     elif sig_algo == 'mldsa87':
-        assert isinstance(pub_key, mldsa.MLDSA87PublicKey)
+        if not isinstance(pub_key, mldsa.MLDSA87PublicKey):
+            raise _key_type_mismatch(pub_key, sig_algo)
         pub_key.verify(signature, signed_data)
     else:
         raise AlgorithmNotSupported(
