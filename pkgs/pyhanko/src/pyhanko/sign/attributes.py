@@ -9,6 +9,7 @@ from pyhanko_certvalidator.util import get_pyca_cryptography_hash
 
 from .general import (
     as_signing_certificate_v2,
+    format_cms_digest_algorithm,
     simple_cms_attribute,
 )
 from .timestamps import TimeStamper
@@ -129,19 +130,10 @@ class CMSAlgorithmProtectionProvider(CMSAttributeProvider):
     async def build_attr_value(
         self, dry_run=False
     ) -> cms.CMSAlgorithmProtection:
-        digest_algorithm_args = {'algorithm': self.digest_algo}
-        if self.digest_algo == 'shake256':
-            # RFC 8419 requirement
-            mech = self.signature_algo
-            if mech['algorithm'].native == 'ed448':
-                digest_algorithm_args = {
-                    'algorithm': 'shake256_len',
-                    'parameters': core.Integer(512),
-                }
         return cms.CMSAlgorithmProtection(
             {
-                'digest_algorithm': algos.DigestAlgorithm(
-                    digest_algorithm_args
+                'digest_algorithm': format_cms_digest_algorithm(
+                    self.digest_algo, self.signature_algo
                 ),
                 'signature_algorithm': self.signature_algo,
             }

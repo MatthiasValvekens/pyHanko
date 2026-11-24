@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import IO
 
-from asn1crypto import algos, cms, tsp, x509
+from asn1crypto import algos, cms, core, tsp, x509
 from asn1crypto.algos import SignedDigestAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -45,6 +45,7 @@ __all__ = [
     'extract_signer_info',
     'find_cms_attribute_iter',
     'find_unique_cms_attribute',
+    'format_cms_digest_algorithm',
     'get_cms_hash_algo_for_mechanism',
     # reexported for compatibility
     'load_cert_from_pemder',
@@ -362,6 +363,40 @@ def get_cms_hash_algo_for_mechanism(mech: SignedDigestAlgorithm) -> str:
         return 'shake256'
     else:
         return mech.hash_algo
+
+
+def format_cms_digest_algorithm(
+    digest_algorithm: str,
+    signature_mechanism: SignedDigestAlgorithm,
+) -> algos.DigestAlgorithm:
+    """
+    Format a :class:`~.algos.DigestAlgorithm` identifier for CMS signature
+    structures (``SignerInfo.digestAlgorithm``, ``SignedData.digestAlgorithms``
+    and ``CMSAlgorithmProtection.digestAlgorithm``), applying RFC 8419 encoding
+    rules for EdDSA mechanisms.
+
+    :param digest_algorithm:
+        Name of the digest algorithm.
+    :param signature_mechanism:
+        The signature mechanism being used.
+    :return:
+        A :class:`~.algos.DigestAlgorithm` object.
+    """
+    digest = digest_algorithm.lower()
+    sig_algo = signature_mechanism['algorithm'].native
+    if sig_algo == 'ed25519' and digest == 'sha512':
+        # RFC 8419 §3.1 requires id-sha512 with absent parameters for Ed25519.
+        # asn1crypto's _ForceNullParameters adds NULL unless explicitly cleared.
+        return algos.DigestAlgorithm({'algorithm': digest, 'parameters': None})
+    if sig_algo == 'ed448' and digest == 'shake256':
+        # RFC 8419 §3.1 requires id-shake256-len with length 512 for Ed448.
+        return algos.DigestAlgorithm(
+            {
+                'algorithm': 'shake256_len',
+                'parameters': core.Integer(512),
+            }
+        )
+    return algos.DigestAlgorithm({'algorithm': digest})
 
 
 def optimal_pss_params(
