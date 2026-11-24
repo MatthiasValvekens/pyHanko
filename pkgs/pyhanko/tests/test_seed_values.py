@@ -23,11 +23,17 @@ from pyhanko_testing_commons.test_utils.signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_TS,
     FROM_CA,
+    FROM_ECC_CA,
+    FROM_ED448_CA,
+    FROM_ED25519_CA,
     INTERM_CERT,
     ROOT_CERT,
     SELF_SIGN,
     dummy_ocsp_vc,
     live_testing_vc,
+    simple_ecc_v_context,
+    simple_ed448_v_context,
+    simple_ed25519_v_context,
 )
 
 from .test_pades import PADES, ts_response_callback
@@ -1092,3 +1098,107 @@ async def test_sign_with_sv_missing_cert():
         await pdf_signer.async_sign_pdf(
             w, existing_fields_only=True, bytes_reserved=8192
         )
+
+
+def test_digest_seed_methods_use_pdf_names():
+    spec = fields.SigSeedValueSpec(
+        digest_methods=[
+            'sha256',
+            'sha3_256',
+            'sha3_384',
+            'sha3_512',
+            'shake256',
+        ]
+    )
+    obj = spec.as_pdf_object()
+    values = obj['/DigestMethod']
+    assert all(isinstance(value, generic.NameObject) for value in values)
+    assert list(values) == [
+        '/SHA256',
+        '/SHA3-256',
+        '/SHA3-384',
+        '/SHA3-512',
+        '/SHAKE256',
+    ]
+    assert (
+        fields.SigSeedValueSpec.from_pdf_object(obj).digest_methods
+        == spec.digest_methods
+    )
+
+    for empty_md in ('', '   ', '/'):
+        with pytest.raises(ValueError, match="cannot be empty"):
+            fields.SigSeedValueSpec(digest_methods=[empty_md]).as_pdf_object()
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    obj[pdf_name('/DigestMethod')] = generic.ArrayObject(
+        [w.add_object(pdf_name('/SHA3-256'))]
+    )
+    assert fields.SigSeedValueSpec.from_pdf_object(obj).digest_methods == [
+        'sha3_256'
+    ]
+
+    # Non-name entries and non-array values are rejected per ISO 32000-2 Table 237.
+    obj[pdf_name('/DigestMethod')] = generic.ArrayObject(
+        [generic.pdf_string('sha256')]
+    )
+    with pytest.raises(SigningError, match="PDF name object"):
+        fields.SigSeedValueSpec.from_pdf_object(obj)
+
+    obj[pdf_name('/DigestMethod')] = pdf_name('/SHA256')
+    with pytest.raises(SigningError, match="must be an array"):
+        fields.SigSeedValueSpec.from_pdf_object(obj)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sv_sign_md_sha3_req():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.DIGEST_METHOD,
+        digest_methods=['sha3_256'],
+    )
+    w = IncrementalPdfFileWriter(prepare_sv_field(sv))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='Sig', md_algorithm='sha3_256'),
+        FROM_ECC_CA,
+    )
+    out = await pdf_signer.async_sign_pdf(w)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = await async_validate_pdf_signature(s, simple_ecc_v_context())
+    assert status.bottom_line
+    assert status.seed_value_ok
+
+    w_bad = IncrementalPdfFileWriter(prepare_sv_field(sv))
+    bad_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='Sig', md_algorithm='sha256'),
+        FROM_ECC_CA,
+    )
+    with pytest.raises(SigningError, match="not allowed by the seed value"):
+        await bad_signer.async_sign_pdf(w_bad)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'signer,vc_factory',
+    [
+        (FROM_ED25519_CA, simple_ed25519_v_context),
+        (FROM_ED448_CA, simple_ed448_v_context),
+    ],
+)
+async def test_sv_sign_md_ignored_for_fixed_digest_eddsa(signer, vc_factory):
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.DIGEST_METHOD,
+        digest_methods=['sha256'],
+    )
+    w = IncrementalPdfFileWriter(prepare_sv_field(sv))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='Sig'),
+        signer,
+    )
+    out = await pdf_signer.async_sign_pdf(w)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = await async_validate_pdf_signature(s, vc_factory())
+    assert status.bottom_line
+    assert status.seed_value_ok

@@ -743,6 +743,36 @@ class SeedLockDocument(Enum):
     """
 
 
+def _format_seed_digest_method(digest_method: str) -> generic.NameObject:
+    # ISO 32000-2 Table 237 and ISO/TS 32001:2022 specify PDF names such as
+    # /SHA256, /SHA3-256, /SHA3-384, /SHA3-512, and /SHAKE256.
+    normalized = digest_method.strip().removeprefix('/')
+    if not normalized:
+        raise ValueError("Digest method name cannot be empty.")
+    return pdf_name('/' + normalized.upper().replace('_', '-'))
+
+
+def _read_seed_digest_methods(raw_methods: object) -> list[str]:
+    if not isinstance(raw_methods, generic.ArrayObject):
+        raise SigningError(
+            "/DigestMethod entry in seed value dictionary must be an array."
+        )
+    methods: list[str] = []
+    for raw_entry in raw_methods:
+        entry = (
+            raw_entry.get_object()
+            if isinstance(raw_entry, generic.IndirectObject)
+            else raw_entry
+        )
+        if not isinstance(entry, generic.NameObject):
+            raise SigningError(
+                f"/DigestMethod entry {entry!r} in seed value dictionary "
+                "must be a PDF name object."
+            )
+        methods.append(entry[1:].lower().replace('-', '_'))
+    return methods
+
+
 @dataclass(frozen=True)
 class SigSeedValueSpec:
     """
@@ -893,7 +923,7 @@ class SigSeedValueSpec:
         if self.digest_methods is not None:
             min_version = SeedValueDictVersion.PDF_1_7
             result[pdf_name('/DigestMethod')] = generic.ArrayObject(
-                map(pdf_string, self.digest_methods)
+                _format_seed_digest_method(md) for md in self.digest_methods
             )
         if self.reasons is not None:
             result[pdf_name('/Reasons')] = generic.ArrayObject(
@@ -1001,10 +1031,9 @@ class SigSeedValueSpec:
 
             subfilters = list(_subfilters())
 
-        try:
-            digest_methods = [s.lower() for s in pdf_dict['/DigestMethod']]
-        except KeyError:
-            digest_methods = None
+        digest_methods = get_and_apply(
+            pdf_dict, '/DigestMethod', _read_seed_digest_methods
+        )
 
         reasons = get_and_apply(pdf_dict, '/Reasons', list)
         legal_attestations = get_and_apply(pdf_dict, '/LegalAttestation', list)
