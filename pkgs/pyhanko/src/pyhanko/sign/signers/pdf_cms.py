@@ -42,6 +42,7 @@ from pyhanko.sign.attributes import (
 )
 from pyhanko.sign.general import (
     SigningError,
+    format_cms_digest_algorithm,
     get_cms_hash_algo_for_mechanism,
     optimal_pss_params,
     simple_cms_attribute,
@@ -604,23 +605,18 @@ class Signer:
             An :class:`.asn1crypto.cms.SignerInfo` object.
         """
 
-        digest_algorithm_args = {'algorithm': digest_algorithm}
-        if digest_algorithm == 'shake256':
-            # RFC 8419 requirement
-            mech = self.get_signature_mechanism_for_digest('shake256')
-            if mech['algorithm'].native == 'ed448':
-                digest_algorithm_args = {
-                    'algorithm': 'shake256_len',
-                    'parameters': core.Integer(512),
-                }
-        digest_algorithm_obj = algos.DigestAlgorithm(digest_algorithm_args)
-
         signing_cert = self.signing_cert
         if signing_cert is None:
             raise SigningError(
                 "The signer's certificate must be available for "
                 "SignerInfo assembly to proceed."
             )
+
+        sig_mech = self.get_signature_mechanism_for_digest(digest_algorithm)
+        digest_algorithm_obj = format_cms_digest_algorithm(
+            digest_algorithm, sig_mech
+        )
+
         # build the signer info object that goes into the PKCS7 signature
         # (see RFC 2315 § 9.2)
         sig_info = cms.SignerInfo(
@@ -637,9 +633,7 @@ class Signer:
                     }
                 ),
                 'digest_algorithm': digest_algorithm_obj,
-                'signature_algorithm': self.get_signature_mechanism_for_digest(
-                    digest_algorithm
-                ),
+                'signature_algorithm': sig_mech,
                 'signed_attrs': signed_attrs,
                 'signature': signature,
             }

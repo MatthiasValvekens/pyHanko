@@ -1491,9 +1491,70 @@ def test_ed25519():
     s = r.embedded_signatures[0]
     status = val_untrusted(s)
     assert status.md_algorithm == 'sha512'
+    # RFC 8419 §3.1: Ed25519 SHA-512 digest identifiers must omit parameters.
+    expected_der = bytes.fromhex('300b0609608648016503040203')
+    assert s.signer_info['digest_algorithm'].dump() == expected_der
+    (digest,) = s.signed_data['digest_algorithms']
+    assert digest.dump() == expected_der
+    cms_prot = find_unique_cms_attribute(
+        s.signer_info['signed_attrs'], 'cms_algorithm_protection'
+    )
+    assert cms_prot['digest_algorithm'].dump() == expected_der
 
     (extn,) = r.root['/Extensions']['/ISO_']
     assert extn['/ExtensionLevel'] == 32002
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_ed25519_digest_params_pades_and_external():
+    expected_der = bytes.fromhex('300b0609608648016503040203')
+
+    # PAdES uses CAdESSignedAttributeProviderSpec (no CMSAlgorithmProtection),
+    # and must still omit parameters in SignerInfo and SignedData.
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=fields.SigSeedSubFilter.PADES,
+        ),
+        signer=FROM_ED25519_CA,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    await async_val_trusted(s, vc=simple_ed25519_v_context())
+    assert s.signer_info['digest_algorithm'].dump() == expected_der
+    (digest,) = s.signed_data['digest_algorithms']
+    assert digest.dump() == expected_der
+
+    # ExternalSigner with explicit ed25519 signature_mechanism must match.
+    ext_signer = ExternalSigner(
+        signing_cert=FROM_ED25519_CA.signing_cert,
+        cert_registry=FROM_ED25519_CA.cert_registry,
+        signature_value=bytes(64),
+        signature_mechanism=SignedDigestAlgorithm({'algorithm': 'ed25519'}),
+    )
+    cms_obj = await ext_signer.async_sign(
+        hashlib.sha512(b'test').digest(), 'sha512'
+    )
+    sd = cms.ContentInfo.load(cms_obj.dump())['content']
+    si = sd['signer_infos'][0]
+    assert si['digest_algorithm'].dump() == expected_der
+    (ext_digest,) = sd['digest_algorithms']
+    assert ext_digest.dump() == expected_der
+    cms_prot = find_unique_cms_attribute(
+        si['signed_attrs'], 'cms_algorithm_protection'
+    )
+    assert cms_prot['digest_algorithm'].dump() == expected_der
+
+    # Non-Ed25519 SHA-512 signatures retain asn1crypto's NULL parameters.
+    rsa_cms = await FROM_CA.async_sign(
+        hashlib.sha512(b'test').digest(), 'sha512'
+    )
+    rsa_sd = cms.ContentInfo.load(rsa_cms.dump())['content']
+    rsa_si = rsa_sd['signer_infos'][0]
+    assert rsa_si['digest_algorithm']['parameters'].dump() == b'\x05\x00'
 
 
 @freeze_time('2020-11-01')
@@ -1545,6 +1606,16 @@ def test_ed448():
     s = r.embedded_signatures[0]
     status = val_untrusted(s)
     assert status.md_algorithm == 'shake256_len'
+    assert s.signer_info['digest_algorithm']['parameters'].native == 512
+    (digest,) = s.signed_data['digest_algorithms']
+    assert digest.dump() == s.signer_info['digest_algorithm'].dump()
+    cms_prot = find_unique_cms_attribute(
+        s.signer_info['signed_attrs'], 'cms_algorithm_protection'
+    )
+    assert (
+        cms_prot['digest_algorithm'].dump()
+        == s.signer_info['digest_algorithm'].dump()
+    )
 
     assert len(s.compute_digest()) == 64
 
