@@ -714,9 +714,14 @@ def _validate_sv_constraints(
                 f"info be added; this requires subfilter '{SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value}'"
             )
 
+    # ISO 32000-2 Table 237 (erratum 158): ignore /DigestMethod for signature
+    # mechanisms that prescribe a fixed digest algorithm.
+    sig_algo = signer_info['signature_algorithm']['algorithm'].native
     if (
         flags & SigSeedValFlags.DIGEST_METHOD
-    ) and sv_spec.digest_methods is not None:
+        and sv_spec.digest_methods is not None
+        and sig_algo not in ('ed25519', 'ed448')
+    ):
         selected_md = emb_sig.md_algorithm.lower()
         if selected_md not in sv_spec.digest_methods:
             raise SigSeedValueValidationError(

@@ -1041,6 +1041,15 @@ def _signatures_exist(handler):
         return False
 
 
+def _uses_fixed_digest_mechanism(signer: Signer) -> bool:
+    """Return whether the signer's mechanism prescribes a fixed CMS digest."""
+    try:
+        mech = signer.get_signature_mechanism_for_digest(None)
+    except (SigningError, ValueError):
+        return False
+    return mech['algorithm'].native in ('ed25519', 'ed448')
+
+
 class PdfSigner:
     """
     .. versionchanged: 0.7.0
@@ -1155,7 +1164,11 @@ class PdfSigner:
         #  (2) Use the first algorithm specified in the seed value dictionary,
         #      if a suggestion is present
         #  (3) fall back to select_suitable_signing_md()
-        if sv_spec is not None and sv_spec.digest_methods:
+        if (
+            sv_spec is not None
+            and sv_spec.digest_methods
+            and not _uses_fixed_digest_mechanism(self.signer)
+        ):
             sv_md_algorithm = sv_spec.digest_methods[0]
         else:
             sv_md_algorithm = None
@@ -2049,7 +2062,9 @@ class PdfSigningSession:
                 )
         if (
             flags & SigSeedValFlags.DIGEST_METHOD
-        ) and sv_spec.digest_methods is not None:
+            and sv_spec.digest_methods is not None
+            and not _uses_fixed_digest_mechanism(pdf_signer.signer)
+        ):
             selected_md = pdf_signer.default_md_for_signer
             if selected_md is not None:
                 selected_md = selected_md.lower()
