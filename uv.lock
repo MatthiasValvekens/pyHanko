@@ -2964,16 +2964,16 @@ wheels = [
 
 [[package]]
 name = "signxml"
-version = "5.3.0"
+version = "5.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
     { name = "cryptography" },
     { name = "lxml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e9/f6/3e583a674acd0aa6348a91c472a3787719b59d8b8f22a3d1e0e8833e5944/signxml-5.3.0.tar.gz", hash = "sha256:1a7f19fad67941ad2aae9b0daf5a53b29248308fc4911c40f7242770221a707d", size = 1718477, upload-time = "2026-11-12T07:18:59.295Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/db/de98a323bc015c78615150dc3e57068b3eced3c7c73b9c5b50ccefe01719/signxml-5.3.1.tar.gz", hash = "sha256:01ca1d5b7d5829d1622ae3a7ce3d312d3fb28a67297d79c0cfa662fb80a722c8", size = 1718643, upload-time = "2026-11-22T04:00:52.454Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7e/e9/efd9194d56133038692cafb258ed841c2de88df2b890a6b94992fa57f01d/signxml-5.3.0-py3-none-any.whl", hash = "sha256:4fc31f162569e40411a23cb971449e579a0510bbdb0a9842db4c87e5bc737287", size = 67330, upload-time = "2026-11-12T07:18:57.595Z" },
+    { url = "https://files.pythonhosted.org/packages/03/51/ab6ced08a22acc1e01f8458e7a33367e12dfc62e0b371d2a2a4762d85cf0/signxml-5.3.1-py3-none-any.whl", hash = "sha256:c45457cd97b3ce52f7342c6f8f049cebe0b8bba69d8fa84da0e7ef5701c9d14f", size = 67316, upload-time = "2026-11-22T04:00:50.988Z" },
 ]
 
 [[package]]
