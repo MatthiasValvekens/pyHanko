@@ -2953,6 +2953,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/50/1e/56bf4531475c32a8503c040ab7f05c34430a0c6b5744bf6c373246dd3c97/securesystemslib-1.6.0-py3-none-any.whl", hash = "sha256:1c1aa00f058f4851f038d409c8ca4a727db854a91f07ec3a0fa047bb93e43e0e", size = 874777, upload-time = "2026-10-20T08:40:17.665Z" },
 ]
 
+[package.optional-dependencies]
+crypto = [
+    { name = "cryptography" },
+]
+
 [[package]]
 name = "setuptools"
 version = "84.2.1"
@@ -2978,7 +2983,7 @@ wheels = [
 
 [[package]]
 name = "sigstore"
-version = "4.5.1"
+version = "4.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -2986,17 +2991,18 @@ dependencies = [
     { name = "platformdirs" },
     { name = "pydantic" },
     { name = "pyjwt" },
-    { name = "requests" },
     { name = "rfc3161-client" },
     { name = "rfc8785" },
     { name = "rich" },
+    { name = "securesystemslib", extra = ["crypto"] },
     { name = "sigstore-models" },
     { name = "sigstore-rekor-types" },
     { name = "tuf" },
+    { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bb/26/0561ddc1fcda5a12e577b4716f3e345905fc5e98978def96bc78e2d538ce/sigstore-4.5.1.tar.gz", hash = "sha256:14accda8a7d4ef47cb25b4903829fb10f011048c261a5937724a43d073c4f34d", size = 90964, upload-time = "2026-10-20T15:12:50.021Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/10/349d460d275dccade8d5aa29e15290a7febb0c0bdeab8f2cd9d0ee61d9db/sigstore-4.6.0.tar.gz", hash = "sha256:dc9a7bd0e35ee381a6f70281f520f858d12b34a997c023f7dec835c0095a5067", size = 96943, upload-time = "2026-11-22T20:19:35.532Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/e7/23dc324a6a5f0c1d8da0dfd8f862b0e3ec88e0b1302fdffd34628cdd6bb2/sigstore-4.5.1-py3-none-any.whl", hash = "sha256:02e000197b34980f1d382741d6f83c2fecbcef7debf7304f36a5253f3c892cd9", size = 113192, upload-time = "2026-10-20T15:12:48.563Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/e7/31bdaf2f99e3a4875c26086a34276012a6f6e64e68690f23e8af47c4ae55/sigstore-4.6.0-py3-none-any.whl", hash = "sha256:df10bc2b87b821df0922405377305b875894e6ce6007175b3eddb3bcc9b23cfa", size = 116700, upload-time = "2026-11-22T20:19:34.144Z" },
 ]
 
 [[package]]
